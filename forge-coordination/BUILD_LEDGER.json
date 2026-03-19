@@ -4,7 +4,7 @@
   "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Deve Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture.",
   "scope_statement": "Build the complete Mac Consensus Dev Agent \u2014 a native macOS two-process application consisting of a Swift/SwiftUI shell (UI, Touch ID authentication, Keychain secret storage, XPC communication, process management per TRD-1) and a Python 3.12 backend (ConsensusEngine with parallel Claude+GPT-4o generation and Claude arbitration per TRD-2, 8-stage BuildPipeline with 3-pass review per TRD-3, multi-agent coordination via BuildLedger per TRD-4, GitHubTool integration per TRD-5, HolisticReview per TRD-6, TRD development workflow per TRD-7, DocumentStore with FAISS vector retrieval per TRD-10, and backend startup/shutdown per TRD-12), connected via an authenticated Unix socket with line-delimited JSON and nonce-based handshake (TRD-1 Section 6), with Mac CI runner infrastructure (TRD-9), UI/UX design system (TRD-8), and all security controls mandated by TRD-11. This is NOT a Forge platform build \u2014 this is the autonomous coding agent product specified across all 12 TRDs in forge-docs/, which uses consensus AI (two LLM providers generating in parallel with Claude arbitrating) to develop high-quality software through an operator-gated, directed build pipeline.\n\nClarifications:\n  - review the full TRDs to determine the detailed information.\n  - review the full TRDs to determine the detailed information.\n  - review the full TRDs to determine the detailed information. Any open questions should be resolved during the PRD development process\n  - review the full TRDs to determine the detailed information.",
   "created_at": 1773959066.2058308,
-  "updated_at": 1773959662.383096,
+  "updated_at": 1773962609.358119,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -166,10 +166,10 @@
       "pr_num": 1,
       "title": "Bootstrap Swift package workspace and module target graph",
       "branch": "",
-      "status": "available",
-      "engineer_id": "",
+      "status": "claimed",
+      "engineer_id": "todd-gould",
       "pr_url": null,
-      "claimed_at": null,
+      "claimed_at": 1773962609.358119,
       "started_at": null,
       "completed_at": null,
       "depends_on_prs": [],
@@ -373,7 +373,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 2,
+  "version": 3,
   "schema_version": 2,
   "agent_version": "38.63.0"
 }
