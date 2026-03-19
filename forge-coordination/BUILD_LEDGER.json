@@ -1,0 +1,114 @@
+{
+  "build_id": "macconsensusdevagent-abaeaa69",
+  "subsystem": "MacConsensusDevAgent",
+  "intent": "we are not going to build the Forge platform. We are going to build the Mac Consensus Dev Agent. Utilize the local files to develop the PRDs and the README, AGENTS and CLAUDE markdown files in the github repository to build the PRD plan",
+  "scope_statement": "Build the PRD plan for the Mac Consensus Dev Agent \u2014 a macOS application that runs two LLM providers in parallel with Claude arbitration (TRD-2), orchestrates a build pipeline that generates PRDs and PR plans (TRD-3 \u00a78.1, \u00a79.1), coordinates multi-engineer builds via a GitHub-stored Build Ledger (TRD-4), provides a SwiftUI professional engineering UI (TRD-8), integrates GitHub for commits and CI (TRD-5), runs a self-hosted Mac CI runner for real Xcode validation (TRD-9), and enforces a security threat model for AI-agent code generation with signing credentials (TRD-11). The PRD plan will be derived from the full TRD suite (TRD-1 through TRD-12) plus the forge_architecture_context, README, AGENTS.md, and CLAUDE.md files, producing an ordered set of PRD items that the Build Pipeline can execute through its per-PRD review gate workflow.\n\nClarifications:\n  - I just added them to the local file\n  - leverage the entire local library to determine any gaps, if gaps exist then it will need to be included in the PRDs\n  - you have access to all the documents already\n  - you will need to select the optimal order in which to develop the app\n  - leverage the entire local library to determine any gaps, if gaps exist then it will need to be included in the PRDs\n  - it is available for your review",
+  "created_at": 1773947682.657119,
+  "updated_at": 1773947682.6571891,
+  "updated_by": "todd-gould",
+  "prd_plan": [
+    {
+      "prd_id": "PRD-001",
+      "title": "Mac Consensus Dev Agent Application Shell and Local Runtime Foundation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-002",
+      "title": "Build Thread, ThreadStateStore, and Checkpoint Persistence",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-003",
+      "title": "Consensus Engine \u2014 Dual-Provider Parallel Execution with Claude Arbitration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-004",
+      "title": "Document Corpus Ingestion, Context Assembly, and Gap Detection",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-005",
+      "title": "GitHub Integration for Repository Operations, Artifact Commits, and CI Coordination",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-006",
+      "title": "Scope Decomposition and Ordered PRD Plan Generation Workflow",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-007",
+      "title": "Per-PRD Full Document Generation and Review Gate Workflow",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-008",
+      "title": "Per-PRD PR Plan Generation Workflow",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-009",
+      "title": "GitHub-Stored Build Ledger for Multi-Engineer Coordination",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-010",
+      "title": "Security Threat Model Enforcement for AI-Agent Code Generation and Signing Credentials",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-011",
+      "title": "Operational Observability, Cost Tracking, and Failure Recovery",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-012",
+      "title": "Professional SwiftUI Engineering Workspace and Build Stream UI",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-013",
+      "title": "Self-Hosted Mac CI Runner Integration and Real Xcode Validation Pipeline",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-014",
+      "title": "End-to-End Build Pipeline Orchestration and Integration Validation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    }
+  ],
+  "pr_entries": {},
+  "knowledge_notes": [],
+  "version": 1,
+  "schema_version": 2,
+  "agent_version": "38.50.0"
+}
