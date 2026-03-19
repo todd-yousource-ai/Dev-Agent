@@ -1,377 +1,128 @@
 {
-  "build_id": "macconsensusdevagent-abaeaa69",
-  "subsystem": "MacConsensusDevAgent",
+  "build_id": "consensusdevagent-cb702164",
+  "subsystem": "ConsensusDevAgent",
   "intent": "we are not going to build the Forge platform. We are going to build the Mac Consensus Dev Agent. Utilize the local files to develop the PRDs and the README, AGENTS and CLAUDE markdown files in the github repository to build the PRD plan",
-  "scope_statement": "Build the PRD plan for the Mac Consensus Dev Agent \u2014 a macOS application that runs two LLM providers in parallel with Claude arbitration (TRD-2), orchestrates a build pipeline that generates PRDs and PR plans (TRD-3 \u00a78.1, \u00a79.1), coordinates multi-engineer builds via a GitHub-stored Build Ledger (TRD-4), provides a SwiftUI professional engineering UI (TRD-8), integrates GitHub for commits and CI (TRD-5), runs a self-hosted Mac CI runner for real Xcode validation (TRD-9), and enforces a security threat model for AI-agent code generation with signing credentials (TRD-11). The PRD plan will be derived from the full TRD suite (TRD-1 through TRD-12) plus the forge_architecture_context, README, AGENTS.md, and CLAUDE.md files, producing an ordered set of PRD items that the Build Pipeline can execute through its per-PRD review gate workflow.\n\nClarifications:\n  - I just added them to the local file\n  - leverage the entire local library to determine any gaps, if gaps exist then it will need to be included in the PRDs\n  - you have access to all the documents already\n  - you will need to select the optimal order in which to develop the app\n  - leverage the entire local library to determine any gaps, if gaps exist then it will need to be included in the PRDs\n  - it is available for your review",
-  "created_at": 1773947682.657119,
-  "updated_at": 1773948247.742149,
+  "scope_statement": "Build the PRD plan generation subsystem of the Consensus Dev Agent \u2014 a native macOS AI coding agent. Per TRD-3 Section 8.1, for each PRDItem in the plan: generate a full PRD via the Consensus Engine (TRD-2), export as .docx for operator review, show inline preview in the build stream, present a per-PRD review gate (yes/skip/stop/correction\u2192regenerate), commit approved PRD markdown to GitHub, and mark completion in ThreadStateStore. The PRD plan itself is derived from the plain-language build intent decomposition described in the README and forge_architecture_context: the agent takes a build intent, decomposes it into an ordered PRD plan, then decomposes each PRD into a sequence of pull requests using two-model consensus (Claude + GPT-4o) with Claude arbitrating.\n\nClarifications:\n  - it is in the document repository. Any necessary specifications should be added to the PRDs\n  - it is in the document repository. Any necessary specifications should be added to the PRDs\n  - it is in the document repository. Any necessary specifications should be added to the PRDs\n  - it is in the document repository. Any necessary specifications should be added to the PRDs\n  - it is in the document repository. Any necessary specifications should be added to the PRDs\n  - it is in the document repository. Any necessary specifications should be added to the PRDs",
+  "created_at": 1773951279.5687838,
+  "updated_at": 1773951279.568852,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
       "prd_id": "PRD-001",
-      "title": "Mac Consensus Dev Agent Application Shell and Local Runtime Foundation",
-      "status": "in_progress",
+      "title": "PRDItem Canonical Data Model and Lifecycle State Machine",
+      "status": "pending",
       "engineer_id": "",
-      "pr_ids": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11,
-        12,
-        13
-      ]
+      "pr_ids": []
     },
     {
       "prd_id": "PRD-002",
-      "title": "Build Thread, ThreadStateStore, and Checkpoint Persistence",
+      "title": "Build Intent Intake and Validation",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-003",
-      "title": "Consensus Engine \u2014 Dual-Provider Parallel Execution with Claude Arbitration",
+      "title": "Consensus Engine Integration for PRD Plan Decomposition",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-004",
-      "title": "Document Corpus Ingestion, Context Assembly, and Gap Detection",
+      "title": "PRD Plan Display with Complexity Indicators and Cost Estimation",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-005",
-      "title": "GitHub Integration for Repository Operations, Artifact Commits, and CI Coordination",
+      "title": "PRD Plan Operator Approval Gate with Single Correction Re-decomposition",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-006",
-      "title": "Scope Decomposition and Ordered PRD Plan Generation Workflow",
+      "title": "PRD_PLAN.md Generation and GitHub Commit",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-007",
-      "title": "Per-PRD Full Document Generation and Review Gate Workflow",
+      "title": "Build Ledger Initialization",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-008",
-      "title": "Per-PRD PR Plan Generation Workflow",
+      "title": "ThreadStateStore Checkpoint for PRD Plan Phase",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-009",
-      "title": "GitHub-Stored Build Ledger for Multi-Engineer Coordination",
+      "title": "Full PRD Generation via Consensus Engine per PRDItem",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-010",
-      "title": "Security Threat Model Enforcement for AI-Agent Code Generation and Signing Credentials",
+      "title": "PRD Export to .docx for Operator Review",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-011",
-      "title": "Operational Observability, Cost Tracking, and Failure Recovery",
+      "title": "Inline PRD Preview in Build Stream",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-012",
-      "title": "Professional SwiftUI Engineering Workspace and Build Stream UI",
+      "title": "Per-PRD Operator Review Gate",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-013",
-      "title": "Self-Hosted Mac CI Runner Integration and Real Xcode Validation Pipeline",
+      "title": "Approved PRD Markdown Commit to GitHub",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-014",
-      "title": "End-to-End Build Pipeline Orchestration and Integration Validation",
+      "title": "PRD Completion Marking in ThreadStateStore",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-015",
+      "title": "PRD Plan Iteration Loop and Pipeline Orchestration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-016",
+      "title": "Auditability, Error Handling, and Observability",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     }
   ],
-  "pr_entries": {
-    "1": {
-      "prd_id": "PRD-001",
-      "pr_num": 1,
-      "title": "Create macOS app target and minimal SwiftUI launch shell",
-      "branch": "",
-      "status": "available",
-      "engineer_id": "",
-      "pr_url": null,
-      "claimed_at": null,
-      "started_at": null,
-      "completed_at": null,
-      "depends_on_prs": [],
-      "retry_count": 0,
-      "failure_summary": "",
-      "journal_path": ""
-    },
-    "2": {
-      "prd_id": "PRD-001",
-      "pr_num": 2,
-      "title": "Add runtime path model and local directory bootstrapper",
-      "branch": "",
-      "status": "blocked",
-      "engineer_id": "",
-      "pr_url": null,
-      "claimed_at": null,
-      "started_at": null,
-      "completed_at": null,
-      "depends_on_prs": [
-        1
-      ],
-      "retry_count": 0,
-      "failure_summary": "",
-      "journal_path": ""
-    },
-    "3": {
-      "prd_id": "PRD-001",
-      "pr_num": 3,
-      "title": "Implement service container protocols and dependency injection core",
-      "branch": "",
-      "status": "blocked",
-      "engineer_id": "",
-      "pr_url": null,
-      "claimed_at": null,
-      "started_at": null,
-      "completed_at": null,
-      "depends_on_prs": [
-        1
-      ],
-      "retry_count": 0,
-      "failure_summary": "",
-      "journal_path": ""
-    },
-    "4": {
-      "prd_id": "PRD-001",
-      "pr_num": 4,
-      "title": "Add service lifecycle management and bootstrap orchestration",
-      "branch": "",
-      "status": "blocked",
-      "engineer_id": "",
-      "pr_url": null,
-      "claimed_at": null,
-      "started_at": null,
-      "completed_at": null,
-      "depends_on_prs": [
-        3
-      ],
-      "retry_count": 0,
-      "failure_summary": "",
-      "journal_path": ""
-    },
-    "5": {
-      "prd_id": "PRD-001",
-      "pr_num": 5,
-      "title": "Implement structured logging facade with os_log categories and privacy defaults",
-      "branch": "",
-      "status": "blocked",
-      "engineer_id": "",
-      "pr_url": null,
-      "claimed_at": null,
-      "started_at": null,
-      "completed_at": null,
-      "depends_on_prs": [
-        3,
-        4
-      ],
-      "retry_count": 0,
-      "failure_summary": "",
-      "journal_path": ""
-    },
-    "6": {
-      "prd_id": "PRD-001",
-      "pr_num": 6,
-      "title": "Add versioned settings schema and UserDefaults-backed configuration store",
-      "branch": "",
-      "status": "blocked",
-      "engineer_id": "",
-      "pr_url": null,
-      "claimed_at": null,
-      "started_at": null,
-      "completed_at": null,
-      "depends_on_prs": [
-        3,
-        4
-      ],
-      "retry_count": 0,
-      "failure_summary": "",
-      "journal_path": ""
-    },
-    "7": {
-      "prd_id": "PRD-001",
-      "pr_num": 7,
-      "title": "Implement settings migration framework for versioned config evolution",
-      "branch": "",
-      "status": "blocked",
-      "engineer_id": "",
-      "pr_url": null,
-      "claimed_at": null,
-      "started_at": null,
-      "completed_at": null,
-      "depends_on_prs": [
-        6
-      ],
-      "retry_count": 0,
-      "failure_summary": "",
-      "journal_path": ""
-    },
-    "8": {
-      "prd_id": "PRD-001",
-      "pr_num": 8,
-      "title": "Add error boundary primitives and non-fatal failure reporting",
-      "branch": "",
-      "status": "blocked",
-      "engineer_id": "",
-      "pr_url": null,
-      "claimed_at": null,
-      "started_at": null,
-      "completed_at": null,
-      "depends_on_prs": [
-        3,
-        4,
-        5
-      ],
-      "retry_count": 0,
-      "failure_summary": "",
-      "journal_path": ""
-    },
-    "9": {
-      "prd_id": "PRD-001",
-      "pr_num": 9,
-      "title": "Implement concurrency conventions and isolated workspace allocation",
-      "branch": "",
-      "status": "blocked",
-      "engineer_id": "",
-      "pr_url": null,
-      "claimed_at": null,
-      "started_at": null,
-      "completed_at": null,
-      "depends_on_prs": [
-        2,
-        3,
-        4
-      ],
-      "retry_count": 0,
-      "failure_summary": "",
-      "journal_path": ""
-    },
-    "10": {
-      "prd_id": "PRD-001",
-      "pr_num": 10,
-      "title": "Wire all foundation services into the app composition root assembly",
-      "branch": "",
-      "status": "blocked",
-      "engineer_id": "",
-      "pr_url": null,
-      "claimed_at": null,
-      "started_at": null,
-      "completed_at": null,
-      "depends_on_prs": [
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9
-      ],
-      "retry_count": 0,
-      "failure_summary": "",
-      "journal_path": ""
-    },
-    "11": {
-      "prd_id": "PRD-001",
-      "pr_num": 11,
-      "title": "Integrate application launch flow with bootstrap, settings init, and clean shutdown",
-      "branch": "",
-      "status": "blocked",
-      "engineer_id": "",
-      "pr_url": null,
-      "claimed_at": null,
-      "started_at": null,
-      "completed_at": null,
-      "depends_on_prs": [
-        1,
-        10
-      ],
-      "retry_count": 0,
-      "failure_summary": "",
-      "journal_path": ""
-    },
-    "12": {
-      "prd_id": "PRD-001",
-      "pr_num": 12,
-      "title": "Add startup diagnostics and environment validation for local runtime readiness",
-      "branch": "",
-      "status": "blocked",
-      "engineer_id": "",
-      "pr_url": null,
-      "claimed_at": null,
-      "started_at": null,
-      "completed_at": null,
-      "depends_on_prs": [
-        10,
-        11
-      ],
-      "retry_count": 0,
-      "failure_summary": "",
-      "journal_path": ""
-    },
-    "13": {
-      "prd_id": "PRD-001",
-      "pr_num": 13,
-      "title": "Add integration and regression test suite for application shell foundation",
-      "branch": "",
-      "status": "blocked",
-      "engineer_id": "",
-      "pr_url": null,
-      "claimed_at": null,
-      "started_at": null,
-      "completed_at": null,
-      "depends_on_prs": [
-        11,
-        12
-      ],
-      "retry_count": 0,
-      "failure_summary": "",
-      "journal_path": ""
-    }
-  },
+  "pr_entries": {},
   "knowledge_notes": [],
-  "version": 2,
+  "version": 1,
   "schema_version": 2,
-  "agent_version": "38.50.0"
+  "agent_version": "38.55.0"
 }
