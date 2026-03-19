@@ -1,0 +1,156 @@
+{
+  "build_id": "consensusdevagent-3b3cbc6f",
+  "subsystem": "ConsensusDevAgent",
+  "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Deve Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture.",
+  "scope_statement": "Build the complete Mac Consensus Dev Agent \u2014 a native macOS two-process application consisting of a Swift/SwiftUI shell (UI, Touch ID authentication, Keychain secret storage, XPC communication, process management per TRD-1) and a Python 3.12 backend (ConsensusEngine with parallel Claude+GPT-4o generation and Claude arbitration per TRD-2, 8-stage BuildPipeline with 3-pass review per TRD-3, multi-agent coordination via BuildLedger per TRD-4, GitHubTool integration per TRD-5, HolisticReview per TRD-6, TRD development workflow per TRD-7, DocumentStore with FAISS vector retrieval per TRD-10, and backend startup/shutdown per TRD-12), connected via an authenticated Unix socket with line-delimited JSON and nonce-based handshake (TRD-1 Section 6), with Mac CI runner infrastructure (TRD-9), UI/UX design system (TRD-8), and all security controls mandated by TRD-11. This is NOT a Forge platform build \u2014 this is the autonomous coding agent product specified across all 12 TRDs in forge-docs/, which uses consensus AI (two LLM providers generating in parallel with Claude arbitrating) to develop high-quality software through an operator-gated, directed build pipeline.\n\nClarifications:\n  - review the full TRDs to determine the detailed information.\n  - review the full TRDs to determine the detailed information.\n  - review the full TRDs to determine the detailed information. Any open questions should be resolved during the PRD development process\n  - review the full TRDs to determine the detailed information.",
+  "created_at": 1773959066.2058308,
+  "updated_at": 1773959066.205937,
+  "updated_by": "todd-gould",
+  "prd_plan": [
+    {
+      "prd_id": "PRD-001",
+      "title": "Swift Shell Application Foundation and Module Architecture",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-002",
+      "title": "Swift Authentication, Session Lifecycle, and Keychain Secret Management",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-003",
+      "title": "Authenticated Swift\u2013Python IPC Channel and Message Protocol",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-004",
+      "title": "Backend Process Runtime, Startup Handshake, Health Monitoring, and Shutdown",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-005",
+      "title": "Settings, Onboarding, Migration, Localization, and Shell Observability",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-006",
+      "title": "Swift UI/UX Design System, Navigation, Build Stream, and Native App Surfaces",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-007",
+      "title": "Document Import, Validation, Preview, and Shell-to-Backend Document UX",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-008",
+      "title": "Consensus Engine Core with Parallel Dual-LLM Generation and Claude Arbitration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-009",
+      "title": "DocumentStore: Parsing, Chunking, Embeddings, FAISS Retrieval, and Context Assembly",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-010",
+      "title": "Build Pipeline Framework, ThreadState Persistence, and Stage Contracts",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-011",
+      "title": "Pipeline Stages 1\u20134: Scope, PRD Planning, PRD Generation, and PR Planning",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-012",
+      "title": "Pipeline Stages 5\u20138: Code Generation, Three-Pass Review, Test Loop, and CI Gate",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-013",
+      "title": "GitHubTool Integration, Branching, PR Lifecycle, and Safe Repository Operations",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-014",
+      "title": "BuildLedger Multi-Agent Coordination and Shared Build State",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-015",
+      "title": "Holistic Review Workflow and Corrective Fix-PR Planning",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-016",
+      "title": "TRD Development Workflow and Specification Authoring Support",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-017",
+      "title": "Security Controls: Credentials, Context Integrity, Generated Code, and Audit Trail",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-018",
+      "title": "Mac CI Runner Infrastructure, Workflows, and Swift Build Validation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-019",
+      "title": "Comprehensive Test Strategy, Coverage Targets, and End-to-End Validation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-020",
+      "title": "macOS Distribution Packaging, Bundled Python Runtime, Signing, Notarization, and Auto-Update",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    }
+  ],
+  "pr_entries": {},
+  "knowledge_notes": [],
+  "version": 1,
+  "schema_version": 2,
+  "agent_version": "38.63.0"
+}
