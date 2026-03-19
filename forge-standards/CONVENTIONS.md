@@ -1,52 +1,52 @@
 # Code Conventions — Forge Platform
 
-This document defines coding conventions, naming rules, structural patterns, and error-handling expectations for the full Forge platform.
+This document defines coding conventions, naming rules, file layout, and implementation patterns for the full Forge platform.
 
-These conventions apply across all subsystems and languages unless a subsystem-specific rule overrides them.
+It applies to all source code, tests, generated interfaces, and supporting modules across every subsystem.
 
 ---
 
 ## Core Principles
 
 1. **TRDs are authoritative.**  
-   If implementation details conflict with this document, the owning TRD wins.
+   If a convention here conflicts with a TRD, the TRD wins.
 
-2. **Security-first by default.**  
-   Any code touching credentials, machine identity, remote content, generated code, policy enforcement, audit streams, or CI must follow the security TRD before implementation.
+2. **Security-sensitive code is explicit, not clever.**  
+   Prefer readable control flow, typed errors, narrow interfaces, and audit-friendly names.
 
-3. **No implicit behavior.**  
-   Prefer explicit names, typed interfaces, explicit state transitions, explicit error mapping, and explicit trust boundaries.
+3. **Subsystem boundaries must remain visible in code.**  
+   Directory names, class names, DTOs, and tests should make ownership obvious.
 
-4. **Interfaces are contracts.**  
-   Public APIs, IPC payloads, SDK contracts, persistence models, and audit events must be versionable and stable.
+4. **Names should reveal trust level and execution role.**  
+   Distinguish clearly between:
+   - trusted vs untrusted content
+   - validated vs raw input
+   - policy vs transport vs storage types
+   - control-plane vs data-plane components
 
-5. **Generated or external content is untrusted.**  
-   Treat model output, repository content, connector input, policy payloads, and replay data as hostile until validated.
+5. **Tests mirror production structure exactly.**  
+   Every `src/<subsystem>/...` path should have corresponding tests under `tests/<subsystem>/...`.
 
-6. **Tests mirror implementation structure.**  
-   Test placement, naming, and fixture structure must make ownership obvious.
+6. **Do not invent cross-subsystem abstractions prematurely.**  
+   Shared code is allowed only when ownership, lifecycle, and security model are unambiguous.
 
 ---
 
-## File and Directory Naming
-
 ## File and Directory Naming (exact `src/` layout)
 
-The platform uses the following top-level source layout:
+### Canonical source layout
 
 ```text
 src/
-  cal/
-  dtl/
-  trustflow/
-  vtz/
-  trustlock/
-  mcp/
-  rewind/
-
+  cal/           # Conversation Abstraction Layer
+  dtl/           # Data Trust Label
+  trustflow/     # TrustFlow audit stream
+  vtz/           # Virtual Trust Zone enforcement
+  trustlock/     # Cryptographic machine identity
+  mcp/           # MCP Policy Engine
+  rewind/        # Forge Rewind replay engine
 sdk/
-  connector/
-
+  connector/     # Forge Connector SDK
 tests/
   cal/
   dtl/
@@ -58,802 +58,976 @@ tests/
   connector/
 ```
 
-### Required directory names
+### Directory rules
 
-Use these directory names exactly:
+- Subsystem directories are **lowercase**.
+- Use **single-word subsystem roots** exactly as defined:
+  - `cal`
+  - `dtl`
+  - `trustflow`
+  - `vtz`
+  - `trustlock`
+  - `mcp`
+  - `rewind`
+  - `connector`
+- Do not create alias directories such as:
+  - `conversation_layer/`
+  - `data_trust_label/`
+  - `virtual_trust_zone/`
+- Nested directories use **snake_case**.
+- Directory names should represent one of:
+  - domain area
+  - protocol
+  - adapter type
+  - storage mechanism
+  - enforcement layer
+  - test fixture category
 
-- `src/cal/` — Conversation Abstraction Layer components
-- `src/dtl/` — Data Trust Label components
-- `src/trustflow/` — TrustFlow audit stream components
-- `src/vtz/` — Virtual Trust Zone enforcement
-- `src/trustlock/` — Cryptographic machine identity
-- `src/mcp/` — MCP Policy Engine
-- `src/rewind/` — Forge Rewind replay engine
-- `sdk/connector/` — Forge Connector SDK
-- `tests/<subsystem>/` — tests mirror implementation layout exactly
-
-### General file naming rules
-
-#### Python
-- Use `snake_case.py` for all Python modules.
-- Module names must describe domain responsibility, not implementation trivia.
-- Prefer singular nouns for core models and plural nouns only for collections or registries.
-
-Examples:
-- `policy_engine.py`
-- `label_resolver.py`
-- `audit_event.py`
-- `socket_transport.py`
-
-Avoid:
-- `utils.py`
-- `helpers.py`
-- `misc.py`
-- `common.py`
-
-If shared functionality exists, name by purpose:
-- `json_canonicalization.py`
-- `signature_verifier.py`
-- `repository_checkout.py`
-
-#### Swift
-- Use `PascalCase.swift` matching the primary type in the file.
-- One top-level primary type per file.
-- Extensions should live in:
-  - same file if small and cohesive
-  - `TypeName+Concern.swift` if behavior is substantial
-
-Examples:
-- `ConsensusEngine.swift`
-- `ProviderAdapter.swift`
-- `SocketClient.swift`
-- `PolicyDecision+Formatting.swift`
-
-#### Test files
-- Python tests use `test_<module_or_behavior>.py`
-- Swift tests use `<TypeName>Tests.swift`
-
-Examples:
-- `tests/dtl/test_label_resolver.py`
-- `tests/trustflow/test_audit_emitter.py`
-- `PolicyEngineTests.swift`
-
-### Directory structure within each subsystem
-
-Each subsystem should follow a predictable internal layout where applicable:
+### Preferred nested directory patterns
 
 ```text
-src/<subsystem>/
-  api/
-  models/
-  services/
-  policies/
-  transport/
-  storage/
-  crypto/
-  replay/
-  adapters/
-  validation/
-  errors.py
-  types.py
-  constants.py
+src/<subsystem>/models/
+src/<subsystem>/services/
+src/<subsystem>/adapters/
+src/<subsystem>/policies/
+src/<subsystem>/validators/
+src/<subsystem>/serializers/
+src/<subsystem>/storage/
+src/<subsystem>/audit/
+src/<subsystem>/runtime/
+src/<subsystem>/transport/
+src/<subsystem>/crypto/
+src/<subsystem>/fixtures/        # only if runtime fixtures are required
 ```
 
-Only create directories that are meaningfully used. Do not create empty architectural folders.
+Use only directories that fit the subsystem’s actual design. Do not create empty pattern folders.
 
-### Test mirroring rules
+### File naming rules
 
-Tests must mirror implementation paths as closely as possible.
+- Source files use **snake_case**.
+- One file should generally contain one primary class, service, protocol, or cohesive type group.
+- File names should match the main exported symbol when practical.
+
+Examples:
+
+```text
+src/dtl/models/trust_label.py
+src/mcp/policies/policy_evaluator.py
+src/trustflow/audit/audit_event_writer.py
+src/vtz/runtime/zone_session_manager.py
+src/trustlock/crypto/attestation_verifier.py
+sdk/connector/client/forge_connector_client.py
+```
+
+### Disallowed file naming patterns
+
+- Generic names without subsystem context:
+  - `utils.py`
+  - `helpers.py`
+  - `misc.py`
+  - `common.py`
+- Vague lifecycle names:
+  - `manager.py` unless the type is actually a manager
+  - `processor.py` unless it truly processes a stream or pipeline
+- Redundant subsystem repetition inside same folder:
+  - `src/dtl/models/dtl_label.py` → prefer `trust_label.py`
+  - `src/vtz/runtime/vtz_session.py` → prefer `zone_session.py`
+
+### Test file naming
+
+- Test files use `test_<production_file>.py`.
+- Tests mirror source paths exactly.
 
 Example:
 
 ```text
-src/dtl/models/label.py
-tests/dtl/models/test_label.py
+src/trustflow/audit/event_envelope.py
+tests/trustflow/audit/test_event_envelope.py
 ```
 
-Example:
-
-```text
-src/mcp/policies/policy_engine.py
-tests/mcp/policies/test_policy_engine.py
-```
-
-For SDK code:
-
-```text
-sdk/connector/session.py
-tests/connector/test_session.py
-```
+If a source file contains multiple tightly coupled public types, the test file may still remain singular if it maps clearly.
 
 ---
 
 ## Class and Function Naming
 
-## Class and Function Naming
+### General naming style
 
-### General naming rules
+- **Classes:** `PascalCase`
+- **Functions/methods:** `snake_case`
+- **Variables:** `snake_case`
+- **Constants:** `UPPER_SNAKE_CASE`
+- **Private/internal helpers:** prefix with single underscore where language/runtime allows
+- **Protocols/interfaces/abstract base classes:** `PascalCase`, named by role
 
-- **Classes, structs, enums, protocols, and Swift actors:** `PascalCase`
-- **Python functions, variables, module names:** `snake_case`
-- **Swift functions, properties, methods, parameters:** `camelCase`
-- **Constants:**  
-  - Python module-level constants: `UPPER_SNAKE_CASE`
-  - Swift static constants: `camelCase` unless interoperating with C-style APIs
-- **Private/internal helpers** must still be descriptively named; do not use abbreviations unless domain-standard.
+### Class naming rules
 
-### Naming by responsibility
+Use suffixes only when they communicate a real architectural role.
 
-Prefer names that reveal role:
-
-- `Resolver` — determines a value from inputs and rules
-- `Validator` — checks structure or semantics; does not mutate
-- `Verifier` — validates cryptographic or proof-bearing claims
-- `Parser` — converts raw input into structured representation
-- `Encoder` / `Decoder` — serialization concerns
-- `Adapter` — boundary translation between systems
-- `Client` — outbound integration
-- `Service` — orchestrates domain behavior
-- `Engine` — core decision or execution logic
-- `Registry` — lookup/registration
-- `Store` / `Repository` — persistence access
-- `Emitter` — sends events
-- `Recorder` — persists event streams
-- `Replayer` — deterministic playback
-- `Factory` / `Builder` — object creation with nontrivial assembly
-- `Coordinator` — multi-component workflow owner
-
-### Boolean naming
-
-Use boolean names that read as predicates.
-
-Python:
-- `is_verified`
-- `has_signature`
-- `can_replay`
-- `should_quarantine`
-
-Swift:
-- `isVerified`
-- `hasSignature`
-- `canReplay`
-- `shouldQuarantine`
-
-Avoid ambiguous names:
-- `valid`
-- `enabled`
-- `check`
-- `status_ok`
-
-### Verb conventions for functions
-
-Use consistent verbs by operation type:
-
-- `get_` / `get...` — only when retrieval may be nontrivial or remote
-- `load_` / `load...` — fetch from persistence
-- `read_` / `read...` — raw IO
-- `parse_` / `parse...` — convert syntax to structure
-- `validate_` / `validate...` — check and report
-- `verify_` / `verify...` — cryptographic or provenance checks
-- `resolve_` / `resolve...` — derive from policy/rules/context
-- `build_` / `build...` — construct output
-- `create_` / `create...` — instantiate or persist new entity
-- `update_` / `update...` — mutate persisted state
-- `record_` / `record...` — append auditable information
-- `emit_` / `emit...` — send event externally
-- `replay_` / `replay...` — deterministic event execution
-- `enforce_` / `enforce...` — apply policy or security controls
-
-Avoid weak verbs:
-- `handle`
-- `process`
-- `do`
-- `run`
-- `manage`
-
-Only use them when the abstraction truly spans multiple concrete operations.
-
-### Interface naming
-
-#### Python abstract interfaces
-Use one of:
-- `...Protocol` for typing protocol
-- `...ABC` for abstract base class
+Preferred suffixes:
+- `Service`
+- `Client`
+- `Adapter`
+- `Provider`
+- `Repository`
+- `Store`
+- `Validator`
+- `Parser`
+- `Serializer`
+- `Encoder`
+- `Decoder`
+- `Factory`
+- `Builder`
+- `Evaluator`
+- `Resolver`
+- `Verifier`
+- `Signer`
+- `Reader`
+- `Writer`
+- `Publisher`
+- `Collector`
+- `Recorder`
+- `Replayer`
+- `Policy`
+- `Session`
+- `Controller` only for explicit orchestration boundaries
 
 Examples:
-- `PolicyStoreProtocol`
-- `AuditEmitterProtocol`
-- `ConnectorClientABC`
+- `TrustLabelValidator`
+- `PolicyEvaluator`
+- `AuditEventWriter`
+- `ZoneSession`
+- `AttestationVerifier`
+- `ReplayCursorStore`
 
-#### Swift protocols
-Protocols use role-based names, usually without `Protocol` suffix.
+Avoid meaningless suffixes:
+- `Helper`
+- `Thing`
+- `Object`
+- `Impl`
+- `BaseManager`
+- `SuperClient`
+
+### Function naming rules
+
+Functions should be verb-led and reveal side effects.
+
+Preferred verbs by intent:
+- `parse_*`
+- `validate_*`
+- `verify_*`
+- `serialize_*`
+- `deserialize_*`
+- `encode_*`
+- `decode_*`
+- `load_*`
+- `save_*`
+- `read_*`
+- `write_*`
+- `build_*`
+- `create_*`
+- `issue_*`
+- `revoke_*`
+- `enforce_*`
+- `evaluate_*`
+- `record_*`
+- `publish_*`
+- `replay_*`
+- `attest_*`
+
+Boolean-returning functions should use:
+- `is_*`
+- `has_*`
+- `can_*`
+- `should_*`
 
 Examples:
-- `PolicyEvaluating`
-- `AuditEmitting`
-- `TrustLabelResolving`
+- `validate_trust_label()`
+- `verify_attestation_chain()`
+- `evaluate_policy_bundle()`
+- `record_audit_event()`
+- `replay_session_timeline()`
+- `is_zone_transition_allowed()`
 
-Use `Protocol` suffix only when required to avoid collisions or improve clarity for generated bindings.
+### Async naming
+
+If the language/runtime does not distinguish async methods clearly, append `_async` only when needed for clarity or API parity. Do not mix styles arbitrarily.
+
+Prefer:
+- `fetch_policy_bundle()`
+- `publish_audit_batch()`
+
+Use `_async` only if sync and async variants coexist:
+- `load_snapshot()`
+- `load_snapshot_async()`
+
+### DTO and schema naming
+
+For structured transport types, use explicit suffixes:
+- `Request`
+- `Response`
+- `Command`
+- `Event`
+- `Envelope`
+- `Record`
+- `Snapshot`
+- `Manifest`
+- `Descriptor`
+
+Examples:
+- `PolicyDecisionRequest`
+- `PolicyDecisionResponse`
+- `AuditEventEnvelope`
+- `ReplaySnapshot`
+- `ConnectorManifest`
+
+### Enum naming
+
+- Enum type names: `PascalCase`
+- Enum values: use the language’s conventional style, but prefer explicit, stable names
+- Avoid abbreviations in enum members unless domain-standard
+
+Examples:
+- `TrustLevel.HIGH`
+- `ZoneState.ACTIVE`
+- `ReplayMode.STRICT`
 
 ---
-
-## Error and Exception Patterns
 
 ## Error and Exception Patterns
 
 ### General rules
 
-1. **Never swallow exceptions silently.**
-2. **Never expose secrets in error messages, logs, or audit events.**
-3. **Map low-level errors into domain errors at subsystem boundaries.**
-4. **Errors must preserve enough context for diagnosis without leaking sensitive material.**
-5. **Validation failures are not crashes.** They must produce typed, expected error outcomes.
-6. **Security denials must be explicit.** Distinguish deny, invalid, unavailable, and internal failure.
+- Raise or return **typed, domain-specific errors**.
+- Never use broad, opaque exceptions for expected failures.
+- Error messages must be:
+  - concise
+  - stable enough for logs and tests
+  - safe for audit trails
+- Never include secrets, tokens, key material, raw credentials, or unredacted sensitive payloads in error messages.
 
-### Python error structure
+### Error naming
 
-Each subsystem should define a dedicated error hierarchy in `errors.py`.
+Custom exception classes use `PascalCase` and end with one of:
+- `Error`
+- `Exception` only if the local codebase already uses it consistently
 
-Pattern:
+Prefer `Error`.
+
+Examples:
+- `TrustLabelValidationError`
+- `PolicyEvaluationError`
+- `AuditPublishError`
+- `ZoneTransitionError`
+- `AttestationVerificationError`
+- `ReplayConsistencyError`
+
+### Error categories
+
+Every subsystem should distinguish at minimum between:
+
+1. **Validation errors**  
+   Input malformed, incomplete, or semantically invalid.
+
+2. **Policy errors**  
+   Request denied by policy or trust rules.
+
+3. **Integrity errors**  
+   Signature mismatch, hash mismatch, tampering, replay inconsistency.
+
+4. **Transport or I/O errors**  
+   Socket, storage, network, queue, stream, persistence failures.
+
+5. **State errors**  
+   Illegal transition, missing prerequisite, expired session, closed cursor.
+
+6. **Internal invariant errors**  
+   Unexpected state that should not happen if code is correct.
+
+### Pattern for exception hierarchy
+
+Each subsystem should define a root error and derive typed variants.
+
+Example:
 
 ```python
 class DtlError(Exception):
-    """Base exception for the DTL subsystem."""
+    pass
 
-class LabelValidationError(DtlError):
-    """Raised when a trust label is structurally or semantically invalid."""
+class TrustLabelValidationError(DtlError):
+    pass
 
-class LabelResolutionError(DtlError):
-    """Raised when a trust label cannot be resolved from available context."""
+class TrustLabelIntegrityError(DtlError):
+    pass
 
-class SignatureVerificationError(DtlError):
-    """Raised when a signature is missing, malformed, or invalid."""
+class TrustLabelSerializationError(DtlError):
+    pass
 ```
 
-Rules:
-- One subsystem base exception per subsystem.
-- Publicly raised exceptions must inherit from subsystem base.
-- Name exceptions as nouns ending in `Error`.
-- Use specific subclasses for actionable cases.
-- Keep transport-specific exceptions wrapped before crossing subsystem boundaries.
+### Wrapping lower-level errors
 
-### Swift error structure
+- Wrap third-party or infrastructure errors at subsystem boundaries.
+- Preserve original cause where supported.
+- Convert generic exceptions into domain terms before crossing API boundaries.
 
-Use typed enums conforming to `Error`.
+Preferred pattern:
+- low-level parser error → `TrustLabelSerializationError`
+- crypto backend failure → `AttestationVerificationError`
+- queue publish failure → `AuditPublishError`
 
-Pattern:
+### Prohibited error practices
 
-```swift
-enum PolicyEngineError: Error {
-    case invalidPolicy(reason: String)
-    case decisionUnavailable
-    case signatureVerificationFailed
-    case accessDenied(operation: String)
-}
-```
-
-Rules:
-- One primary error enum per major component or subsystem.
-- Use associated values for safe, non-sensitive diagnostics.
-- Conform to `LocalizedError` only if the message is user-safe.
-- Separate user-display errors from internal diagnostic errors when needed.
-
-### Error taxonomy
-
-Use these categories consistently:
-
-- `ValidationError` / `.invalid...` — input malformed or violates schema/rules
-- `VerificationError` / `.verificationFailed` — cryptographic/provenance proof failed
-- `AuthorizationError` / `.accessDenied` — caller not allowed
-- `PolicyDecisionError` / `.decisionUnavailable` — engine cannot safely decide
-- `ConflictError` / `.versionConflict` — optimistic concurrency or state race
-- `TransportError` / `.connectionFailed` — IPC/network issue
-- `TimeoutError` / `.timedOut` — operation exceeded limits
-- `ReplayError` / `.replayFailed` — deterministic replay could not proceed
-- `InternalError` / `.internalFailure` — invariant or unexpected fault
-
-### Result patterns
-
-#### Python
-For domain operations that can fail as part of normal flow, prefer:
-- typed exceptions for invalid/unrecoverable conditions
-- explicit result objects when callers must branch on decision outcomes
-
-Example:
-```python
-@dataclass(frozen=True)
-class PolicyDecision:
-    effect: PolicyEffect
-    reason_code: str
-    obligations: tuple[str, ...]
-```
-
-Do not use exceptions for ordinary deny outcomes.
-
-#### Swift
-Use:
-- `throws` for exceptional failures
-- enums/results for ordinary control flow decisions
-
-Example:
-```swift
-enum PolicyEffect {
-    case allow
-    case deny
-    case quarantine
-}
-```
-
-A deny is a decision, not an exception.
-
-### Logging and audit interaction
-
-- Errors may be logged with correlation IDs, entity IDs, policy IDs, and redacted metadata.
-- Never log:
-  - raw secrets
-  - tokens
-  - private keys
-  - full prompt contents unless explicitly permitted
-  - unredacted connector payloads
-  - sensitive replay artifacts
-
-- Use structured logging fields rather than interpolated freeform strings where available.
+- `except Exception:` without immediate re-raise or domain wrapping
+- returning `None` to mean “error”
+- mixing success payloads and error strings
+- embedding stack traces in user-facing responses
+- leaking raw policy source or secret material through exceptions
 
 ---
 
 ## Per-Subsystem Naming Rules
 
-## Per-Subsystem Naming Rules
+---
 
 ### `src/cal/` — Conversation Abstraction Layer
 
-Purpose: normalize conversation/session interactions across providers and internal orchestration.
+#### Purpose
+Owns conversation abstraction, message normalization, interaction state, and conversation-safe representations used by upstream orchestration.
 
-#### File naming
-Use names such as:
-- `conversation_session.py`
-- `message_envelope.py`
-- `provider_adapter.py`
-- `consensus_engine.py`
-- `socket_transport.py`
+#### Naming rules
+Use the term **conversation** for user/agent interaction threads, and **message** for atomic units.
 
-#### Type naming
+#### Preferred type names
 - `ConversationSession`
+- `ConversationMessage`
 - `MessageEnvelope`
-- `ProviderAdapter`
-- `ConsensusEngine`
-- `ConversationTurn`
-- `ResponseCandidate`
-- `ArbitrationResult`
+- `MessageNormalizer`
+- `ConversationStateStore`
+- `PromptBoundaryValidator`
+- `InteractionContext`
 
-#### Function naming
-- `start_session`
-- `append_turn`
-- `build_prompt_context`
-- `request_candidate_responses`
-- `arbitrate_responses`
-- `serialize_message_envelope`
+#### Preferred function names
+- `normalize_message()`
+- `append_message()`
+- `build_conversation_context()`
+- `validate_prompt_boundary()`
+- `serialize_message_envelope()`
 
-#### Naming guidance
-- Use `candidate` for model outputs prior to selection.
-- Use `arbitration` for Claude-selected consensus outcomes.
-- Use `turn` for one interaction unit.
-- Use `session` for persistent conversation state.
-- Do not use `chat` in core abstractions unless it specifically maps to an external provider API.
+#### Avoid
+- `chat_*`
+- `bot_*`
+- `thread_*` unless the TRD explicitly uses thread terminology
+- `prompt_manager` when the component actually validates or transforms prompts
+
+#### File examples
+```text
+src/cal/models/conversation_message.py
+src/cal/services/message_normalizer.py
+src/cal/validators/prompt_boundary_validator.py
+```
 
 ---
 
 ### `src/dtl/` — Data Trust Label
 
-Purpose: assign, validate, propagate, and enforce trust metadata on data objects.
+#### Purpose
+Owns data trust labeling, trust classification, provenance labeling, and trust metadata validation.
 
-#### File naming
-Use names such as:
-- `label.py`
-- `label_resolver.py`
-- `label_validator.py`
-- `classification_policy.py`
-- `provenance_chain.py`
-- `signature_verifier.py`
+#### Naming rules
+Use **trust_label** as the canonical term, not `tag`, `badge`, or `marker`.
 
-#### Type naming
+#### Preferred type names
 - `TrustLabel`
-- `LabelResolver`
-- `LabelValidator`
-- `ClassificationPolicy`
-- `ProvenanceChain`
-- `LabelEvidence`
-- `TrustTier`
-- `DataOrigin`
+- `TrustLabelValidator`
+- `TrustLabelParser`
+- `TrustLabelSerializer`
+- `TrustProvenanceRecord`
+- `TrustClassification`
+- `LabelDerivationPolicy`
 
-#### Function naming
-- `resolve_label`
-- `validate_label`
-- `verify_provenance_chain`
-- `attach_label`
-- `propagate_label`
-- `downgrade_label`
-- `quarantine_object`
+#### Preferred function names
+- `validate_trust_label()`
+- `parse_trust_label()`
+- `serialize_trust_label()`
+- `derive_trust_classification()`
+- `attach_provenance_record()`
 
-#### Naming guidance
-- Use `label` for the canonical trust object.
-- Use `classification` for policy-assigned sensitivity/trust grouping.
-- Use `provenance` for origin and lineage.
-- Use `evidence` for supporting facts used in label derivation.
-- Use `tier` for ordinal trust level names, not `level` unless numerically defined by TRD.
+#### Avoid
+- `label_utils`
+- `trust_helper`
+- `metadata_processor` when trust semantics are central
+
+#### File examples
+```text
+src/dtl/models/trust_label.py
+src/dtl/validators/trust_label_validator.py
+src/dtl/policies/label_derivation_policy.py
+```
 
 ---
 
-### `src/trustflow/` — TrustFlow Audit Stream
+### `src/trustflow/` — TrustFlow audit stream
 
-Purpose: append-only, queryable audit stream for trust-relevant actions and decisions.
+#### Purpose
+Owns audit event creation, integrity-preserving event flow, audit publication, and stream consumption.
 
-#### File naming
-Use names such as:
-- `audit_event.py`
-- `audit_emitter.py`
-- `audit_recorder.py`
-- `event_canonicalizer.py`
-- `stream_cursor.py`
-- `integrity_verifier.py`
+#### Naming rules
+Use **audit_event**, **envelope**, **stream**, **batch**, and **cursor** consistently.
 
-#### Type naming
+#### Preferred type names
 - `AuditEvent`
-- `AuditEmitter`
-- `AuditRecorder`
-- `AuditStreamCursor`
-- `EventCanonicalizer`
-- `IntegrityVerifier`
-- `AuditEnvelope`
+- `AuditEventEnvelope`
+- `AuditEventWriter`
+- `AuditStreamPublisher`
+- `AuditBatchBuilder`
+- `AuditCursor`
+- `StreamCheckpointStore`
 
-#### Function naming
-- `record_event`
-- `emit_event`
-- `canonicalize_event`
-- `verify_stream_integrity`
-- `read_from_cursor`
-- `append_audit_envelope`
+#### Preferred function names
+- `record_audit_event()`
+- `publish_audit_batch()`
+- `load_stream_checkpoint()`
+- `advance_audit_cursor()`
+- `verify_event_envelope()`
 
-#### Naming guidance
-- Use `event` for logical audit records.
-- Use `envelope` for signed/wrapped transport form.
-- Use `stream` for append-only ordered records.
-- Use `cursor` for consumer read position.
-- Use `integrity` for tamper-evidence checks; use `authenticity` when verifying issuer identity.
+#### Avoid
+- `log_event` for structured audit records
+- `logger` for event pipeline writers unless it truly wraps a logging framework
+- `queue_item` when the object is an audit event envelope
 
----
-
-### `src/vtz/` — Virtual Trust Zone
-
-Purpose: isolation and enforcement boundary for operations based on trust constraints.
-
-#### File naming
-Use names such as:
-- `zone_policy.py`
-- `zone_enforcer.py`
-- `execution_guard.py`
-- `boundary_rule.py`
-- `artifact_quarantine.py`
-- `zone_context.py`
-
-#### Type naming
-- `VirtualTrustZone`
-- `ZonePolicy`
-- `ZoneEnforcer`
-- `ExecutionGuard`
-- `BoundaryRule`
-- `ArtifactQuarantine`
-- `ZoneContext`
-
-#### Function naming
-- `enforce_zone_policy`
-- `is_operation_permitted`
-- `quarantine_artifact`
-- `validate_boundary_crossing`
-- `build_zone_context`
-- `deny_execution`
-
-#### Naming guidance
-- Use `zone` for the isolation domain.
-- Use `boundary` for transitions between trust domains.
-- Use `quarantine` for containment of untrusted artifacts.
-- Use `guard` for preventive checks.
-- Use `execution` only when discussing actual runnable operations; generated code remains non-executed unless explicitly allowed by TRD.
+#### File examples
+```text
+src/trustflow/models/audit_event.py
+src/trustflow/audit/audit_event_writer.py
+src/trustflow/storage/stream_checkpoint_store.py
+```
 
 ---
 
-### `src/trustlock/` — Cryptographic Machine Identity
+### `src/vtz/` — Virtual Trust Zone enforcement
 
-Purpose: TPM-anchored or hardware-backed machine identity, signing, attestation, and key lifecycle.
+#### Purpose
+Owns zone boundaries, zone lifecycle, trust-zone transitions, and enforcement decisions.
 
-#### File naming
-Use names such as:
-- `machine_identity.py`
-- `attestation_verifier.py`
-- `key_handle_store.py`
-- `signing_service.py`
-- `device_claim.py`
-- `nonce_challenge.py`
+#### Naming rules
+Use **zone**, **boundary**, **transition**, **session**, and **enforcement** as canonical terms.
 
-#### Type naming
+#### Preferred type names
+- `ZoneSession`
+- `ZoneBoundary`
+- `ZoneTransitionPolicy`
+- `ZoneEnforcementService`
+- `BoundaryViolationError`
+- `TrustZoneDescriptor`
+
+#### Preferred function names
+- `open_zone_session()`
+- `close_zone_session()`
+- `enforce_zone_boundary()`
+- `evaluate_zone_transition()`
+- `is_zone_transition_allowed()`
+
+#### Avoid
+- `sandbox` unless the TRD explicitly means sandbox
+- `container` unless integrating with container runtime
+- `permission_check` when evaluating trust-zone semantics
+
+#### File examples
+```text
+src/vtz/runtime/zone_session.py
+src/vtz/policies/zone_transition_policy.py
+src/vtz/services/zone_enforcement_service.py
+```
+
+---
+
+### `src/trustlock/` — Cryptographic machine identity
+
+#### Purpose
+Owns machine identity, attestation, TPM-backed identity proofs, trust anchors, and verification flows.
+
+#### Naming rules
+Use **attestation**, **identity**, **anchor**, **quote**, **verifier**, and **signer** consistently.
+
+#### Preferred type names
 - `MachineIdentity`
+- `AttestationQuote`
 - `AttestationVerifier`
-- `KeyHandleStore`
-- `SigningService`
-- `DeviceClaim`
-- `NonceChallenge`
-- `AttestationStatement`
-- `KeyProvisioningRecord`
+- `TrustAnchorStore`
+- `IdentityProvisioner`
+- `QuoteSigner`
+- `CredentialBinding`
 
-#### Function naming
-- `generate_attestation`
-- `verify_attestation`
-- `load_key_handle`
-- `sign_payload`
-- `rotate_key_material`
-- `validate_device_claim`
+#### Preferred function names
+- `issue_machine_identity()`
+- `verify_attestation_quote()`
+- `load_trust_anchors()`
+- `bind_credential_to_identity()`
+- `rotate_identity_material()`
 
-#### Naming guidance
-- Use `attestation` for hardware/device proof material.
-- Use `claim` for asserted properties.
-- Use `statement` for signed attestation payloads.
-- Use `handle` for opaque references to secure key storage.
-- Never name private key material as plain `key`; distinguish:
-  - `key_handle`
-  - `public_key`
-  - `wrapped_key`
-  - `key_reference`
+#### Avoid
+- `crypto_utils`
+- `key_manager` unless full key lifecycle management is actually implemented
+- `token_verifier` when attestation semantics are involved
+
+#### File examples
+```text
+src/trustlock/models/machine_identity.py
+src/trustlock/crypto/attestation_verifier.py
+src/trustlock/storage/trust_anchor_store.py
+```
 
 ---
 
 ### `src/mcp/` — MCP Policy Engine
 
-Purpose: evaluate policy, produce decisions, and enforce obligations for machine control policies.
+#### Purpose
+Owns policy evaluation, policy bundles, rule resolution, decisioning, and enforcement recommendations.
 
-#### File naming
-Use names such as:
-- `policy_engine.py`
-- `policy_bundle.py`
-- `decision_context.py`
-- `obligation_resolver.py`
-- `rule_evaluator.py`
-- `policy_store.py`
+#### Naming rules
+Use **policy**, **rule**, **bundle**, **decision**, **evaluator**, and **resolver** consistently.
 
-#### Type naming
-- `PolicyEngine`
+#### Preferred type names
 - `PolicyBundle`
-- `DecisionContext`
-- `PolicyDecision`
-- `PolicyEffect`
-- `ObligationResolver`
-- `RuleEvaluator`
-- `PolicyStore`
+- `PolicyRule`
+- `PolicyEvaluator`
+- `DecisionResolver`
+- `PolicyDecisionRequest`
+- `PolicyDecisionResponse`
+- `EnforcementRecommendation`
 
-#### Function naming
-- `evaluate_policy`
-- `resolve_obligations`
-- `load_policy_bundle`
-- `compile_rule_set`
-- `build_decision_context`
-- `apply_policy_decision`
+#### Preferred function names
+- `evaluate_policy_bundle()`
+- `resolve_policy_decision()`
+- `load_policy_rules()`
+- `validate_policy_bundle()`
+- `build_enforcement_recommendation()`
 
-#### Naming guidance
-- Use `decision` for the complete evaluative result.
-- Use `effect` for allow/deny/quarantine-style action.
-- Use `obligation` for required follow-up actions.
-- Use `rule` for atomic evaluative logic.
-- Use `bundle` for signed/versioned policy packages.
+#### Avoid
+- `engine_utils`
+- `checker`
+- `handler` when the code actually performs policy evaluation
+
+#### File examples
+```text
+src/mcp/models/policy_bundle.py
+src/mcp/policies/policy_evaluator.py
+src/mcp/resolvers/decision_resolver.py
+```
 
 ---
 
-### `src/rewind/` — Forge Rewind Replay Engine
+### `src/rewind/` — Forge Rewind replay engine
 
-Purpose: deterministic replay of prior workflows, event streams, and decisions for audit/debugging.
+#### Purpose
+Owns replay, deterministic reconstruction, timeline traversal, snapshots, and replay consistency validation.
 
-#### File naming
-Use names such as:
-- `replay_engine.py`
-- `replay_session.py`
-- `timeline_cursor.py`
-- `determinism_checker.py`
-- `event_reconstructor.py`
-- `replay_snapshot.py`
+#### Naming rules
+Use **replay**, **timeline**, **snapshot**, **cursor**, **checkpoint**, and **consistency** consistently.
 
-#### Type naming
+#### Preferred type names
 - `ReplayEngine`
-- `ReplaySession`
-- `TimelineCursor`
-- `DeterminismChecker`
-- `EventReconstructor`
 - `ReplaySnapshot`
-- `ReplayOutcome`
+- `ReplayCursor`
+- `TimelineSegment`
+- `ConsistencyVerifier`
+- `CheckpointLoader`
 
-#### Function naming
-- `start_replay_session`
-- `replay_event_stream`
-- `advance_timeline_cursor`
-- `reconstruct_state`
-- `check_determinism`
-- `capture_replay_snapshot`
+#### Preferred function names
+- `replay_timeline()`
+- `load_replay_snapshot()`
+- `advance_replay_cursor()`
+- `verify_replay_consistency()`
+- `restore_checkpoint_state()`
 
-#### Naming guidance
-- Use `replay` for deterministic re-execution from recorded artifacts.
-- Use `timeline` for ordered temporal traversal.
-- Use `snapshot` for point-in-time reconstructed state.
-- Use `reconstructor` for rebuilding prior state from events.
-- Use `outcome` for replay result classification.
+#### Avoid
+- `history_manager`
+- `time_travel`
+- `debug_replay` for production replay semantics
+
+#### File examples
+```text
+src/rewind/runtime/replay_engine.py
+src/rewind/models/replay_snapshot.py
+src/rewind/validators/consistency_verifier.py
+```
 
 ---
 
 ### `sdk/connector/` — Forge Connector SDK
 
-Purpose: external integrations into Forge platform services with stable SDK contracts.
+#### Purpose
+Owns SDK-facing integration contracts, connector client libraries, manifests, transport wrappers, and public integration surface.
 
-#### File naming
-Use names such as:
-- `connector_client.py`
-- `connector_session.py`
-- `request_signer.py`
-- `payload_validator.py`
-- `webhook_adapter.py`
-- `sdk_errors.py`
+#### Naming rules
+Public SDK names must be stable, explicit, and integration-friendly. Prefer **connector**, **client**, **manifest**, **session**, and **transport**.
 
-#### Type naming
-- `ConnectorClient`
+#### Preferred type names
+- `ForgeConnectorClient`
+- `ConnectorManifest`
 - `ConnectorSession`
-- `RequestSigner`
-- `PayloadValidator`
-- `WebhookAdapter`
+- `ConnectorTransport`
 - `ConnectorRequest`
 - `ConnectorResponse`
+- `ConnectorAuthProvider`
 
-#### Function naming
-- `open_session`
-- `sign_request`
-- `validate_payload`
-- `send_connector_request`
-- `parse_connector_response`
-- `register_webhook`
+#### Preferred function names
+- `connect()`
+- `open_connector_session()`
+- `send_connector_request()`
+- `load_connector_manifest()`
+- `validate_connector_response()`
 
-#### Naming guidance
-- Use `connector` for SDK-facing integration abstractions.
-- Use `client` for caller-facing API entry points.
-- Use `session` for authenticated interaction scope.
-- Use `request` / `response` for wire contracts.
-- Use `adapter` for provider-specific translation layers.
+#### Avoid
+- `sdk_helper`
+- `integration_utils`
+- public names tied to internal implementation details
+
+#### File examples
+```text
+sdk/connector/client/forge_connector_client.py
+sdk/connector/models/connector_manifest.py
+sdk/connector/transport/connector_transport.py
+```
 
 ---
 
-## Additional Cross-Cutting Conventions
+## Cross-Subsystem Naming Rules
 
-### Data model naming
+### Trusted vs untrusted data
 
-Use suffixes consistently:
-
-- `...Request` — inbound API or command payload
-- `...Response` — outbound API payload
-- `...Event` — audit/domain event
-- `...Envelope` — signed or transport wrapper
-- `...Record` — persisted row/document form
-- `...Snapshot` — point-in-time state capture
-- `...Context` — execution/evaluation inputs
-- `...Result` — operation outcome
-- `...Outcome` — classified end state
-- `...Evidence` — supporting proof inputs
-
-### Enum naming
-
-- Enum types use singular `PascalCase`.
-- Enum members should be domain words, not encoded strings.
-
-Python:
-```python
-class PolicyEffect(Enum):
-    ALLOW = "allow"
-    DENY = "deny"
-    QUARANTINE = "quarantine"
-```
-
-Swift:
-```swift
-enum PolicyEffect {
-    case allow
-    case deny
-    case quarantine
-}
-```
-
-### Acronyms and abbreviations
-
-Avoid unexplained abbreviations in type names. Approved subsystem abbreviations may be used in directory names, but expand them in class/type names where clarity is improved.
+Names must reveal trust state whenever ambiguous.
 
 Prefer:
-- `VirtualTrustZone` over `VTZ`
-- `DataTrustLabel` or `TrustLabel` over `DTLLabel`
-- `MachineControlPolicy` only if needed; otherwise `Policy`
+- `raw_payload`
+- `untrusted_input`
+- `validated_request`
+- `verified_attestation`
+- `sanitized_content`
+- `redacted_event`
 
-Use acronyms only when already product-standard:
-- `MCP`
-- `TPM`
-- `SDK`
-- `JSON`
-- `XPC`
-- `CI`
+Avoid:
+- `data`
+- `payload`
+- `content`
+- `input`
 
-### Serialization and schema naming
+### Serialized vs structured forms
 
-- JSON field names: `snake_case` unless external protocol requires otherwise
-- Versioned schemas should include explicit version fields:
-  - `schema_version`
-  - `policy_version`
-  - `event_version`
+Always distinguish bytes/string forms from parsed objects.
 
-Do not infer schema version from filenames alone.
+Prefer:
+- `serialized_label`
+- `encoded_quote`
+- `event_json`
+- `parsed_manifest`
+- `policy_document`
 
-### Time and identifiers
+Avoid:
+- `label`
+- `quote`
+- `manifest` when type ambiguity exists
 
-- Use `created_at`, `updated_at`, `recorded_at`, `expires_at`
-- Use `*_id` suffix for identifiers
-- Use `correlation_id` for cross-component traceability
-- Use `request_id` for request-scoped tracing
-- Use `session_id` for session-scoped identifiers
-- Use `event_id` for audit events
+### IDs and references
 
-Avoid generic `id` in public data contracts unless the entity type is unambiguous.
+Use stable suffixes:
+- `_id` for opaque identifiers
+- `_key` for map lookup keys
+- `_hash` for hashes
+- `_digest` for digests
+- `_uri` for URIs
+- `_path` for filesystem paths
+- `_at` for timestamps
+- `_by` for actor identities
+
+Examples:
+- `event_id`
+- `zone_id`
+- `anchor_hash`
+- `created_at`
+- `issued_by`
+
+### Booleans
+
+Boolean variables must read as propositions.
+
+Prefer:
+- `is_verified`
+- `has_boundary_access`
+- `can_publish`
+- `should_replay`
+
+Avoid:
+- `verified`
+- `boundary_access`
+- `publish_flag`
 
 ---
 
-## Patterns to Avoid
+## Code Patterns
 
-Do not introduce:
+### Validation-first pattern
 
-- `utils.py`, `helpers.py`, `misc.py`, `common.py`
-- god objects like `Manager`, `Processor`, `Handler` without explicit bounded purpose
-- broad exception catches without re-raising or mapping
-- implicit trust upgrades
-- boolean parameters that hide policy decisions
-- hidden global state for security, policy, or replay logic
-- side effects in validation functions
-- transport-layer names inside core domain models unless the model is transport-specific
+Validate external or untrusted input at the boundary before transformation or persistence.
 
-Bad:
+Preferred flow:
+1. receive raw input
+2. parse into structured form
+3. validate schema
+4. validate trust/policy/integrity
+5. persist or act
+
+Example naming sequence:
+- `raw_event`
+- `parsed_event`
+- `validated_event`
+- `verified_event`
+
+### Boundary wrapping pattern
+
+At every subsystem boundary:
+- validate inputs
+- convert foreign errors into subsystem errors
+- emit audit events if required by TRD/security model
+- return typed domain results
+
+### Explicit policy evaluation pattern
+
+Policy decisions should not be hidden inside generic methods.
+
+Prefer:
+- `decision = policy_evaluator.evaluate_policy_bundle(request)`
+- `recommendation = decision_resolver.build_enforcement_recommendation(decision)`
+
+Avoid:
+- `service.process(request)` if policy evaluation is the true action
+
+### Replay-safe deterministic pattern
+
+For replayable systems:
+- isolate time sources
+- isolate randomness
+- inject clocks, ID generators, and sequence providers
+- name deterministic helpers explicitly:
+  - `DeterministicClock`
+  - `ReplaySequenceProvider`
+
+### Audit-safe logging pattern
+
+Operational logs and audit events are not the same.
+
+- Use logging for diagnostics.
+- Use TrustFlow event models for auditable actions.
+- Never substitute one for the other.
+
+---
+
+## Imports and Dependency Rules
+
+### Import style
+
+- Prefer absolute imports rooted at subsystem package boundaries.
+- Avoid deep relative imports when they obscure ownership.
+- Do not import across subsystem internals unless the interface is explicitly public.
+
+Prefer:
 ```python
-def process(data): ...
+from src.dtl.models.trust_label import TrustLabel
+from src.mcp.policies.policy_evaluator import PolicyEvaluator
 ```
+
+Avoid:
+```python
+from ..models.trust_label import TrustLabel
+from src.dtl.validators.trust_label_validator import SomeInternalHelper
+```
+
+### Dependency direction
+
+Preferred dependency shape:
+- `models` are dependency-light
+- `validators`, `serializers`, `policies` depend on `models`
+- `services` orchestrate lower-level components
+- `adapters` isolate external systems
+- `sdk/connector` depends only on documented public contracts, not internal private modules
+
+Avoid cyclical dependencies between subsystems.
+
+---
+
+## Testing Conventions
+
+### Test layout
+
+Tests must mirror source structure exactly.
+
+Example:
+```text
+src/mcp/policies/policy_evaluator.py
+tests/mcp/policies/test_policy_evaluator.py
+```
+
+### Test naming
+
+- Test functions use `test_<behavior>`.
+- Name tests after observable behavior, not implementation detail.
+
+Prefer:
+- `test_rejects_untrusted_label_without_provenance()`
+- `test_advances_replay_cursor_after_checkpoint_restore()`
+
+Avoid:
+- `test_helper_1()`
+- `test_internal_branch_b()`
+
+### Test categories
+
+Where needed, separate by suffix or directory:
+- unit
+- integration
+- contract
+- replay
+- security
+
+Examples:
+```text
+tests/trustlock/crypto/test_attestation_verifier.py
+tests/trustlock/crypto/test_attestation_verifier_integration.py
+tests/rewind/runtime/test_replay_engine_replay.py
+```
+
+### Security test naming
+
+Security-relevant tests should make the threat or invariant obvious.
+
+Examples:
+- `test_rejects_modified_attestation_quote()`
+- `test_prevents_cross_zone_transition_without_policy()`
+- `test_redacts_secret_material_from_audit_error()`
+
+---
+
+## Documentation and Comment Conventions
+
+### Comments
+
+Comment only when:
+- documenting non-obvious security rationale
+- explaining protocol or TRD-mandated behavior
+- clarifying invariants
+- documenting edge-case intent
+
+Avoid comments that restate code.
 
 Good:
 ```python
-def validate_payload(payload: bytes) -> ConnectorRequest: ...
-def evaluate_policy(context: DecisionContext) -> PolicyDecision: ...
+# TRD-11: raw attestation material must never be persisted before verification.
 ```
 
+Bad:
+```python
+# Increment the counter
+counter += 1
+```
+
+### Docstrings
+
+Public classes and functions should have concise docstrings when they:
+- form part of a subsystem boundary
+- implement protocol contracts
+- enforce trust/security behavior
+- are consumed by SDK users or other subsystems
+
+Docstrings should describe:
+- purpose
+- key inputs/outputs
+- notable side effects
+- security or determinism constraints when relevant
+
 ---
 
-## Documentation Expectations
+## Constants, Configuration, and Schemas
 
-- Public classes, exported functions, and boundary modules must have concise docstrings/comments.
-- Docstrings should describe:
-  - purpose
-  - inputs
-  - outputs
-  - failure conditions
-  - security constraints if applicable
+### Constants
 
-Do not restate the function name in prose without adding meaning.
+- Constants use `UPPER_SNAKE_CASE`.
+- Group subsystem constants in dedicated files only if they are truly shared.
+- Prefer typed config objects over scattered magic strings.
+
+Examples:
+- `MAX_AUDIT_BATCH_SIZE`
+- `DEFAULT_REPLAY_WINDOW`
+- `ATTESTATION_QUOTE_VERSION`
+
+### Configuration naming
+
+Use suffixes:
+- `Config`
+- `Settings`
+- `Options`
+
+Examples:
+- `TrustFlowConfig`
+- `ReplaySettings`
+- `ConnectorClientOptions`
+
+### Schema naming
+
+Use explicit names for validation or transport schemas:
+- `TrustLabelSchema`
+- `PolicyDecisionRequestSchema`
+- `AuditEventEnvelopeSchema`
 
 ---
 
-## Convention Compliance Checklist
+## Anti-Patterns
 
-Before merging code, confirm:
+Do not introduce:
 
-- File path matches subsystem ownership.
-- File name is domain-specific and follows naming rules.
-- Public types use consistent role-based names.
-- Errors map to subsystem-specific typed hierarchies.
-- Normal deny/decision flow is not implemented as an exception.
-- Tests mirror source structure.
-- Sensitive data is excluded from logs and errors.
-- External/generated content is validated before use.
-- Names reflect trust, policy, replay, audit, and identity semantics consistently.
-- Implementation matches the owning TRD.
+- generic `utils` modules for domain logic
+- cross-subsystem “shared” packages without explicit ownership
+- hidden policy checks inside unrelated service methods
+- untyped dict-based APIs where stable DTOs are expected
+- silent exception swallowing
+- names that conceal trust state
+- names that blur audit logs with audit events
+- replay logic that depends on ambient time or randomness
+- public SDK symbols that expose internal implementation structure
+
+---
+
+## Minimum Naming Checklist
+
+Before merging, confirm:
+
+- file path matches the owning subsystem
+- file name is snake_case and specific
+- class names are PascalCase and role-accurate
+- function names are verb-led and side-effect-aware
+- typed errors exist for expected failure modes
+- trusted/untrusted data is named explicitly
+- tests mirror source layout exactly
+- subsystem terminology matches the canonical terms in this document
+- comments reference TRDs where security or protocol behavior is non-obvious
+
+---
+
+## Canonical Terminology Summary
+
+Use these exact subsystem terms consistently:
+
+- **CAL:** conversation, message, envelope, interaction, context
+- **DTL:** trust_label, provenance, classification, derivation
+- **TrustFlow:** audit_event, envelope, stream, batch, cursor, checkpoint
+- **VTZ:** zone, boundary, transition, enforcement, session
+- **TrustLock:** identity, attestation, quote, anchor, verifier, signer
+- **MCP:** policy, rule, bundle, decision, evaluator, resolver
+- **Rewind:** replay, timeline, snapshot, cursor, checkpoint, consistency
+- **Connector SDK:** connector, client, manifest, session, transport, request, response
+
+---
+
+## Final Rule
+
+If a name is shorter but less precise, choose the more precise name.  
+In Forge, clarity, auditability, and trust semantics are always more important than brevity.
