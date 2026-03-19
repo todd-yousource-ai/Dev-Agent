@@ -4,15 +4,29 @@
   "intent": "we are not going to build the Forge platform. We are going to build the Mac Consensus Dev Agent. Utilize the local files to develop the PRDs and the README, AGENTS and CLAUDE markdown files in the github repository to build the PRD plan",
   "scope_statement": "Build the PRD plan for the Mac Consensus Dev Agent \u2014 a macOS application that runs two LLM providers in parallel with Claude arbitration (TRD-2), orchestrates a build pipeline that generates PRDs and PR plans (TRD-3 \u00a78.1, \u00a79.1), coordinates multi-engineer builds via a GitHub-stored Build Ledger (TRD-4), provides a SwiftUI professional engineering UI (TRD-8), integrates GitHub for commits and CI (TRD-5), runs a self-hosted Mac CI runner for real Xcode validation (TRD-9), and enforces a security threat model for AI-agent code generation with signing credentials (TRD-11). The PRD plan will be derived from the full TRD suite (TRD-1 through TRD-12) plus the forge_architecture_context, README, AGENTS.md, and CLAUDE.md files, producing an ordered set of PRD items that the Build Pipeline can execute through its per-PRD review gate workflow.\n\nClarifications:\n  - I just added them to the local file\n  - leverage the entire local library to determine any gaps, if gaps exist then it will need to be included in the PRDs\n  - you have access to all the documents already\n  - you will need to select the optimal order in which to develop the app\n  - leverage the entire local library to determine any gaps, if gaps exist then it will need to be included in the PRDs\n  - it is available for your review",
   "created_at": 1773947682.657119,
-  "updated_at": 1773947682.6571891,
+  "updated_at": 1773948247.742149,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
       "prd_id": "PRD-001",
       "title": "Mac Consensus Dev Agent Application Shell and Local Runtime Foundation",
-      "status": "pending",
+      "status": "in_progress",
       "engineer_id": "",
-      "pr_ids": []
+      "pr_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ]
     },
     {
       "prd_id": "PRD-002",
@@ -106,9 +120,258 @@
       "pr_ids": []
     }
   ],
-  "pr_entries": {},
+  "pr_entries": {
+    "1": {
+      "prd_id": "PRD-001",
+      "pr_num": 1,
+      "title": "Create macOS app target and minimal SwiftUI launch shell",
+      "branch": "",
+      "status": "available",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": ""
+    },
+    "2": {
+      "prd_id": "PRD-001",
+      "pr_num": 2,
+      "title": "Add runtime path model and local directory bootstrapper",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        1
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": ""
+    },
+    "3": {
+      "prd_id": "PRD-001",
+      "pr_num": 3,
+      "title": "Implement service container protocols and dependency injection core",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        1
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": ""
+    },
+    "4": {
+      "prd_id": "PRD-001",
+      "pr_num": 4,
+      "title": "Add service lifecycle management and bootstrap orchestration",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        3
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": ""
+    },
+    "5": {
+      "prd_id": "PRD-001",
+      "pr_num": 5,
+      "title": "Implement structured logging facade with os_log categories and privacy defaults",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        3,
+        4
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": ""
+    },
+    "6": {
+      "prd_id": "PRD-001",
+      "pr_num": 6,
+      "title": "Add versioned settings schema and UserDefaults-backed configuration store",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        3,
+        4
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": ""
+    },
+    "7": {
+      "prd_id": "PRD-001",
+      "pr_num": 7,
+      "title": "Implement settings migration framework for versioned config evolution",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        6
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": ""
+    },
+    "8": {
+      "prd_id": "PRD-001",
+      "pr_num": 8,
+      "title": "Add error boundary primitives and non-fatal failure reporting",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        3,
+        4,
+        5
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": ""
+    },
+    "9": {
+      "prd_id": "PRD-001",
+      "pr_num": 9,
+      "title": "Implement concurrency conventions and isolated workspace allocation",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        2,
+        3,
+        4
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": ""
+    },
+    "10": {
+      "prd_id": "PRD-001",
+      "pr_num": 10,
+      "title": "Wire all foundation services into the app composition root assembly",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": ""
+    },
+    "11": {
+      "prd_id": "PRD-001",
+      "pr_num": 11,
+      "title": "Integrate application launch flow with bootstrap, settings init, and clean shutdown",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        1,
+        10
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": ""
+    },
+    "12": {
+      "prd_id": "PRD-001",
+      "pr_num": 12,
+      "title": "Add startup diagnostics and environment validation for local runtime readiness",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        10,
+        11
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": ""
+    },
+    "13": {
+      "prd_id": "PRD-001",
+      "pr_num": 13,
+      "title": "Add integration and regression test suite for application shell foundation",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        11,
+        12
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": ""
+    }
+  },
   "knowledge_notes": [],
-  "version": 1,
+  "version": 2,
   "schema_version": 2,
   "agent_version": "38.50.0"
 }
