@@ -60,16 +60,28 @@ jobs:
         if: always()
 
       - name: Lint (ruff)
-        run: ruff check src/ --output-format=github
+        run: |
+          if [ -d src/ ] && find src/ -name "*.py" -maxdepth 3 | grep -q .; then
+            ruff check src/ --output-format=github
+          else
+            echo "No Python files in src/ — skipping ruff"
+          fi
         if: always()
 
       - name: Type check (mypy)
-        run: mypy src/ --ignore-missing-imports --no-error-summary || true
+        run: |
+          if [ -d src/ ] && find src/ -name "*.py" -maxdepth 3 | grep -q .; then
+            mypy src/ --ignore-missing-imports --no-error-summary || true
+          else
+            echo "No Python files in src/ — skipping mypy"
+          fi
         if: always()
 
       - name: Forge standards check
         run: |
           echo "Checking for hardcoded secrets..."
-          ! grep -r "api_key\s*=\s*['\"][a-zA-Z0-9]" src/ || (echo "FAIL: possible hardcoded key" && exit 1)
+          if [ -d src/ ]; then
+            ! grep -r "api_key\s*=\s*['\"][a-zA-Z0-9]" src/ || (echo "FAIL: possible hardcoded key" && exit 1)
+          fi
           echo "Standards check passed."
         if: always()
