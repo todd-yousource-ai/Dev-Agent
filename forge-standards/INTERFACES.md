@@ -1,224 +1,220 @@
 
 
-# INTERFACES.md — Forge Platform
-
-## Definitive Wire Format and API Contract Reference
+# INTERFACES.md — Forge Platform Wire Format & API Contract Reference
 
 **Version:** 1.0
-**Authority:** This document is the canonical reference for every interface contract, wire format, data structure, enum, validation rule, and cross-subsystem protocol in the Forge platform. All implementations MUST conform to these specifications. Conflicts with code are resolved in favor of this document.
+**Authority:** This document is the definitive reference for every wire format, data structure, protocol, enum, validation rule, and API contract across the Forge platform. All subsystems MUST conform to these specifications. Non-conformant implementations MUST be rejected at code review.
 
-**Scope:** All subsystems — macOS Application Shell, Consensus Engine, Pipeline, IPC, Trust/Identity (CAL, CTX-ID, VTZ, TrustFlow, TrustLock, DTL), Audit, GitHub Operations, UI, Settings, and Logging.
+**Governing Documents:** TRD-1 through TRD-12, CLAUDE.md, AGENTS.md, Forge Component Interface Contracts.
 
 ---
 
 ## Table of Contents
 
-1. [Foundational Conventions](#1-foundational-conventions)
-2. [CTX-ID — Context Identity Tokens](#2-ctx-id--context-identity-tokens)
-3. [VTZ — Virtual Trust Zones](#3-vtz--virtual-trust-zones)
-4. [TrustFlow — Security Event Stream](#4-trustflow--security-event-stream)
-5. [TrustLock — Cryptographic Validation](#5-trustlock--cryptographic-validation)
-6. [DTL — Data Trust Labels](#6-dtl--data-trust-labels)
-7. [CAL — Contextual Authorization Layer](#7-cal--contextual-authorization-layer)
-8. [IPC — Inter-Process Communication](#8-ipc--inter-process-communication)
-9. [Consensus Engine](#9-consensus-engine)
-10. [Pipeline — PRD / PR Decomposition and Execution](#10-pipeline--prd--pr-decomposition-and-execution)
-11. [GitHub Operations](#11-github-operations)
-12. [Audit Subsystem](#12-audit-subsystem)
-13. [macOS Application Shell](#13-macos-application-shell)
-14. [Settings and Configuration](#14-settings-and-configuration)
-15. [UI View Models and State](#15-ui-view-models-and-state)
-16. [Logging](#16-logging)
-17. [Enums and Constants — Master Reference](#17-enums-and-constants--master-reference)
-18. [Validation Rules — Master Reference](#18-validation-rules--master-reference)
-19. [Wire Format Examples — Master Reference](#19-wire-format-examples--master-reference)
-20. [Cross-Subsystem Protocol Matrix](#20-cross-subsystem-protocol-matrix)
+1. [Architecture Overview](#1-architecture-overview)
+2. [Cross-Subsystem Transport Protocol](#2-cross-subsystem-transport-protocol)
+3. [Identity & Trust Subsystem (CTX-ID, TrustLock, CAL)](#3-identity--trust-subsystem)
+4. [Virtual Trust Zone (VTZ) Enforcement](#4-virtual-trust-zone-vtz-enforcement)
+5. [TrustFlow Event System](#5-trustflow-event-system)
+6. [Data Trust Labels (DTL)](#6-data-trust-labels-dtl)
+7. [XPC Communication Channel (Swift ↔ Python)](#7-xpc-communication-channel-swift--python)
+8. [Consensus Engine Interfaces](#8-consensus-engine-interfaces)
+9. [Pipeline & PRD Plan Interfaces](#9-pipeline--prd-plan-interfaces)
+10. [GitHub Operations Interfaces](#10-github-operations-interfaces)
+11. [Authentication & Session Lifecycle](#11-authentication--session-lifecycle)
+12. [Settings, Configuration & Onboarding](#12-settings-configuration--onboarding)
+13. [Audit Subsystem](#13-audit-subsystem)
+14. [Error Contracts](#14-error-contracts)
+15. [Enums and Constants](#15-enums-and-constants)
+16. [Validation Rules](#16-validation-rules)
+17. [Wire Format Examples](#17-wire-format-examples)
 
 ---
 
-## 1. Foundational Conventions
-
-### 1.1 Serialization
-
-| Property | Requirement |
-|---|---|
-| Wire format | Line-delimited JSON (LDJSON). One JSON object per line. No pretty-printing on the wire. |
-| Encoding | UTF-8. No BOM. |
-| Line terminator | `\n` (0x0A). |
-| Max message size | 16 MiB per line. Messages exceeding this MUST be rejected. |
-| Numeric precision | Integers: signed 64-bit. Floats: IEEE 754 double. |
-| Timestamps | UTC Unix timestamp, millisecond precision, represented as integer (not float). Field name: `ts`. |
-| Identifiers | Unless otherwise noted, all IDs are hex-encoded strings from 128-bit CSPRNG output (32 hex chars). |
-| Hashing | SHA-256. Represented as lowercase hex string (64 chars). |
-| Null handling | Explicit `null` in JSON. Missing keys and `null` are semantically distinct — missing keys are protocol errors. |
-| Boolean representation | JSON `true`/`false`. Never `0`/`1`, `"yes"`/`"no"`. |
-| String constraints | No control characters (U+0000–U+001F) except `\n` in designated freetext fields. |
-
-### 1.2 Versioning
-
-Every top-level message on IPC and every persisted data structure includes a `v` field:
+## 1. Architecture Overview
 
 ```
-"v": 1
+┌──────────────────────────────────┐     ┌──────────────────────────────────┐
+│       Swift Shell (macOS)        │     │        Python Backend            │
+│                                  │     │                                  │
+│  ┌─────────┐  ┌──────────────┐   │     │  ┌───────────────┐              │
+│  │ SwiftUI  │  │  Keychain /  │   │     │  │  Consensus    │              │
+│  │  Views   │  │  Auth / Bio  │   │     │  │  Engine       │              │
+│  └────┬─────┘  └──────┬───────┘   │     │  └───────┬───────┘              │
+│       │               │           │     │          │                      │
+│  ┌────┴───────────────┴────────┐  │     │  ┌───────┴───────┐             │
+│  │     XPC Manager             │──╋─────╋──│  Socket Server │             │
+│  │  (Authenticated Unix Socket)│  │     │  │  (IPC Handler) │             │
+│  └─────────────────────────────┘  │     │  └───────┬───────┘             │
+│                                  │     │          │                      │
+│  ┌─────────────────────────────┐  │     │  ┌───────┴───────┐             │
+│  │  CAL Enforcement Layer      │  │     │  │  Pipeline /   │             │
+│  │  (CTX-ID, VTZ, TrustFlow)  │  │     │  │  GitHub Ops   │             │
+│  └─────────────────────────────┘  │     │  └───────────────┘             │
+└──────────────────────────────────┘     └──────────────────────────────────┘
 ```
 
-Receivers MUST reject messages with unknown major versions. Minor version negotiation is not supported — the version integer is the major version.
-
-### 1.3 Error Representation (Universal)
-
-All subsystems use this error envelope when returning errors:
-
-```json
-{
-  "error": {
-    "code": "STRING_ERROR_CODE",
-    "component": "subsystem_name",
-    "operation": "operation_name",
-    "reason": "Human-readable failure description",
-    "ctx_id": "hex_string_or_null",
-    "ts": 1719000000000
-  }
-}
-```
-
-| Field | Type | Required | Constraints |
-|---|---|---|---|
-| `code` | string | YES | Must be a value from `ErrorCode` enum (§17). |
-| `component` | string | YES | Originating subsystem identifier. |
-| `operation` | string | YES | Operation that failed. |
-| `reason` | string | YES | MUST NOT contain keys, tokens, secrets, or cleartext payloads. |
-| `ctx_id` | string \| null | YES | The CTX-ID in scope when the error occurred, or `null` if unavailable. |
-| `ts` | integer | YES | UTC Unix ms. |
-
-### 1.4 Fail-Closed Semantics
-
-All trust, identity, policy, and cryptographic failures MUST fail closed:
-
-1. **Reject** the action.
-2. **Log** the event (audit record BEFORE execution — see §12).
-3. **Surface** the error to the caller via the error envelope.
-4. **Never** silently continue.
-
-`try/except/pass` (or equivalent) is **BANNED** in all enforcement code paths.
+**Transport:** Authenticated Unix domain socket. Line-delimited JSON (NDJSON). One JSON object per `\n`-terminated line. Neither process ever executes generated code.
 
 ---
 
-## 2. CTX-ID — Context Identity Tokens
+## 2. Cross-Subsystem Transport Protocol
 
-### 2.1 Purpose
+### 2.1 Socket Path Convention
 
-A CTX-ID is an immutable, cryptographically signed token that binds an agent session to an identity, a VTZ, and a time window. Every action in the system requires a valid CTX-ID.
+```
+/tmp/forge-{session_id}.sock
+```
 
-### 2.2 Data Structure
+- `session_id`: 32-character lowercase hex string (128-bit CSPRNG)
+- Socket file permissions: `0600` (owner read/write only)
+- Owner: the user running the Forge application
 
-```json
-{
-  "ctx_id": "a1b2c3d4e5f6...",
-  "session_id": "f6e5d4c3b2a1...",
-  "vtz_id": "zone_repo_main",
-  "principal": "user@example.com",
-  "issued_at": 1719000000000,
-  "expires_at": 1719003600000,
-  "scope": ["repo:read", "repo:write", "pr:create"],
-  "trustlock_key_id": "key_abc123...",
-  "signature": "hex_encoded_ed25519_signature",
-  "v": 1
+### 2.2 Wire Format: Line-Delimited JSON (NDJSON)
+
+Every message is a single JSON object terminated by `\n` (0x0A). No embedded newlines in the JSON body. UTF-8 encoding. No BOM.
+
+### 2.3 Message Envelope
+
+Every message across the socket MUST conform to this envelope:
+
+```typescript
+interface ForgeMessage {
+  msg_id: string;         // UUIDv4, globally unique per message
+  msg_type: MessageType;  // Enum: "request" | "response" | "event" | "error"
+  timestamp: number;      // UTC Unix timestamp, millisecond precision
+  ctx_id: string;         // CTX-ID token bound to this session
+  version: string;        // Protocol version: "1.0"
+  payload: object;        // Subsystem-specific payload
 }
 ```
 
-| Field | Type | Required | Constraints |
-|---|---|---|---|
-| `ctx_id` | string | YES | 32 hex chars. CSPRNG-generated. Globally unique. |
-| `session_id` | string | YES | 32 hex chars. Binds to the session that requested issuance. |
-| `vtz_id` | string | YES | Must match an active VTZ definition. Format: `zone_{scope}_{qualifier}`. |
-| `principal` | string | YES | Authenticated identity. Email or service account URI. Max 256 chars. |
-| `issued_at` | integer | YES | UTC Unix ms. Must be ≤ current time + clock_skew_tolerance. |
-| `expires_at` | integer | YES | UTC Unix ms. Must be > `issued_at`. Max lifetime: 3600000 ms (1 hour). |
-| `scope` | array[string] | YES | Non-empty. Each element must be a value from `Scope` enum (§17). |
-| `trustlock_key_id` | string | YES | Identifies the TrustLock key pair used to sign this token. |
-| `signature` | string | YES | Ed25519 signature over the canonical serialization of all other fields. Hex-encoded. 128 hex chars. |
-| `v` | integer | YES | Must be `1`. |
+**Field Constraints:**
 
-### 2.3 Lifecycle Rules
+| Field | Type | Constraints |
+|-------|------|-------------|
+| `msg_id` | `string` | UUIDv4 format, MUST be unique per message, generated via CSPRNG |
+| `msg_type` | `string` | One of: `"request"`, `"response"`, `"event"`, `"error"` |
+| `timestamp` | `number` | UTC Unix epoch in milliseconds. MUST NOT be zero. MUST NOT be in the future beyond clock skew tolerance. |
+| `ctx_id` | `string` | Valid CTX-ID token. MUST be validated before payload processing. |
+| `version` | `string` | Semantic version. Current: `"1.0"` |
+| `payload` | `object` | Non-null JSON object. Schema depends on subsystem and operation. |
 
-| Rule | Specification |
-|---|---|
-| **Immutability** | Once issued, no field may be modified. Any modification invalidates the token. |
-| **Rotation** | Creates a new CTX-ID with a new `ctx_id` value. The old token is invalidated immediately and added to the revocation set. |
-| **Expiry** | Expired CTX-IDs MUST be rejected. Clock skew tolerance: configurable per deployment, default 5000 ms. |
-| **Validation** | MUST be validated against TrustLock public key. Software-only validation (skipping signature check) is rejected. |
-| **Missing CTX-ID** | MUST be treated as UNTRUSTED. Never infer identity from context (IP, process ID, etc.). |
-| **Revocation** | Revoked tokens are stored in an in-memory set with periodic persistence. Revocation checks happen before signature verification (fast-path rejection). |
+### 2.4 Request/Response Correlation
 
-### 2.4 Canonical Serialization for Signing
+```typescript
+interface ForgeRequest extends ForgeMessage {
+  msg_type: "request";
+  payload: {
+    operation: string;      // Subsystem-qualified operation name
+    params: object;         // Operation-specific parameters
+  };
+}
 
-Fields are serialized in deterministic order for signature computation:
-
-```
-ctx_id|session_id|vtz_id|principal|issued_at|expires_at|scope_csv|trustlock_key_id|v
-```
-
-- `scope_csv`: scope values sorted lexicographically, joined by `,`.
-- All fields are UTF-8 string representations.
-- Separator: `|` (U+007C).
-- No trailing separator.
-
-### 2.5 Validation Procedure
-
-```
-1. Parse JSON. Reject if malformed or missing required fields.
-2. Check v == 1. Reject if unknown version.
-3. Check ctx_id is in valid format (32 hex chars). Reject otherwise.
-4. Check ctx_id is NOT in revocation set. Reject if revoked.
-5. Check expires_at > now() - clock_skew_tolerance. Reject if expired.
-6. Check issued_at <= now() + clock_skew_tolerance. Reject if issued in future.
-7. Check expires_at - issued_at <= 3600000. Reject if lifetime exceeds maximum.
-8. Resolve trustlock_key_id to a public key. Reject if key is unknown or revoked.
-9. Compute canonical serialization (§2.4).
-10. Verify Ed25519 signature. Reject if invalid.
-11. Validate vtz_id references an active VTZ. Reject if VTZ is unknown or suspended.
-12. Validate each scope value is a known Scope enum member. Reject if any unknown.
-13. Return validated CTX-ID for use in enforcement.
+interface ForgeResponse extends ForgeMessage {
+  msg_type: "response";
+  payload: {
+    request_id: string;     // msg_id of the originating request
+    status: ResponseStatus; // "ok" | "error" | "partial"
+    result: object | null;  // Operation result on success
+    error: ForgeError | null; // Error detail on failure
+  };
+}
 ```
 
-Every rejection produces an error envelope (§1.3) with `component: "ctx_id"` and the appropriate `ErrorCode`.
+### 2.5 Maximum Message Size
+
+- Soft limit: 1 MB per message
+- Hard limit: 16 MB per message
+- Messages exceeding the hard limit MUST be rejected with `ERR_MESSAGE_TOO_LARGE`
+
+### 2.6 Keepalive
+
+- Heartbeat interval: 30 seconds
+- Heartbeat is a `ForgeMessage` with `msg_type: "event"` and `payload.event_type: "heartbeat"`
+- If no message (including heartbeat) is received within 90 seconds, the connection is considered dead
 
 ---
 
-## 3. VTZ — Virtual Trust Zones
+## 3. Identity & Trust Subsystem
 
-### 3.1 Purpose
+### 3.1 CTX-ID Token
 
-A VTZ defines a structural security boundary. Every agent session is bound to exactly one VTZ at CTX-ID issuance. VTZ boundaries are **structural, not advisory** — enforcement cannot be bypassed by application code.
+The CTX-ID is the foundational identity token for every agent action in the Forge platform.
 
-### 3.2 Data Structure
-
-```json
-{
-  "vtz_id": "zone_repo_main",
-  "display_name": "Main Repository Zone",
-  "status": "active",
-  "policy": {
-    "allowed_scopes": ["repo:read", "repo:write", "pr:create", "pr:merge"],
-    "allowed_tools": ["git_clone", "git_push", "file_read", "file_write", "gh_api"],
-    "cross_vtz_policy": "deny",
-    "max_session_lifetime_ms": 3600000,
-    "require_biometric": true,
-    "data_classification_floor": "internal"
-  },
-  "resource_bindings": [
-    {
-      "resource_type": "repository",
-      "resource_id": "org/repo-name",
-      "access": "read_write"
-    }
-  ],
-  "created_at": 1719000000000,
-  "updated_at": 1719000000000,
-  "v": 1
+```typescript
+interface CTXIDToken {
+  ctx_id: string;              // 64-character hex string (256-bit CSPRNG)
+  session_id: string;          // 32-character hex string (128-bit CSPRNG)
+  vtz_id: string;              // VTZ identifier this token is bound to
+  issued_at: number;           // UTC Unix timestamp (ms) of issuance
+  expires_at: number;          // UTC Unix timestamp (ms) of expiration
+  issuer: string;              // Issuing component identifier
+  trust_level: TrustLevel;     // Enum: trust classification at issuance
+  public_key_fingerprint: string; // SHA-256 fingerprint of TrustLock public key
+  signature: string;           // Ed25519 signature over canonical form
 }
 ```
 
-| Field | Type | Required | Constraints |
-|---|---|---|---|
-| `vtz_id` | string | YES | Format: `zone_{scope}_{qualifier}`. Max 128 chars. Alphanumeric, underscores, hyphens. |
+**Field Constraints:**
+
+| Field | Type | Size | Constraints |
+|-------|------|------|-------------|
+| `ctx_id` | `string` | 64 chars | Hex-encoded, CSPRNG-generated, globally unique |
+| `session_id` | `string` | 32 chars | Hex-encoded, MUST match active session |
+| `vtz_id` | `string` | 1–128 chars | Alphanumeric + hyphens, no leading/trailing hyphen |
+| `issued_at` | `number` | 8 bytes | MUST be ≤ current time + clock skew tolerance |
+| `expires_at` | `number` | 8 bytes | MUST be > `issued_at`. Max TTL: 3600000 ms (1 hour) |
+| `issuer` | `string` | 1–256 chars | Dot-separated component path (e.g., `forge.shell.auth`) |
+| `trust_level` | `string` | — | One of TrustLevel enum values |
+| `public_key_fingerprint` | `string` | 64 chars | SHA-256 hex digest of TrustLock Ed25519 public key |
+| `signature` | `string` | 128 chars | Hex-encoded Ed25519 signature |
+
+**Immutability Contract:** CTX-ID tokens are IMMUTABLE once issued. No field may be modified after issuance. Rotation creates a new token; the old one is invalidated immediately.
+
+**Canonical Form for Signing:**
+
+```
+ctx_id|session_id|vtz_id|issued_at|expires_at|issuer|trust_level|public_key_fingerprint
+```
+
+Fields concatenated with `|` separator. No trailing separator. UTF-8 encoded. Signature is Ed25519 over SHA-256 of this canonical string.
+
+### 3.2 CTX-ID Validation Procedure
+
+Every entry point that processes an agent action MUST execute this procedure FIRST:
+
+```
+1. REQUIRE ctx_id field is present and non-empty
+   → Missing: REJECT with ERR_CTX_MISSING, trust_level = UNTRUSTED
+2. PARSE token fields
+   → Parse failure: REJECT with ERR_CTX_MALFORMED
+3. CHECK expires_at > current_time - clock_skew_tolerance
+   → Expired: REJECT with ERR_CTX_EXPIRED
+4. VERIFY signature against TrustLock public key
+   → Invalid signature: REJECT with ERR_CTX_SIGNATURE_INVALID
+5. VERIFY session_id matches active session
+   → Mismatch: REJECT with ERR_CTX_SESSION_MISMATCH
+6. VERIFY vtz_id matches requested VTZ scope
+   → Mismatch: REJECT with ERR_CTX_VTZ_MISMATCH
+7. ACCEPT — proceed to VTZ policy evaluation
+```
+
+Clock skew tolerance: **5000 ms** (5 seconds) default, configurable per deployment.
+
+### 3.3 TrustLock Key Management
+
+```typescript
+interface TrustLockKeyPair {
+  algorithm: "Ed25519";
+  public_key: string;          // Base64-encoded Ed25519 public key (44 chars)
+  public_key_fingerprint: string; // SHA-256 hex of raw public key bytes
+  created_at: number;          // UTC Unix timestamp (ms)
+  storage: "keychain";         // MUST be macOS Keychain, never filesystem
+}
+```
+
+**Storage Rules:**
+- Private key: macOS Keychain ONLY, access control = biometric + device passcode
+- Public key: may be stored in UserDefaults for validation caching
+- Key rotation: new keypair generated, old public key retained for grace period (
