@@ -1,6 +1,6 @@
 # TRD-11-Security-Threat-Model
 
-_Source: `TRD-11-Security-Threat-Model.docx` — extracted 2026-03-19 22:01 UTC_
+_Source: `TRD-11-Security-Threat-Model.docx` — extracted 2026-03-19 23:49 UTC_
 
 ---
 
