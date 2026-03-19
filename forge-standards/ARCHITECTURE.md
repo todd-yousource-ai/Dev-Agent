@@ -2,620 +2,685 @@
 
 ## System Overview
 
-Forge is a native macOS autonomous software delivery platform built as a **two-process system**:
+Forge is a two-process, policy-first autonomous software delivery platform for macOS that turns repository context, technical specifications, and operator intent into gated GitHub pull requests. The platform is structured around a strict separation of concerns:
 
-- **Swift/macOS Shell**
-  - Owns native UX, onboarding, authentication, biometric gating, Keychain access, settings, process lifecycle, update/install behavior, notifications, and trusted local orchestration.
-- **Python Backend**
-  - Owns planning, document retrieval, consensus generation, review/fix cycles, repository analysis, GitHub integration, CI coordination, and documentation regeneration.
+- **Swift macOS Shell** owns local trust, UX, secrets, installation, session lifecycle, and operator control.
+- **Python Backend** owns planning, retrieval, consensus generation, review, CI orchestration, GitHub interactions, and document synthesis.
+- **Document Store** supplies retrieval-augmented context for all planning, generation, review, and documentation tasks.
+- **Security and policy controls** apply across both processes and all external inputs, governed centrally by the platform security model.
 
-The platform is designed around a strict separation of trust domains:
+The architecture is intentionally non-chat and non-executing:
 
-1. **Operator trust domain**
-   - Human intent, review approval, local app interaction.
-2. **Trusted local shell domain**
-   - macOS-native process with UI authority, secrets authority, and backend launch authority.
-3. **Constrained backend execution domain**
-   - Python orchestration process that performs intelligence and automation but does not own long-term secret storage.
-4. **External service domain**
-   - LLM providers, GitHub APIs, webhooks, remote repositories, CI systems, and imported specification documents.
+- The system does **not** execute generated code locally.
+- The system does **not** grant LLMs direct access to credentials.
+- The system does **not** permit hidden trust transitions between UI, backend, document inputs, generated code, or remote systems.
+- All progression from intent to pull request is staged, reviewed, observable, and operator-gated.
 
-Core operating model:
+At runtime, the normal flow is:
 
-1. Operator imports repository and source specifications (TRDs/PRDs/architecture docs).
-2. Document Store ingests and indexes the specs.
-3. Operator supplies plain-language intent.
-4. Planning converts intent into an ordered PRD plan, then into PR-sized implementation units.
-5. For each PR unit, the backend retrieves relevant context, generates code with parallel model providers, arbitrates via consensus, runs review/fix cycles, executes CI, and opens a draft PR.
-6. Operator reviews/approves each PR; the system continues to the next unit.
-7. On completion, the system may regenerate project documentation, including product context and TRDs.
+1. Operator launches the macOS app.
+2. Shell performs onboarding, biometric/session gate, settings validation, and secure backend startup.
+3. Shell establishes an authenticated local IPC channel to the backend.
+4. Operator imports documents and scopes a project/repository.
+5. Backend parses and indexes documents into the Document Store.
+6. Operator provides intent.
+7. Backend creates a PRD plan, decomposes it into ordered pull requests, and processes each PR through generation, review, CI, and GitHub draft PR creation.
+8. Operator reviews and approves each PR before the next PR proceeds.
+9. On completion, backend may generate or refresh repository documentation artifacts such as `PRODUCT_CONTEXT.md` and TRDs.
 
-All generated output is treated as untrusted until it passes explicit review, validation, and operator gate conditions. The system must **never execute generated code**.
+This architecture follows the Forge rules:
 
-Architecturally, Forge follows these rules:
-
-- Trust is asserted and verified explicitly, never inferred implicitly.
-- Identity, policy, telemetry, and enforcement are separate concerns with explicit interfaces.
-- Enforcement decisions must be explainable, observable, and reproducible.
-- Components default to enforcement, not advisory behavior.
-- Local flows minimize friction without weakening guarantees.
-- Administrative and operator controls remain explicit and understandable.
-- Protocols and control logic are designed to scale to broader endpoint/network/cloud/AI-runtime environments.
+- Trust is explicit, asserted, and verified.
+- Identity, policy, telemetry, and enforcement are separate but linked.
+- Control decisions are explainable and reproducible.
+- Components default to enforcement.
+- Operator friction is minimized without weakening guarantees.
+- Local and remote workflows are explicit.
+- Protocols and controls are designed to scale beyond this initial macOS-local form factor.
 
 ---
 
 ## Subsystem Map
 
 ### 1. macOS Application Shell
-**What it does**
-- Packages the app as a native macOS application.
-- Owns first-launch onboarding, settings, navigation, session lifecycle, menu bar/dock behavior, notifications, update/install flows, and crash/logging infrastructure.
-- Launches and supervises the Python backend.
-- Provides the root trust anchor for local operator interaction.
+**Primary TRD:** TRD-1  
+**What it does:** Native Swift/SwiftUI application container for packaging, onboarding, authentication, settings, process orchestration, secure secret handling, and presentation of pipeline state.  
+**What it enforces:**
+- Native app lifecycle and distribution model
+- Session and biometric gating
+- Keychain ownership for secrets
+- Local process launch and restart policy
+- Authenticated IPC boundary to backend
+- UI state ownership and concurrency boundaries
+- Observability via `os_log` and crash/reporting integration
 
-**What it enforces**
-- Native authentication boundaries.
-- Session gating before sensitive actions.
-- Stable module boundaries and UI state ownership.
-- Authenticated local IPC to the backend.
-- Explicit operator confirmation at review gates.
+### 2. SwiftUI Presentation Layer
+**Primary TRD:** TRD-8  
+**What it does:** Implements root views, navigation, cards, panels, settings, onboarding, notifications, menu bar behavior, dock integration, and operator review surfaces.  
+**What it enforces:**
+- Explicit operator review gates
+- Stable state presentation of pipeline phases
+- No direct business logic mutation outside view-model contracts
+- No direct secret handling in views
+- No direct backend bypass around shell-owned session/auth rules
 
----
+### 3. Authentication and Session Lifecycle
+**Primary TRD:** TRD-1, security requirements from TRD-11  
+**What it does:** First-launch auth setup, biometric unlock, session creation, timeout, lock/unlock transitions, and secret access preconditions.  
+**What it enforces:**
+- Local user-presence requirement before sensitive operations
+- Session-scoped access to credentials and backend launch
+- Re-authentication on configured security boundaries
+- No unauthenticated access to high-risk settings or operations
 
-### 2. Authentication and Secret Management
-**What it does**
-- Handles biometric gate and local identity checks.
-- Stores API credentials and tokens in Keychain.
-- Controls secret release to the backend at runtime.
-- Manages session unlock/lock lifecycle.
+### 4. Secrets and Keychain Management
+**Primary TRD:** TRD-1, TRD-11  
+**What it does:** Stores and retrieves provider API keys, GitHub credentials/tokens, and other sensitive local configuration via macOS Keychain.  
+**What it enforces:**
+- Secrets remain owned by the Swift process
+- Secrets are never persisted in plaintext app configuration
+- Controlled credential delivery to backend
+- Secret access only after local trust gates succeed
 
-**What it enforces**
-- Secrets are never persisted in backend-owned storage.
-- Secret access is conditional on authenticated session state.
-- Sensitive fields use explicit privacy-safe logging behavior.
-- Credential handling follows TRD-11 security controls.
+### 5. XPC / Local IPC Transport
+**Primary TRD:** TRD-1  
+**What it does:** Authenticated local communication between Swift shell and Python backend using a local Unix socket and line-delimited JSON protocol.  
+**What it enforces:**
+- Single explicit transport boundary between local control plane and intelligence plane
+- Peer authentication and startup handshake
+- Typed message framing and stateful command/response flow
+- Prevention of unauthorized local process impersonation
 
----
+### 6. Backend Process Manager
+**Primary TRD:** TRD-1  
+**What it does:** Launches, monitors, restarts, and tears down the Python backend; injects runtime configuration and credentials through approved mechanisms.  
+**What it enforces:**
+- Backend startup ordering
+- Crash/restart policy
+- Environment and working-directory constraints
+- No backend execution before shell trust gates pass
+- No backend self-escalation into shell-owned privileges
 
-### 3. XPC / Local IPC Channel
-**What it does**
-- Provides authenticated communication between Swift shell and Python backend.
-- Uses a local Unix socket with line-delimited JSON messaging.
-- Carries commands, state updates, telemetry, and credential delivery.
+### 7. Planning Engine
+**Primary TRD:** planning PRD/TRD set  
+**What it does:** Converts repository context, technical documents, and operator intent into an ordered implementation plan, including PRD generation and PR sequencing.  
+**What it enforces:**
+- Work decomposition into logical, reviewable units
+- Dependency-aware PR ordering
+- Scope explicitness before code generation
+- Alignment to imported specifications rather than freeform generation
 
-**What it enforces**
-- Backend messages must originate on an authenticated local channel.
-- Message framing, schema validity, and process identity checks are explicit.
-- The shell remains the controlling side for process startup and credential release.
+### 8. Consensus Engine
+**Primary TRD:** TRD-2  
+**What it does:** Runs multi-provider generation using at least two models in parallel, compares outputs, and uses Claude as the arbiter on every result path.  
+**What it enforces:**
+- No single-model unilateral code authority
+- Structured disagreement handling
+- Arbitration before downstream acceptance
+- Provider abstraction through stable interfaces
 
----
+### 9. Provider Adapter Layer
+**Primary TRD:** TRD-2  
+**What it does:** Normalizes interactions with Claude, GPT-4o, and future providers under a shared contract for prompting, generation, and result capture.  
+**What it enforces:**
+- Provider-independent consensus semantics
+- Prompt isolation and output normalization
+- Error categorization per provider
+- No provider-specific trust exceptions
 
-### 4. Process Management and Runtime Supervision
-**What it does**
-- Starts, monitors, restarts, and terminates the backend process.
-- Tracks health, startup readiness, and failure modes.
-- Coordinates backend availability with UI state.
+### 10. Retrieval and Document Store
+**Primary TRD:** TRD-10  
+**What it does:** Imports technical documents, parses multiple file types, extracts metadata, chunks content, embeds chunks, stores vectors and metadata, and retrieves relevant context for all downstream LLM calls.  
+**What it enforces:**
+- Structured ingestion pipeline
+- Stable chunking and embedding rules
+- Metadata-preserving retrieval
+- Context relevance for generation/review
+- Document-origin traceability
 
-**What it enforces**
-- Backend is not trusted merely because it is local; it must be launched and verified by the shell.
-- Crash/restart paths are deterministic and observable.
-- Backend startup sequencing and credential injection are ordered and gated.
+### 11. Document Import Pipeline
+**Primary TRD:** TRD-10  
+**What it does:** Handles document import UX and backend parsing for TRDs, PRDs, architecture specifications, and related knowledge sources.  
+**What it enforces:**
+- Supported format validation
+- Parse-failure error handling
+- Metadata extraction standards
+- Rejection or quarantine of invalid inputs where required
 
----
-
-### 5. SwiftUI UX Layer
-**What it does**
-- Implements root views, navigation, cards, panels, settings screens, onboarding, project import, scoping UI, review UI, and notifications.
-- Surfaces build state, PR progress, CI state, and operator gates.
-
-**What it enforces**
-- User-facing state transitions are explicit.
-- Sensitive actions are not hidden behind implicit side effects.
-- Review and approval remain operator-visible and operator-driven.
-
----
-
-### 6. Planning Engine
-**What it does**
-- Converts operator intent plus loaded source documents into an ordered implementation plan.
-- Generates PRD-level decomposition.
-- Splits PRDs into sequenced pull-request-sized work units.
-
-**What it enforces**
-- Work is decomposed into logical, reviewable units.
-- Planning is constrained by retrieved source specifications.
-- Scope confirmation occurs before implementation begins.
-
----
-
-### 7. Repository Analysis and Scoping
-**What it does**
-- Inspects repository structure, detects file overlap/conflicts, identifies dependencies, and scopes work before generation.
-- Performs project scoping and live sync against repository state.
-
-**What it enforces**
-- Pre-start file overlap checks.
-- Unmet dependency warning paths.
-- File/issue exclusion rules.
-- Conflict detection before concurrent or unsafe edits.
-
----
-
-### 8. Document Store and Retrieval Engine
-**What it does**
-- Parses source documents in supported formats.
-- Extracts metadata.
-- Chunks content into retrieval units.
-- Embeds chunks into vectors.
-- Indexes and retrieves relevant context for planning, generation, review, and documentation tasks.
-
-**What it enforces**
-- Context supply is grounded in imported specifications.
-- Retrieval quality is a first-class dependency for downstream correctness.
-- Ingestion and retrieval apply prompt-injection and context-poisoning defenses.
-- Metadata and chunk provenance remain traceable.
-
----
-
-### 9. Context Assembly Layer
-**What it does**
-- Builds task-specific prompt context from retrieved chunks, repository state, issue/PR metadata, and workflow stage requirements.
-- Produces structured context packages for generation, review, and fix passes.
-
-**What it enforces**
-- Only relevant, policy-allowed context is passed downstream.
-- Context packages retain source attribution.
-- Excluded files/issues/documents are omitted from task context.
-
----
-
-### 10. Consensus Engine
-**What it does**
-- Runs multi-model generation and arbitration.
-- Uses parallel providers (e.g. Claude and GPT-4o) to produce candidate outputs.
-- Uses Claude arbitration to decide result selection and synthesis.
-
-**What it enforces**
-- No single provider is the sole source of implementation truth.
-- Provider outputs are treated as untrusted candidate artifacts.
-- Arbitration is explicit and reproducible.
-
----
-
-### 11. Provider Adapter Layer
-**What it does**
-- Normalizes calls to multiple LLM providers.
-- Handles provider-specific request/response formats, retry behavior, and error mapping.
-- Supports generation and review prompts.
-
-**What it enforces**
-- Backend business logic is isolated from provider-specific APIs.
-- Provider failures do not silently bypass consensus rules.
-- Prompt/response handling respects security filtering.
-
----
-
-### 12. Pipeline Orchestrator
-**What it does**
-- Executes the end-to-end build pipeline as ordered stages.
-- Coordinates state, handoff, retries, failure handling, and outputs between stages.
-
-**What it enforces**
-- Stages execute in defined order.
-- Stage contracts are explicit.
-- Intermediate artifacts are persisted or surfaced only through controlled interfaces.
-- Failure semantics are deterministic.
-
----
+### 12. Prompt Construction Layer
+**Primary TRD:** generation/review/security TRDs  
+**What it does:** Builds generation, review, arbitration, improvement, and documentation prompts from intent, repo state, retrieved context, and pipeline stage.  
+**What it enforces:**
+- Stage-specific prompt templates
+- Separation between system instructions, retrieved context, and user intent
+- Injection-resistant treatment of external content
+- Reproducible prompt assembly
 
 ### 13. Code Generation Stage
-**What it does**
-- Produces code and tests for a PR-sized unit using retrieved context, repository state, and consensus generation.
-- Emits structured file patches/artifacts rather than executing code.
-
-**What it enforces**
-- Generated output remains inert text/artifact data.
-- Generation is grounded in scoping and retrieved specifications.
-- No execution of generated code is permitted.
-
----
+**Primary TRD:** generation pipeline TRD, “Stage 5: CodeGenerationStage”  
+**What it does:** Generates implementation and tests for a scoped PR unit using consensus outputs and retrieved context.  
+**What it enforces:**
+- Generation only after planning/scoping gates pass
+- Patch production scoped to intended files and tasks
+- Requirement alignment against imported specs
+- No code execution as part of generation
 
 ### 14. Three-Pass Review Stage
-**What it does**
-- Runs a structured review sequence over generated work.
-- Identifies defects, spec mismatches, safety issues, and implementation gaps.
-- Produces fix recommendations and updated artifacts.
+**Primary TRD:** “Stage 6: ThreePassReviewStage”  
+**What it does:** Applies a structured multi-pass review cycle to generated changes before CI and PR creation.  
+**What it enforces:**
+- Independent review passes
+- Defect discovery before remote submission
+- Improvement loop bounded by explicit prompts and conditions
+- No unreviewed generated output enters PR flow
 
-**What it enforces**
-- Generation cannot proceed directly to PR without review.
-- Review is multi-pass, not single-shot.
-- Findings are explicit, attributable, and fixable.
+### 15. Improvement / Fix Pass
+**Primary TRD:** “10. Improvement Pass”, “11. Fix Execution”  
+**What it does:** Runs targeted remediation when review or CI identifies defects; may create fix branches or correction iterations.  
+**What it enforces:**
+- Explicit trigger conditions
+- Controlled remediation prompt lens selection
+- Bounded retries and corrective scope
+- Preservation of auditability across fix iterations
 
----
+### 16. Conflict Detection and Dependency Safety
+**Primary TRD:** “10. Conflict Detection”, “10.1 Pre-Start File Overlap Check”, “10.4 Unmet Dependency Warning”  
+**What it does:** Detects file overlap, dependency conflicts, issue exclusions, and sequence hazards before and during PR execution.  
+**What it enforces:**
+- No overlapping concurrent modifications where prohibited
+- No progression with unmet prerequisite work
+- File/path exclusion rules
+- Early conflict surfacing to operator and logs
 
-### 15. Improvement / Fix Pass System
-**What it does**
-- Executes targeted repair iterations after review findings.
-- Creates fix branches where required.
-- Re-runs validation after fixes.
+### 17. CI Orchestration
+**Primary TRD:** CI pipeline TRD, “10. Python Bundling in CI”, “11. Notarization Job”  
+**What it does:** Validates generated changes through repository CI and platform packaging CI, including Python bundling and notarization for the macOS application where applicable.  
+**What it enforces:**
+- No PR promotion without CI status
+- Artifact reproducibility checks
+- Packaging correctness for app distribution
+- Notarization/signing job boundaries for releaseable builds
 
-**What it enforces**
-- Fixes are gated by review output and operator/workflow rules.
-- Repair loops are bounded and explicit.
-- Improvement prompt content is controlled rather than ad hoc.
+### 18. GitHub Integration
+**Primary TRD:** GitHub integration TRD, “10. GraphQL API”, “11. Webhook Receiver”, “11. Live Sync”  
+**What it does:** Creates branches, commits changes, opens draft PRs, queries PR status, receives webhooks, and synchronizes local state with GitHub.  
+**What it enforces:**
+- Remote state as an external, validated source
+- GraphQL/API error handling
+- Draft-first PR creation
+- Branch/PR lifecycle consistency
+- No hidden merge behavior
 
----
+### 19. Operator Review Gate
+**Primary TRD:** “10. Operator Review Gate”  
+**What it does:** Presents generated PRs, review findings, and CI outcomes to the operator for explicit approve/reject/proceed decisions.  
+**What it enforces:**
+- Human approval before next PR progression
+- Visibility into scope and quality signals
+- Pause semantics between autonomous units
+- No fully silent end-to-end autonomous merge path
 
-### 16. Operator Review Gate
-**What it does**
-- Presents draft PR results for human review.
-- Supports scope confirmation, proceed/fix gating, and lens selection for review workflows.
+### 20. Repository Scoping and Project Context
+**Primary TRD:** “11. Project Scoping”, “10.1 Gate 1 — Scope Confirmation”  
+**What it does:** Establishes the target repository, allowed scope, task boundaries, and context material before generation begins.  
+**What it enforces:**
+- Repository-level target explicitness
+- Scope confirmation before mutation planning
+- Exclusion/inclusion constraints
+- Prevention of accidental out-of-scope modification
 
-**What it enforces**
-- Human approval is required at designated gates.
-- The system does not silently merge or finalize work without operator consent.
-- Review gates remain explicit workflow barriers.
+### 21. PRODUCT_CONTEXT.md Generation
+**Primary TRD:** “10. Phase 7: PRODUCT_CONTEXT.md Generation”  
+**What it does:** Synthesizes repository/product context documentation from accumulated understanding after build completion or designated phases.  
+**What it enforces:**
+- Documentation generation as a post-build artifact, not a hidden side effect
+- Traceability back to imported sources and observed repo state
+- Separation from implementation generation stage
 
----
+### 22. TRD Generation
+**Primary TRD:** “11. Phase 8: TRD Generation”  
+**What it does:** Produces technical requirements documents from repository state, product context, and observed architecture, when invoked by workflow.  
+**What it enforces:**
+- Structured technical specification output
+- Explicit phase ordering after implementation/document context accumulation
+- No substitution of generated TRDs for imported source-of-truth docs unless operator-directed
 
-### 17. GitHub Integration
-**What it does**
-- Interacts with GitHub repositories, pull requests, branches, issues, GraphQL APIs, and webhook events.
-- Opens draft PRs, queries PR status, syncs state, and receives remote updates.
+### 23. Logging, Telemetry, and Observability
+**Primary TRD:** TRD-1, TRD-11  
+**What it does:** Emits structured local logs, pipeline events, diagnostics, crash metadata, and security-relevant audit events.  
+**What it enforces:**
+- Privacy annotations for sensitive fields
+- Reproducible event trails
+- Explainability of control decisions
+- Separation between operational telemetry and secret material
 
-**What it enforces**
-- Remote repository operations use explicit API contracts.
-- GraphQL/API error handling is normalized.
-- Draft PR creation happens only after local workflow gates pass.
-- Webhook inputs are handled as untrusted external data.
+### 24. Security and Threat Defense Layer
+**Primary TRD:** TRD-11  
+**What it does:** Defines global controls for prompt injection defense, path security, generated-code risk handling, context poisoning resistance, dependency code injection mitigation, and adversarial LLM output handling.  
+**What it enforces:**
+- Untrusted-content classification
+- Multi-layer prompt injection defense
+- Path and file access constraints
+- No execution of generated code
+- Suspicion and containment of model outputs and imported context
+- Security review requirements for external and generated artifacts
 
----
+### 25. Update, Packaging, and Distribution
+**Primary TRD:** TRD-1, release/build TRD  
+**What it does:** Builds the `.app` bundle, supports drag-to-Applications installation, Sparkle auto-update, bundling of Python runtime, and notarized distribution.  
+**What it enforces:**
+- Signed, notarized app distribution
+- Controlled update path
+- Bundle integrity
+- Versioned installation and migration behavior
 
-### 18. CI Coordination
-**What it does**
-- Triggers or observes CI runs associated with generated branches and PRs.
-- Surfaces build/test state back into the pipeline and UI.
-
-**What it enforces**
-- PR readiness depends on validation state, not generation alone.
-- CI signals are explicit inputs to workflow progression.
-- Generated code is validated through repository-native CI, not local execution of arbitrary generated payloads.
-
----
-
-### 19. Live Sync Engine
-**What it does**
-- Synchronizes local workflow state with GitHub and repository changes.
-- Updates PR status, issue state, and branch/remote metadata.
-
-**What it enforces**
-- UI and orchestration state reflect authoritative external system changes.
-- Sync strategy is controlled and observable.
-- External changes cannot bypass local operator gates.
-
----
-
-### 20. Webhook Receiver
-**What it does**
-- Accepts and processes remote event notifications related to PRs, CI, and repository state.
-
-**What it enforces**
-- Webhook authenticity and payload handling must be explicit.
-- Events are inputs to state transition logic, not direct mutation authority.
-- Untrusted remote content is parsed and validated before use.
-
----
-
-### 21. Logging, Telemetry, and Observability
-**What it does**
-- Records structured logs, os_log events, diagnostics, conflict logs, process health, and workflow state transitions.
-- Supports crash symbolication and operational debugging.
-
-**What it enforces**
-- Security-sensitive values are privacy-annotated or excluded.
-- Control decisions and failures are reconstructable.
-- Logging does not become a secondary secret exfiltration path.
-
----
-
-### 22. Security Enforcement Layer
-**What it does**
-- Implements platform-wide controls from TRD-11.
-- Covers path security gates, prompt injection defense, context poisoning defense, dependency code injection mitigation, and adversarial output handling.
-
-**What it enforces**
-- Imported documents, repository contents, dependencies, model outputs, and webhook/API payloads are all treated as potentially malicious.
-- Three-layer defenses apply where specified.
-- Unsafe paths, untrusted content, and policy violations block progression.
-
----
-
-### 23. Documentation Generation
-**What it does**
-- Produces `PRODUCT_CONTEXT.md`, TRD regeneration output, and other derived project documentation after build phases complete.
-
-**What it enforces**
-- Documentation is derived from the same controlled retrieval/generation pipeline.
-- Generated documentation remains reviewable output.
-- Documentation generation does not bypass the core safety model.
-
----
-
-### 24. Packaging, Update, and Distribution
-**What it does**
-- Builds the macOS application bundle.
-- Supports drag-to-Applications install, Sparkle auto-update, notarization, and CI bundling for Python/runtime assets.
-
-**What it enforces**
-- Shipping artifacts preserve the shell/backend trust boundary.
-- Update channels remain native-app controlled.
-- Bundling and notarization flows are explicit and testable.
+### 26. Settings and Configuration Management
+**Primary TRD:** TRD-1  
+**What it does:** Persists non-secret settings in `UserDefaults`, handles migrations, exposes provider/API configuration, and drives security-sensitive option validation.  
+**What it enforces:**
+- Separation of secret vs non-secret configuration
+- Schema/version migration behavior
+- Validation before persistence where required
+- No settings path that bypasses trust or review controls
 
 ---
 
 ## Enforcement Order
 
-The effective control path of the platform is ordered. Later components cannot weaken guarantees imposed earlier.
+The platform is designed as a strict enforcement pipeline. Each subsystem calls the next only after its own invariants have been satisfied.
 
-### 1. Launch and trust establishment
-1. macOS launches the Swift shell.
-2. Shell initializes persistent settings, logging, and crash handling.
-3. Shell enforces first-launch onboarding and project preconditions.
-4. Operator completes biometric/session authentication if required.
-5. Shell launches the Python backend under managed process supervision.
-6. Shell establishes authenticated local IPC.
-7. Shell releases runtime credentials only after session and backend checks pass.
+### 1. Application startup
+1. **macOS Application Shell** launches.
+2. **Settings and Configuration Management** loads persisted non-secret configuration and runs migrations.
+3. **Authentication and Session Lifecycle** checks whether first-launch onboarding or unlock is required.
+4. **Secrets and Keychain Management** becomes accessible only after successful local auth conditions.
+5. **Backend Process Manager** starts the Python backend with approved configuration.
+6. **XPC / Local IPC Transport** performs authenticated handshake and establishes command channel.
+7. **Logging and Observability** records startup state, versions, and failures.
 
-### 2. Repository and document preparation
-1. Operator imports repository and source documents.
-2. Repository Analysis performs project scoping and overlap/dependency/conflict checks.
-3. Document Store parses documents, extracts metadata, chunks, embeds, and indexes them.
-4. Security layer scans ingestion inputs for prompt injection and context poisoning patterns.
-5. Indexed documents become the retrieval base for all downstream operations.
+### 2. Onboarding and environment preparation
+1. Operator completes **First-Launch Onboarding**.
+2. Operator configures repository, provider credentials, and preferences through **Settings and Configuration Management**.
+3. Shell validates credentials presence and required configuration.
+4. **Repository Scoping and Project Context** establishes target repo and work scope.
+5. **Document Import Pipeline** accepts TRDs/PRDs/spec documents.
+6. **Retrieval and Document Store** parses, chunks, embeds, and indexes imported materials.
 
-### 3. Planning and work decomposition
+### 3. Intent-to-plan path
 1. Operator submits intent.
-2. Planning Engine retrieves relevant specifications.
-3. Planning Engine generates ordered PRD plan.
-4. Planning Engine decomposes PRD plan into PR-sized work units.
-5. Operator scope confirmation gate is applied where required.
+2. **Repository Scoping and Project Context** confirms scope boundaries.
+3. **Prompt Construction Layer** builds planning prompts from intent, repo metadata, and retrieved spec context.
+4. **Planning Engine** generates ordered PRD/work plan.
+5. **Conflict Detection and Dependency Safety** checks overlap, dependency ordering, exclusions, and unmet prerequisites.
+6. **Operator Review Gate** may confirm plan or scope before execution proceeds.
 
-### 4. Per-PR execution pipeline
-1. Pipeline Orchestrator selects next work unit.
-2. Repository Analysis re-checks repository state and file overlap/conflict conditions.
-3. Context Assembly gathers task-specific retrieved specs and repo context.
-4. Code Generation Stage requests candidate implementations through Provider Adapters.
-5. Consensus Engine runs parallel generation and arbitration.
-6. Generated artifacts are materialized as controlled file changes.
-7. Three-Pass Review Stage evaluates output.
-8. Improvement/Fix Pass applies bounded corrections if needed.
-9. Validation/CI coordination determines readiness.
-10. Operator Review Gate presents draft result.
-11. GitHub Integration creates/updates draft PR after gates pass.
+### 4. Per-PR execution path
+1. Select next planned PR unit.
+2. **Conflict Detection and Dependency Safety** performs pre-start file overlap and dependency checks.
+3. **Prompt Construction Layer** assembles generation prompt with retrieved context.
+4. **Consensus Engine** dispatches to **Provider Adapter Layer** for parallel model generation.
+5. **Consensus Engine** arbitrates outputs with Claude as required.
+6. **Code Generation Stage** materializes proposed implementation and tests.
+7. **Three-Pass Review Stage** performs structured review.
+8. If issues are found, **Improvement / Fix Pass** runs targeted remediation and returns to review as allowed.
+9. **CI Orchestration** validates resulting branch/build state.
+10. **GitHub Integration** creates or updates branch, commit set, and draft PR.
+11. **Operator Review Gate** blocks progression until operator decision.
+12. On approval, planner advances to the next PR unit.
 
-### 5. Post-PR and completion flows
-1. Live Sync tracks PR and CI state.
-2. Webhook Receiver updates external event state through validated handlers.
-3. On operator approval/merge progression, orchestrator advances to next PR unit.
-4. When the full build completes, Documentation Generation may produce updated context/TRD outputs.
-5. Packaging/update/distribution flows apply to the product itself, not to generated target-repo code.
+### 5. Post-build documentation path
+1. After implementation sequence completion, **PRODUCT_CONTEXT.md Generation** may run.
+2. **TRD Generation** may run as a later phase.
+3. Outputs are surfaced through the shell for operator review and repository inclusion as configured.
+
+### 6. Live sync and external feedback path
+1. **GitHub Integration** receives webhooks or polls GraphQL status.
+2. **Live Sync** updates local pipeline/PR state.
+3. **SwiftUI Presentation Layer** refreshes operator-visible status.
+4. **Logging and Observability** records state transitions and API errors.
+
+### 7. Security enforcement path
+Security checks are not a separate phase; they wrap every phase:
+1. External content is classified as untrusted.
+2. **Prompt injection defenses** sanitize and isolate imported content.
+3. **Path security gates** validate file operations before patch application or branch preparation.
+4. Generated output is treated as adversarial until review and CI clear it.
+5. No generated artifact is executed locally.
+6. Operator gate remains mandatory before workflow continuation where specified.
 
 ---
 
 ## Component Boundaries
 
+This section defines what each subsystem must never do.
+
 ### macOS Application Shell must never
-- Generate code logic itself.
-- Persist provider secrets outside approved secret stores.
-- Trust backend messages without authenticated IPC validation.
-- Allow hidden workflow progression around operator gates.
+- Implement LLM planning, generation, arbitration, or retrieval logic.
+- Store secrets in `UserDefaults`, logs, or plaintext files.
+- Allow UI code to bypass auth/session gates.
+- Execute generated code or repository code as part of agent workflow.
+- Trust backend state without authenticated IPC and explicit message contracts.
 
-### Authentication and Secret Management must never
-- Delegate long-term secret custody to the backend.
-- Log raw credentials or tokens.
-- Release credentials before session and policy checks complete.
+### SwiftUI Presentation Layer must never
+- Contain secret material directly.
+- Own durable business state outside approved view models/store objects.
+- Call external providers or GitHub directly.
+- Make hidden workflow progression decisions without operator visibility.
 
-### Python Backend must never
-- Be treated as the root of trust.
-- Store canonical secrets in its own persistent storage.
-- Execute generated code, generated tests, or dependency payloads.
-- Bypass shell-controlled approval or launch sequencing.
+### Authentication and Session Lifecycle must never
+- Infer trust from app foreground state alone.
+- Grant indefinite secret access without session policy.
+- Expose biometric results directly to backend as a substitute for shell-controlled authorization.
 
-### Document Store must never
-- Treat imported documents as trusted instructions.
-- Lose provenance of chunks used for retrieval.
-- Mix excluded or poisoned content into retrieval context without controls.
+### Secrets and Keychain Management must never
+- Hand raw secrets to LLM providers.
+- Serialize secrets into prompts, logs, crash reports, or documents.
+- Permit backend self-service secret retrieval without shell mediation.
+
+### XPC / Local IPC Transport must never
+- Accept unauthenticated peer messages.
+- Permit ambiguous framing or mixed message schemas.
+- Act as a general-purpose plugin bus.
+
+### Backend Process Manager must never
+- Launch arbitrary child tools outside approved backend/runtime strategy.
+- Escalate privileges or inherit unconstrained environment state.
+- Continue silently after repeated backend integrity failures.
 
 ### Planning Engine must never
-- Invent requirements that contradict source specifications.
-- Skip decomposition and produce unreviewable monolithic work.
-- Ignore repository scoping constraints.
-
-### Context Assembly must never
-- Include policy-excluded files or issues.
-- Drop source attribution for retrieved content.
-- Pass raw unfiltered external text into prompts where defenses are required.
+- Modify the repository directly.
+- Skip explicit scope decomposition.
+- Treat undocumented assumptions as requirements when imported specs exist.
 
 ### Consensus Engine must never
-- Accept a single provider response as implicitly authoritative when consensus/arbitration is required.
-- Hide disagreement or uncertainty.
-- Execute or validate code by running it.
+- Accept a single-provider result as equivalent to consensus when consensus is required.
+- Bypass arbitration on disagreement or low-confidence paths.
+- Mutate files or Git state directly.
 
 ### Provider Adapter Layer must never
-- Leak provider-specific failures as silent success.
-- Smuggle unsafe prompt content around security controls.
-- Own workflow policy.
+- Leak provider-specific credentials into other provider contexts.
+- Embed policy logic that changes consensus semantics per provider.
+- Normalize away safety-relevant error conditions.
 
-### Pipeline Orchestrator must never
-- Reorder mandatory stages.
-- Advance on ambiguous stage state.
-- Suppress failure conditions that should block PR creation.
+### Retrieval and Document Store must never
+- Treat imported documents as trusted instructions.
+- Lose document provenance during chunking or retrieval.
+- Return context without metadata sufficient for traceability.
+- Mutate source documents during ingestion.
+
+### Document Import Pipeline must never
+- Silently coerce unsupported formats into partial/truncated context.
+- Ignore parse errors that would degrade retrieval correctness.
+- Treat file names alone as trustworthy metadata.
+
+### Prompt Construction Layer must never
+- Merge user intent, system rules, and retrieved text without role separation.
+- Permit external content to override platform instructions.
+- Omit source boundaries in contexts that need them for reviewability.
 
 ### Code Generation Stage must never
-- Execute generated code.
-- Modify files outside scoped and approved target sets.
-- Ignore conflict and path security gates.
+- Execute generated or target-repo code locally.
+- Write outside scoped repository/file boundaries.
+- Advance changes directly to GitHub without review and CI stages.
 
-### Review and Improvement subsystems must never
-- Mark work complete without explicit review evidence.
-- Enter unbounded self-repair loops.
-- Treat model self-assertion as proof of correctness.
+### Three-Pass Review Stage must never
+- Be skipped for generated code.
+- Collapse all review objectives into a single undifferentiated pass.
+- Hide review findings from later audit/telemetry.
+
+### Improvement / Fix Pass must never
+- Loop indefinitely.
+- Expand fix scope beyond triggering defects without explicit approval.
+- Overwrite prior review history.
+
+### Conflict Detection and Dependency Safety must never
+- Ignore file overlap or unmet dependency conditions.
+- Permit hidden concurrent mutation of the same scoped areas.
+- Resolve conflicts by silently dropping work.
+
+### CI Orchestration must never
+- Be treated as optional for PR-ready changes.
+- Execute arbitrary generated payloads outside the repository’s defined CI process.
+- Report success without capturing actual remote/local CI outcomes.
 
 ### GitHub Integration must never
-- Merge autonomously without operator authority.
-- Trust remote payloads without validation.
-- Let API transport failures masquerade as repository state truth.
+- Merge PRs autonomously unless explicitly specified by future requirements.
+- Treat webhook payloads as implicitly trusted without validation.
+- Drift local state from remote state without surfacing sync errors.
 
-### Webhook Receiver must never
-- Apply direct state mutation from unauthenticated or malformed events.
-- Treat event payload content as trusted prompt context.
+### Operator Review Gate must never
+- Auto-approve on behalf of the user.
+- Conceal scope, review findings, or CI status required for decision-making.
+- Permit automatic progression when a human decision is required.
 
-### Logging and Telemetry must never
-- Exfiltrate secrets or private repository content unnecessarily.
-- Become the sole persistence mechanism for critical workflow state.
-- Omit enough detail that enforcement decisions are not reconstructable.
+### Repository Scoping and Project Context must never
+- Allow ambiguous target repository selection.
+- Permit out-of-scope file mutation.
+- Ignore explicit exclusions or dependency order constraints.
 
-### Security Enforcement Layer must never
-- Be optional on untrusted-input paths.
-- Depend solely on provider behavior for safety.
-- Convert hard policy violations into warnings when blocking is required.
+### PRODUCT_CONTEXT.md Generation must never
+- Rewrite source-of-truth imported specifications silently.
+- Masquerade inferred behavior as verified fact without basis.
+- Run as an invisible side effect of unrelated phases.
 
-### Documentation Generation must never
-- Be considered source of truth over imported specifications unless explicitly designated.
-- Bypass retrieval grounding and review expectations.
+### TRD Generation must never
+- Replace imported TRDs as authoritative source without operator intent.
+- Present generated requirements as enforced platform behavior unless adopted.
+- Omit traceability to observed context.
 
-### Packaging and Distribution must never
-- Collapse shell/backend isolation for convenience.
-- Ship unsigned/unnotarized artifacts where notarization is required.
-- Break Python bundling assumptions defined by build and CI flows.
+### Logging, Telemetry, and Observability must never
+- Emit secrets or raw credential values.
+- Collapse security events into generic log noise.
+- Make control decisions unverifiable after the fact.
+
+### Security and Threat Defense Layer must never
+- Assume model output is safe because it passed generation.
+- Allow imported documents to act as executable instruction authority.
+- Trust paths, dependencies, or generated patches without validation.
+- Allow “convenience” exceptions that bypass core controls.
+
+### Update, Packaging, and Distribution must never
+- Ship unsigned or unnotarized release artifacts where notarization is required.
+- Update application code through uncontrolled channels.
+- Bundle runtime components without version and integrity control.
+
+### Settings and Configuration Management must never
+- Persist secrets in non-secret stores.
+- Accept invalid or incomplete critical settings silently.
+- Perform migrations that alter security posture without explicit schema logic.
 
 ---
 
 ## Key Data Flows
 
-### 1. Credential flow
-1. Operator authenticates in the shell.
-2. Secrets are loaded from Keychain by the shell.
-3. Shell launches backend and establishes authenticated IPC.
-4. Shell delivers only required runtime credentials over the local authenticated channel.
-5. Backend uses credentials for provider/GitHub access without becoming the source of truth for stored secrets.
+## 1. Secret and credential flow
+**Origin:** Operator enters provider/API credentials in settings.  
+**Path:**
+1. SwiftUI settings form captures secret input.
+2. Shell validates format/basic constraints.
+3. Secret is written to macOS Keychain.
+4. Non-secret references/status may be persisted in `UserDefaults`.
+5. On authenticated backend startup or provider call preparation, shell retrieves secret from Keychain.
+6. Secret is delivered to backend only through approved shell-mediated runtime channels.
 
-**Invariant:** credentials originate and persist in the shell-controlled secret domain.
+**Controls:**
+- Keychain-only durable storage
+- Session/biometric gate before retrieval
+- No secret exposure in logs, prompts, documents, or telemetry
 
----
+## 2. Document ingestion and retrieval flow
+**Origin:** Operator imports TRDs/PRDs/specs.  
+**Path:**
+1. UI submits import request to backend.
+2. Document Import Pipeline validates type and parses content.
+3. Metadata is extracted.
+4. Content is chunked according to Document Store strategy.
+5. Chunks are embedded.
+6. Embeddings + metadata are stored in retrieval index.
+7. Later prompt assembly retrieves relevant chunks by query.
+8. Retrieved chunks are attached to planning/generation/review prompts with source metadata.
 
-### 2. Document ingestion flow
-1. Operator imports TRDs/PRDs/architecture docs.
-2. Document Store parses supported formats and extracts metadata.
-3. Content is chunked according to retrieval policy.
-4. Chunks are embedded and indexed.
-5. Security defenses inspect for prompt injection / poisoning patterns.
-6. Retrieval-ready records are stored with provenance.
+**Controls:**
+- Parse error handling
+- Provenance retention
+- Imported text treated as untrusted context, not executable instruction
+- Injection-aware prompt assembly
 
-**Invariant:** every retrieved chunk can be traced back to an imported source document and ingestion path.
+## 3. Intent-to-plan flow
+**Origin:** Operator provides plain-language intent.  
+**Path:**
+1. Intent is submitted through the shell.
+2. Backend combines intent with repository scope and retrieved specification context.
+3. Planning prompts are constructed.
+4. Planning Engine generates PRD/work plan.
+5. Conflict/dependency validation runs.
+6. Plan is exposed to operator and execution scheduler.
 
----
+**Controls:**
+- Scope confirmation gate
+- Dependency checks
+- Traceable plan artifacts
+- No direct code generation before planning completes
 
-### 3. Intent-to-plan flow
-1. Operator submits plain-language intent.
-2. Planning Engine queries Document Store for relevant specs.
-3. Retrieved context plus repository state produce an ordered PRD plan.
-4. Plan is decomposed into PR-sized tasks.
-5. Scope confirmation gate validates direction before execution.
+## 4. Per-PR generation flow
+**Origin:** Next planned implementation unit.  
+**Path:**
+1. Scheduler selects PR unit.
+2. Relevant repository context and document context are retrieved.
+3. Prompt Construction Layer creates provider-ready prompts.
+4. Provider Adapter Layer invokes multiple models.
+5. Consensus Engine compares and arbitrates outputs.
+6. Code Generation Stage materializes candidate patch and tests.
+7. Review stage inspects candidate output.
+8. Improvement loop runs if needed.
+9. Final candidate enters CI.
 
-**Invariant:** implementation planning is grounded in source specifications and constrained by repository reality.
+**Controls:**
+- Multi-model generation
+- Claude arbitration
+- No code execution
+- Security checks on content, paths, and dependencies
+- Review before CI/PR creation
 
----
+## 5. Branch/PR publication flow
+**Origin:** Reviewed, CI-eligible change set.  
+**Path:**
+1. Backend prepares branch state.
+2. GitHub Integration creates or updates branch.
+3. Commit(s) are pushed.
+4. Draft PR is opened via API.
+5. PR metadata and status are synchronized locally.
+6. Operator reviews in app and/or GitHub.
 
-### 4. Per-PR generation flow
-1. Orchestrator selects next PR unit.
-2. Repository analysis verifies no unsafe overlap or conflicts.
-3. Context Assembly builds generation package.
-4. Provider Adapters call multiple LLMs in parallel.
-5. Consensus Engine arbitrates outputs.
-6. Candidate file changes are produced.
-7. Review and fix passes iterate as needed.
-8. CI status is checked.
-9. Draft PR is created on GitHub.
-10. Operator reviews and approves progression.
+**Controls:**
+- Draft-first PR policy
+- GraphQL/API error handling
+- Sync status visible to operator
+- No autonomous merge implied
 
-**Invariant:** no PR is produced from raw model output alone; all outputs traverse review and validation.
+## 6. Review and fix loop flow
+**Origin:** Review findings or CI failure.  
+**Path:**
+1. Findings are classified by stage.
+2. Improvement prompt is constructed with defect-specific lens.
+3. Fix branch or corrective iteration is generated.
+4. Changes re-enter review.
+5. If CI-related, CI reruns after accepted fix.
+6. On success, publication resumes.
 
----
+**Controls:**
+- Explicit fix triggers
+- Bounded retries
+- Scope-limited remediation
+- Full event history retained
 
-### 5. GitHub sync flow
-1. Backend queries GitHub GraphQL/API for PR and repository state.
-2. Webhooks provide asynchronous updates.
-3. Live Sync reconciles remote truth with local workflow state.
-4. UI reflects current status and available operator actions.
+## 7. Live sync flow
+**Origin:** Remote GitHub state changes.  
+**Path:**
+1. Webhook receiver or GraphQL poll obtains remote update.
+2. Payload/status is validated and mapped to local entities.
+3. Backend updates pipeline state.
+4. Shell receives state updates over IPC.
+5. UI refreshes and notifications may be posted.
 
-**Invariant:** remote state informs workflow but does not erase local enforcement or operator approval requirements.
+**Controls:**
+- External payload validation
+- Error-classified sync failures
+- No hidden state mutation outside auditable event path
 
----
+## 8. Documentation synthesis flow
+**Origin:** Build completion or explicit documentation phase.  
+**Path:**
+1. Repository state, imported docs, and execution artifacts are gathered.
+2. Retrieval/context assembly constructs documentation prompts.
+3. PRODUCT_CONTEXT.md and/or TRDs are generated.
+4. Outputs are surfaced for review and repository inclusion.
 
-### 6. Documentation regeneration flow
-1. Completion of implementation phases triggers doc-generation eligibility.
-2. Document generation retrieves current specs, implementation context, and repository outcomes.
-3. Generated docs are emitted as reviewable artifacts.
-4. Optional TRD and product-context outputs are produced.
-
-**Invariant:** generated documentation is downstream of controlled context retrieval and generation, not freeform synthesis.
-
----
-
-### 7. Packaging/update flow
-1. CI builds application bundle and bundled Python runtime.
-2. Caching and bundling steps produce distributable artifacts.
-3. Notarization job signs and notarizes the app.
-4. Sparkle/update metadata enables field updates.
-
-**Invariant:** distributed binaries preserve native shell authority and deployment integrity.
+**Controls:**
+- Separation from implementation path
+- Traceability to source context
+- Generated docs are reviewable artifacts, not implicit truth
 
 ---
 
 ## Critical Invariants
 
-1. **The shell is the local root of trust.**
-   - The Swift/macOS process owns UI authority, session authority, secret authority, and backend launch authority.
+1. **Swift owns trust; Python owns intelligence.**  
+   The shell controls secrets, local auth, session state, and backend lifecycle. The backend must not become the trust anchor.
 
-2. **The backend is orchestrator, not trust anchor.**
-   - Python owns intelligence and automation, but not long-term secret custody or operator identity.
+2. **No generated code is executed locally by the agent.**  
+   Generation, review, and packaging workflows must not run generated code as part of local agent behavior. Validation occurs through defined CI mechanisms, not arbitrary local execution.
 
-3. **Generated code is never executed by Forge.**
-   - The system may write, review, diff, validate through repository-native CI, and prepare PRs, but it must not run generated code locally as part of generation.
+3. **All external content is untrusted by default.**  
+   Imported documents, repository content, dependencies, webhook payloads, provider responses, and generated code all enter through explicit validation and containment paths.
 
-4. **All external content is untrusted by default.**
-   - Imported documents, repository files, dependencies, model outputs, webhook payloads, and API responses all require explicit validation and policy handling.
+4. **Consensus is mandatory where specified.**  
+   A single provider output cannot substitute for the required multi-model consensus + Claude arbitration path.
 
-5. **Retrieval quality is a correctness dependency.**
-   - Document parsing, chunking, metadata extraction, embedding, and retrieval directly affect planning, generation, review, and documentation quality.
+5. **Operator approval is a first-class enforcement point.**  
+   The platform may automate planning, generation, review, and PR creation, but not silently erase the human decision boundary where required.
 
-6. **Consensus is mandatory where specified.**
-   - Multi-model generation with Claude arbitration is part of the product architecture, not an optimization.
+6. **Secrets never cross into durable insecure storage.**  
+   Credentials must remain in Keychain or equally protected transient memory paths; they must never appear in `UserDefaults`, logs, prompt bodies, or generated artifacts.
 
-7. **Review is mandatory before PR creation.**
-   - Raw generation output cannot go directly to a final PR artifact without structured review/fix passes.
+7. **Prompt roles must remain separated.**  
+   System rules, operator intent, retrieved context, repository evidence, and model outputs must not be collapsed into a single unstructured trust domain.
 
-8. **Operator approval remains explicit.**
-   - Human review gates are first-class control points and cannot be bypassed by automation convenience.
+8. **Retrieval quality is architecture-critical.**  
+   Chunking, embeddings, metadata retention, and retrieval relevance directly affect every downstream subsystem; ingestion correctness is not optional infrastructure.
 
-9. **Stage ordering is enforced.**
-   - Planning precedes generation; generation precedes review; review precedes PR creation; operator approval governs progression.
+9. **Planning precedes mutation.**  
+   The system must define scope, dependencies, and PR ordering before code generation starts.
 
-10. **Provenance must be preserved.**
-    - Retrieved chunks, generated artifacts, review findings, and workflow state transitions must remain attributable.
+10. **Review precedes publication.**  
+    Generated changes must pass structured review before CI/PR publication.
 
-11. **Security controls are cross-cutting and blocking.**
-    - Path security, injection defense, dependency injection defense, and adversarial-output controls apply across ingestion, prompting, generation, and integration surfaces.
+11. **CI precedes PR readiness.**  
+    A change set is not considered ready for operator review as a valid implementation unit until required CI states are available.
 
-12. **Logging must be useful without becoming a leak.**
-    - Observability must support auditability and reproducibility while preserving privacy and secret safety.
+12. **Path and scope constraints are mandatory.**  
+    No subsystem may modify files outside the explicitly scoped repository and allowed path set.
 
-13. **GitHub state is integrated, not sovereign.**
-    - Remote state drives synchronization but cannot override local enforcement, policy, or operator intent.
+13. **Every control decision must be observable.**  
+    Security gates, scope blocks, conflict detections, review findings, CI outcomes, and sync failures must be surfaced through logs and/or operator-visible state.
 
-14. **Work units must stay reviewable.**
-    - Planning and implementation are decomposed into logical PR units to preserve correctness, traceability, and human oversight.
+14. **Remote state is authoritative for remote objects; local state is authoritative for local trust.**  
+    GitHub owns PR/branch truth; the shell owns local auth/session/secrets truth. Neither side should be inferred from the other.
 
-15. **Packaging must preserve architecture.**
-    - Distribution, Python bundling, notarization, and updates must not weaken process isolation or trust boundaries.
+15. **Generated documentation is derivative unless adopted.**  
+    Synthesized `PRODUCT_CONTEXT.md` or TRDs are outputs of the platform, not automatically the new source of truth.
+
+16. **Security controls must compose across stages.**  
+    Prompt injection defense, path security, dependency scrutiny, and adversarial-output handling are layered protections, not one-time checks.
+
+17. **Failure must degrade safely.**  
+    On parse failures, provider errors, IPC failures, auth issues, CI ambiguity, or sync uncertainty, the platform must stop or quarantine progression rather than guess.
+
+18. **Explainability is part of correctness.**  
+    If a reviewer cannot reconstruct why the system planned, generated, blocked, or published something, the architecture has failed an explicit requirement.
+
+19. **Distribution integrity matters as much as runtime integrity.**  
+    Bundling, signing, Sparkle updates, Python packaging, and notarization are architectural trust boundaries, not release afterthoughts.
+
+20. **Subsystem boundaries are security boundaries.**  
+    The separation between UI, secrets, backend intelligence, retrieval, review, CI, and GitHub is intentional and must not be collapsed for convenience.
