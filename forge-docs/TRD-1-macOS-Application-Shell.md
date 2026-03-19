@@ -1,6 +1,6 @@
 # TRD-1-macOS-Application-Shell
 
-_Source: `TRD-1-macOS-Application-Shell.docx` — extracted 2026-03-19 18:28 UTC_
+_Source: `TRD-1-macOS-Application-Shell.docx` — extracted 2026-03-19 19:55 UTC_
 
 ---
 
