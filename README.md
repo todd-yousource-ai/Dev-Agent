@@ -1,25 +1,25 @@
 # Enterprise Security Platform
 
-A unified security enforcement platform that provides centralized policy management, threat detection, and compliance orchestration across distributed enterprise environments.
+A policy-driven security enforcement platform that provides unified access control, threat detection, and compliance governance across distributed enterprise infrastructure.
 
 ## What It Does
 
-This platform enforces security policies across infrastructure, application, and data layers through a coordinated set of subsystems that share a common trust model and policy engine. It protects enterprise workloads by combining real-time threat detection with automated compliance enforcement, ensuring that security controls are applied consistently from ingress through data access. The system is designed for platform engineering teams, security operators, and compliance officers who need auditable, policy-driven security at scale.
+This platform enforces security policies across enterprise environments through a layered architecture of interconnected subsystems — from identity and access management through real-time threat detection to continuous compliance monitoring. It protects organizational assets, data flows, and workloads by centralizing policy definition while distributing enforcement to the network edge. Built for security engineers, platform teams, and compliance operators who need auditable, zero-trust security guarantees at scale.
 
 ## Key Subsystems
 
-- **Policy Engine** — evaluates and enforces security policies across all subsystems using a declarative rule model
-- **Identity & Access Management (IAM)** — manages authentication, authorization, and credential lifecycle with zero-trust principles
-- **Threat Detection** — performs real-time analysis of events and telemetry to identify and escalate security incidents
-- **Compliance Orchestrator** — maps enforcement actions to regulatory frameworks and generates audit-ready evidence
-- **Network Enforcement** — applies micro-segmentation and traffic policies at the network layer
-- **Data Protection** — enforces encryption, classification, and access controls on data at rest and in transit
-- **Secret Management** — handles secure storage, rotation, and distribution of credentials and keys
-- **Audit & Logging** — captures tamper-evident logs of all policy decisions and enforcement actions
+- **Identity & Access Management (IAM)** — enforces authentication, authorization, and identity lifecycle across all services
+- **Policy Engine** — evaluates and enforces security policies in real-time using a hierarchical rule resolution model
+- **Threat Detection** — monitors telemetry streams for anomalous behavior and known attack patterns
+- **Compliance Governance** — continuously validates infrastructure and workload state against regulatory frameworks
+- **Secret Management** — handles secure storage, rotation, and distribution of credentials and cryptographic material
+- **Audit & Logging** — captures tamper-evident audit trails for all enforcement decisions and administrative actions
+- **Network Security** — enforces microsegmentation, traffic policies, and encrypted communication channels
+- **Data Protection** — classifies, encrypts, and controls access to sensitive data at rest and in transit
 
 ## Architecture Overview
 
-All enforcement flows through the Policy Engine, which serves as the central decision point — no subsystem bypasses it. The trust model is rooted in cryptographically verified identity: every request carries an authenticated principal, and policy evaluation happens before any action is permitted. Subsystems communicate via well-defined interfaces with structured events, enabling the Compliance Orchestrator and Audit & Logging services to maintain a complete, immutable record of all enforcement decisions.
+The platform follows a zero-trust enforcement model where every request traverses the Policy Engine before reaching any protected resource. Subsystems communicate through well-defined API contracts with mutual TLS authentication, and enforcement decisions cascade through a strict evaluation order: identity verification → policy evaluation → threat assessment → action. All state changes produce immutable audit events that feed back into the Threat Detection and Compliance Governance subsystems for continuous posture assessment.
 
 ## Repository Structure
 
@@ -34,22 +34,22 @@ tests/               — test suite
 
 ## Getting Started
 
-- **Read `CLAUDE.md` first** — it contains the coding instructions, conventions, and constraints that all contributors (human and LLM) must follow.
-- **Review `forge-standards/ARCHITECTURE.md`** — understand the trust model, enforcement order, and how subsystems interact before writing any code.
-- **Check `forge-standards/INTERFACES.md`** — all API contracts and wire formats are defined here; implementations must conform exactly.
-- **Find the relevant TRD in `forge-docs/`** — every subsystem has a Technical Requirements Document that specifies its behavior, constraints, and acceptance criteria.
-- **Run the test suite** — `tests/` contains validation for all enforced contracts; CI will block merges that break them.
+- **Read `CLAUDE.md` first** — it contains all coding conventions, constraints, and patterns that must be followed before writing any code
+- **Review `forge-standards/ARCHITECTURE.md`** to understand the trust model, enforcement order, and subsystem boundaries
+- **Study the TRDs in `forge-docs/`** — each subsystem has a dedicated technical requirements document that defines its contracts and invariants
+- **Check `forge-standards/INTERFACES.md`** for wire formats, API schemas, and inter-subsystem communication protocols before implementing any integration
+- **Run the existing test suite** (`tests/`) to verify your environment before submitting changes
 
 ## Documentation
 
 | Document | Location | What It Contains |
-|---|---|---|
-| LLM Coding Instructions | `CLAUDE.md` | Conventions, constraints, and rules for all code contributions |
-| System Architecture | `forge-standards/ARCHITECTURE.md` | Trust model, enforcement flow, subsystem relationships |
-| Interface Contracts | `forge-standards/INTERFACES.md` | API specifications, wire formats, event schemas |
-| Architecture Decisions | `forge-standards/DECISIONS.md` | ADRs capturing key design choices and rationale |
-| Conventions | `forge-standards/CONVENTIONS.md` | Naming, structure, and style standards |
-| Technical Requirements | `forge-docs/` | Per-subsystem TRDs and PRDs with full specifications |
+|----------|----------|-----------------|
+| Architecture | `forge-standards/ARCHITECTURE.md` | Full system architecture, trust model, enforcement flows |
+| Interfaces | `forge-standards/INTERFACES.md` | API contracts, wire formats, protocol specifications |
+| Architecture Decisions | `forge-standards/DECISIONS.md` | ADRs capturing key technical choices and rationale |
+| Conventions | `forge-standards/CONVENTIONS.md` | Coding standards, naming, error handling patterns |
+| LLM Instructions | `CLAUDE.md` | Constraints and rules for AI-assisted development |
+| TRDs & PRDs | `forge-docs/` | Complete technical and product requirements per subsystem |
 
 ## Where to Go Next
 
