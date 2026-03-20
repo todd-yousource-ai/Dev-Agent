@@ -1,288 +1,153 @@
-
-
 # CLAUDE.md — Forge Platform
 
-Forge is a distributed trust-enforcement platform that validates every operation against cryptographic identity (CTX-ID), temporal authorization (VTZ), and policy-driven trust propagation (TrustFlow), failing closed at runtime on any violation.
+Forge is a security-first, two-process enforcement platform that cryptographically binds every agent action to a verified machine identity (CTX-ID), enforces session-bound policy isolation (VTZ), classifies all data at ingestion (DTL), and records every control decision through synchronous TrustFlow audit streams — every decision is explainable, observable, and reproducible.
 
-## How to Use This File
+---
 
-This file is the authoritative baseline for all code changes in the Forge repository — read it completely before writing any code. For subsystem-specific implementation detail, see `forge-docs/` for full TRDs and PRDs, and `forge-standards/` for synthesised architecture documents, interface contracts, and decision records.
+## Critical Rules — Read Before Writing Any Code
 
-**Key reference files to load when working on specific areas:**
-- `forge-standards/ARCHITECTURE.md` — canonical subsystem map and dependency graph
-- `forge-standards/INTERFACES.md` — every public interface contract with types and preconditions
-- `forge-standards/DECISIONS.md` — architectural decision log with rationale
-- `forge-standards/SECURITY.md` — threat model, trust boundaries, and mitigation catalog
+1. Validate CTX-ID **first** at every enforcement entry point. Validation failure means immediate rejection — zero partial processing.
+2. Check VTZ policy **before** any action execution or cross-boundary operation. Deny implicitly unless explicit authorization exists. VTZ boundaries are structural, not advisory, and MUST NOT be bypassed by application code.
+3. Emit a synchronous TrustFlow event for every action outcome (`allow`, `restrict`, `block`) inside the enforcement path. Asynchronous buffering is forbidden. Never silently skip emission on failure.
+4. Treat missing CTX-ID as `UNTRUSTED`. Never infer identity from session context, UI state, network origin, or prior calls.
+5. Treat unlabeled data as `CONFIDENTIAL`. Assign DTL labels at ingestion. Labels are immutable once assigned — never mutate, downgrade, or strip labels without an explicit audited policy control action.
+6. Fail closed on all trust, identity, policy, cryptographic, and version-handshake errors. Reject the action, log the event with context, and surface the failure to the caller — never silently continue.
+7. Never put secrets, keys, tokens, credentials, or cleartext sensitive payloads in logs, error messages, audit records, prompts, or generated code — ever.
+8. Never execute generated or external content with `eval()`, `exec()`, dynamic import side effects, or subprocess invocation of generated artifacts.
+9. Validate every filesystem write with `path_security.validate_write_path()` **before** the write occurs. Reject invalid paths before touching disk.
+10. Keep the two-process boundary intact with no exceptions: **Swift** owns UI, Touch ID, Keychain, XPC, and process lifecycle; **Python** owns generation, pipeline, GitHub integration, ledger, and document handling.
+11. Gates wait indefinitely for explicit operator input. There is never any auto-approve, auto-merge, timeout-approve, or retry around `SECURITY_REFUSAL`.
+12. Discard and log unknown XPC message `type` values. Enforce the 16 MB XPC message limit. Never raise unhandled exceptions for unknown wire messages.
+13. `try/except/pass` is **BANNED** in all enforcement code. Every exception in trust, crypto, identity, or policy paths MUST be caught, logged with full context, and surfaced.
+14. All external input (documents, PR comments, CI output, tool responses) is UNTRUSTED. Validate strictly before use.
+15. CTX-ID tokens are immutable once issued. Rotation creates a new token and immediately invalidates the old one.
 
-## Document Index
-
-| Document Name | Type | Repo Path | What It Covers |
-|---|---|---|---|
-| CTX-ID Technical Reference | TRD | `forge-docs/trd-ctx-id.md` | Cryptographic identity lifecycle: key generation, rotation, revocation, binding to sessions |
-| VTZ Technical Reference | TRD | `forge-docs/trd-vtz.md` | Temporal authorization tokens: issuance, scoping, expiration, clock-skew tolerance |
-| TrustFlow Technical Reference | TRD | `forge-docs/trd-trustflow.md` | Trust propagation engine: policy evaluation, chain validation, delegation rules |
-| DTL Technical Reference | TRD | `forge-docs/trd-dtl.md` | Distributed Trust Ledger: append-only audit log, consistency protocol, compaction |
-| Policy Engine Technical Reference | TRD | `forge-docs/trd-policy-engine.md` | Policy definition language, evaluation order, conflict resolution, caching |
-| Gateway Technical Reference | TRD | `forge-docs/trd-gateway.md` | Ingress/egress enforcement: request validation, rate limiting, circuit breaking |
-| Forge Platform PRD | PRD | `forge-docs/prd-forge-platform.md` | Product requirements: use cases, SLAs, compliance mandates, deployment targets |
-| Architecture Reference | Standard | `forge-standards/ARCHITECTURE.md` | Subsystem map, dependency graph, deployment topology, scaling constraints |
-| Interface Contracts | Standard | `forge-standards/INTERFACES.md` | All public APIs: method signatures, wire formats, preconditions, error codes |
-| Decision Log | Standard | `forge-standards/DECISIONS.md` | Numbered ADRs with context, decision, consequences for every architectural choice |
-| Security Standard | Standard | `forge-standards/SECURITY.md` | Threat model, trust boundaries, required mitigations, penetration test schedule |
-| Testing Standard | Standard | `forge-standards/TESTING.md` | Coverage requirements, fuzz targets, integration test topology, CI gate criteria |
-
-## Critical Rules — Non-Negotiable
-
-1. **Fail closed on every authorization check.** If CTX-ID validation, VTZ verification, or TrustFlow evaluation returns an error or timeout, deny the operation — never default to allow.
-2. **Validate CTX-ID before reading the request body.** Identity binding happens at the transport layer; no subsystem may process payload bytes from an unverified identity.
-3. **Treat VTZ tokens as immutable after issuance.** Never mutate a VTZ token in place — issue a new token with a new expiration and revoke the old one atomically.
-4. **Enforce VTZ clock-skew tolerance of ≤ 5 seconds.** Reject any token whose `nbf` or `exp` falls outside this window relative to the local monotonic clock.
-5. **Write to the DTL before returning success to the caller.** Every state-changing operation must be durably logged in the Distributed Trust Ledger; if the DTL write fails, roll back and return an error.
-6. **Never bypass TrustFlow evaluation with hardcoded role checks.** All authorization decisions route through the TrustFlow policy engine — no inline `if role == "admin"` patterns.
-7. **Rotate CTX-ID signing keys on the schedule defined in `trd-ctx-id.md`.** Key rotation is automated; manual key management code is forbidden.
-8. **Scope every VTZ token to exactly one resource and one action.** Wildcard scopes (`resource: "*"`) are banned in production token issuance paths.
-9. **Propagate trace context (CTX-ID, VTZ reference, span ID) on every inter-service call.** Missing trace headers cause the receiving service to reject the request.
-10. **Never log secret material.** CTX-ID private keys, VTZ signing secrets, TrustFlow policy-engine secrets, and DTL encryption keys must never appear in log output at any level including DEBUG.
-11. **Pin all cryptographic algorithm identifiers.** Do not accept algorithm negotiation from callers — the server dictates `alg` in every cryptographic operation.
-12. **Return structured error responses with Forge error codes.** Every error response includes `forge_error_code`, `subsystem`, `message`, and `trace_id` — never return raw stack traces.
-13. **Gate every PR on ≥ 90% line coverage and zero failing tests.** CI must block merge if coverage drops or any test — unit, integration, or fuzz — fails.
-14. **Enforce schema validation at subsystem boundaries.** Every inbound payload is validated against the canonical schema before deserialization into domain types.
-15. **Never introduce circular dependencies between subsystems.** The dependency graph is a DAG: Gateway → TrustFlow → Policy Engine → DTL; CTX-ID and VTZ are leaf dependencies consumed by all.
+---
 
 ## Architecture Overview
 
-```
-┌──────────┐     ┌───────────┐     ┌──────────────┐     ┌─────┐
-│  Gateway  │────▶│ TrustFlow │────▶│ Policy Engine│────▶│ DTL │
-└──────────┘     └───────────┘     └──────────────┘     └─────┘
-     │                │                    │
-     ▼                ▼                    ▼
-  ┌───────┐       ┌─────┐            ┌─────────┐
-  │CTX-ID │       │ VTZ │            │ Schema  │
-  └───────┘       └─────┘            │ Registry│
-                                     └─────────┘
-```
+| Subsystem | Path | Enforces | MUST NOT |
+|---|---|---|---|
+| **CAL** (Conversation Abstraction Layer) | `src/cal/` | CTX-ID validation at every entry point → VTZ policy check → action dispatch → TrustFlow emission | Process any action before CTX-ID validation and VTZ policy check both succeed |
+| **VTZ** (Virtual Trust Zones) | `src/vtz/` | Exactly-one-VTZ-per-session binding, cross-VTZ deny-by-default, authorization gates for cross-zone operations | Allow implicit cross-VTZ calls; change policy mid-session; let application code bypass boundaries |
+| **TrustFlow** | `src/trustflow/` | Synchronous audit event emission for every action outcome; every event includes required fields (see schema below) | Buffer events asynchronously in the enforcement path; skip emission on failure |
+| **DTL** (Data Trust Labels) | `src/dtl/` | Classification labels assigned at ingestion, label inheritance on derived data, label verification before trust-boundary crossings | Strip or downgrade labels without audited policy control; allow unlabeled data to cross trust boundaries |
+| **TrustLock** | `src/trustlock/` | TPM-anchored cryptographic machine identity, CTX-ID issuance, CTX-ID validation, token rotation with immediate old-token invalidation | Accept unvalidated identity claims; cache stale CTX-ID tokens; infer identity from context |
 
-### Gateway
-- **Enforces:** Transport-layer identity binding, request validation, rate limiting, circuit breaking.
-- **Called by:** External clients, internal service-mesh sidecars.
-- **Calls:** CTX-ID (identity verification), VTZ (token validation), TrustFlow (authorization).
-- **Must NEVER:** Forward a request with an unverified CTX-ID or expired VTZ token.
+---
 
-### CTX-ID
-- **Enforces:** Cryptographic identity lifecycle — key generation, binding, rotation, revocation.
-- **Called by:** Gateway, TrustFlow, any subsystem performing identity verification.
-- **Calls:** DTL (audit logging of key events), Hardware Security Module (HSM) interface for key storage.
-- **Must NEVER:** Export private key material, accept externally-supplied key IDs without re-derivation.
+## TrustFlow Event Schema
 
-### VTZ
-- **Enforces:** Temporal authorization — token issuance, expiration, scope binding, revocation.
-- **Called by:** Gateway (token validation), TrustFlow (scope checking during policy eval).
-- **Calls:** CTX-ID (identity verification of token requestor), DTL (revocation list sync).
-- **Must NEVER:** Issue a token without a bounded `exp`, reuse a revoked token ID (`jti`).
+Every TrustFlow event MUST include these fields:
 
-### TrustFlow
-- **Enforces:** Trust propagation — evaluates policy chains, validates delegation depth, computes effective permissions.
-- **Called by:** Gateway (per-request authorization), internal services (delegation checks).
-- **Calls:** Policy Engine (rule evaluation), VTZ (scope verification), DTL (trust chain audit).
-- **Must NEVER:** Cache authorization decisions beyond the TTL of the shortest-lived input token.
+| Field | Type | Description |
+|---|---|---|
+| `event_id` | `string (UUIDv4)` | Globally unique identifier for this event |
+| `session_id` | `string (UUIDv4)` | Session that produced the event |
+| `ctx_id` | `string` | CTX-ID of the agent or machine identity; `"UNTRUSTED"` if absent |
+| `ts` | `string (ISO 8601, UTC)` | Timestamp of event creation |
+| `event_type` | `string enum` | One of: `action.allow`, `action.restrict`, `action.block`, `policy.violation`, `identity.failure`, `gate.wait`, `gate.resolve`, `version.handshake`, `version.mismatch` |
+| `payload_hash` | `string (SHA-256 hex)` | Hex-encoded SHA-256 hash of the serialized event payload |
+| `vtz_id` | `string` | VTZ zone identifier in effect at event time |
+| `dtl_label` | `string \| null` | DTL classification label of the data involved, if applicable |
+| `outcome` | `string enum` | `allow`, `restrict`, `block`, `error` |
+| `detail` | `object` | Subsystem-specific structured detail; schema varies by `event_type` |
 
-### Policy Engine
-- **Enforces:** Policy evaluation — parses policy definitions, resolves conflicts (deny-overrides), returns deterministic decisions.
-- **Called by:** TrustFlow exclusively.
-- **Calls:** Schema Registry (policy schema validation), DTL (policy change audit).
-- **Must NEVER:** Execute arbitrary code from policy definitions — the policy language is declarative only.
+---
 
-### DTL (Distributed Trust Ledger)
-- **Enforces:** Append-only audit integrity — every trust-relevant event is recorded with cryptographic chaining.
-- **Called by:** All subsystems for audit writes; compliance services for reads.
-- **Calls:** Storage backend (pluggable: PostgreSQL, FoundationDB, or S3-compatible).
-- **Must NEVER:** Delete or overwrite an existing ledger entry — compaction creates summary records but preserves originals.
+## Semantic Versioning Policy
 
-### Schema Registry
-- **Enforces:** Canonical schema definitions for all wire formats and internal types.
-- **Called by:** Gateway (request validation), Policy Engine (policy schema validation), all subsystems at boundaries.
-- **Calls:** Nothing — it is a leaf service serving static schemas.
-- **Must NEVER:** Accept schema registrations that break backward compatibility without a version bump.
+### Version Format
 
-## Interface Contracts — All Subsystems
+Forge uses strict [Semantic Versioning 2.0.0](https://semver.org/):
 
-### CTX-ID
 
-```
-CtxIdService.Verify(request: VerifyRequest) -> VerifyResponse
-  VerifyRequest  { ctx_id: string, signature: bytes, payload_hash: bytes }
-  VerifyResponse { valid: bool, identity: Identity, error: ForgeError? }
-  Precondition: ctx_id is non-empty, signature length matches algorithm.
-  Postcondition: if valid==true, identity is fully populated.
-  Failure: returns valid=false with forge_error_code; never throws.
+MAJOR.MINOR.PATCH[-pre][+build]
 
-CtxIdService.Rotate(request: RotateRequest) -> RotateResponse
-  RotateRequest  { ctx_id: string, rotation_proof: bytes }
-  RotateResponse { new_ctx_id: string, effective_at: timestamp, error: ForgeError? }
-  Precondition: rotation_proof is signed by the current active key.
-  Postcondition: old key enters grace period; new key is immediately valid.
-```
 
-### VTZ
+| Component | Increment When |
+|---|---|
+| **MAJOR** | Any breaking change to enforcement semantics, wire formats, CTX-ID validation behavior, VTZ policy schema, TrustFlow event schema, DTL label contracts, or XPC message contracts |
+| **MINOR** | New subsystem capabilities, new `event_type` values, new optional fields added to existing schemas, new VTZ policy verbs — all backward-compatible |
+| **PATCH** | Bug fixes, performance improvements, documentation corrections — no schema or behavioral changes |
 
-```
-VtzService.Issue(request: IssueRequest) -> IssueResponse
-  IssueRequest  { ctx_id: string, resource: string, action: string, ttl_seconds: uint32 }
-  IssueResponse { token: string, jti: string, exp: timestamp, error: ForgeError? }
-  Precondition: ctx_id is verified, resource != "*", action != "*", ttl_seconds ≤ MAX_VTZ_TTL.
-  Postcondition: token is signed, DTL entry written.
+### Invariants
 
-VtzService.Validate(request: ValidateRequest) -> ValidateResponse
-  ValidateRequest  { token: string }
-  ValidateResponse { valid: bool, claims: VtzClaims, error: ForgeError? }
-  Precondition: token is non-empty.
-  Postcondition: if valid==true, claims.exp > now - CLOCK_SKEW_TOLERANCE.
+- MAJOR `0.x.y` releases carry no backward-compatibility guarantee.
+- Once MAJOR ≥ `1`, all MINOR and PATCH releases within the same MAJOR MUST be wire-compatible with prior versions in that MAJOR line.
+- Pre-release tags (e.g., `-alpha.1`, `-rc.2`) MUST NOT be deployed to production enforcement paths.
+- Every released version MUST be recorded in `CHANGELOG.md` with date, version, and a list of changes tagged by subsystem.
 
-VtzService.Revoke(request: RevokeRequest) -> RevokeResponse
-  RevokeRequest  { jti: string, reason: string }
-  RevokeResponse { revoked: bool, error: ForgeError? }
-  Precondition: jti exists in the issuance log.
-  Postcondition: token is immediately invalid; revocation propagated to all VTZ caches within 2 seconds.
-```
+### Version Handshake Schema
 
-### TrustFlow
+When any two Forge subsystems establish a session (XPC, inter-process, or intra-process boundary), they MUST perform a version handshake **before** any enforcement action.
 
-```
-TrustFlowService.Evaluate(request: EvalRequest) -> EvalResponse
-  EvalRequest  { ctx_id: string, vtz_token: string, resource: string, action: string, context: map<string,string> }
-  EvalResponse { decision: ALLOW|DENY, reasons: []string, policy_ids: []string, error: ForgeError? }
-  Precondition: ctx_id verified, vtz_token validated, resource and action non-empty.
-  Postcondition: DTL audit entry written for decision. decision is DENY if any input validation fails.
-```
+#### Handshake Request
 
-### DTL
 
-```
-DtlService.Append(request: AppendRequest) -> AppendResponse
-  AppendRequest  { subsystem: string, event_type: string, payload: bytes, prev_hash: bytes }
-  AppendResponse { entry_id: string, hash: bytes, timestamp: timestamp, error: ForgeError? }
-  Precondition: prev_hash matches the current head; payload ≤ MAX_DTL_ENTRY_SIZE.
-  Postcondition: entry is durable and hash-chained before response is sent.
-
-DtlService.Query(request: QueryRequest) -> QueryResponse
-  QueryRequest  { subsystem: string?, event_type: string?, from: timestamp, to: timestamp, limit: uint32 }
-  QueryResponse { entries: []DtlEntry, has_more: bool, error: ForgeError? }
-```
-
-See `forge-standards/INTERFACES.md` for the complete contract catalog including Gateway, Policy Engine, Schema Registry, and all internal helper interfaces.
-
-## Wire Formats and Schemas
-
-### ForgeError (universal error envelope)
-```json
 {
-  "forge_error_code": "string — e.g. VTZ_EXPIRED, CTX_ID_REVOKED, TRUSTFLOW_DENY",
-  "subsystem": "string — e.g. gateway, ctx-id, vtz, trustflow, dtl",
-  "message": "string — human-readable, no secrets",
-  "trace_id": "string — 32-hex-char trace identifier",
-  "timestamp": "string — RFC 3339 with nanoseconds"
+  "type": "version.handshake.request",
+  "sender": {
+    "subsystem": "string",
+    "version": "MAJOR.MINOR.PATCH",
+    "min_compatible_version": "MAJOR.MINOR.PATCH",
+    "ctx_id": "string"
+  },
+  "ts": "ISO 8601 UTC",
+  "request_id": "UUIDv4"
 }
-```
 
-### VtzClaims
-```json
+
+#### Handshake Response
+
+
 {
-  "jti": "string — unique token ID, UUIDv7",
-  "sub": "string — CTX-ID of the subject",
-  "resource": "string — fully qualified resource URN",
-  "action": "string — one of: read, write, delete, admin",
-  "iss": "string — issuing VTZ node ID",
-  "iat": "uint64 — issued-at, Unix epoch seconds",
-  "nbf": "uint64 — not-before, Unix epoch seconds",
-  "exp": "uint64 — expiration, Unix epoch seconds",
-  "sig": "bytes — Ed25519 or ES256 signature over canonical JSON"
+  "type": "version.handshake.response",
+  "responder": {
+    "subsystem": "string",
+    "version": "MAJOR.MINOR.PATCH",
+    "min_compatible_version": "MAJOR.MINOR.PATCH",
+    "ctx_id": "string"
+  },
+  "request_id": "UUIDv4",
+  "ts": "ISO 8601 UTC",
+  "result": "compatible | incompatible | degraded",
+  "negotiated_version": "MAJOR.MINOR.PATCH | null",
+  "detail": "string | null"
 }
-```
 
-### DtlEntry
-```json
-{
-  "entry_id": "string — UUIDv7",
-  "subsystem": "string",
-  "event_type": "string",
-  "payload": "bytes — opaque, schema-validated by subsystem",
-  "prev_hash": "bytes — SHA-256 of the previous entry",
-  "hash": "bytes — SHA-256 of this entry (entry_id || subsystem || event_type || payload || prev_hash || timestamp)",
-  "timestamp": "string — RFC 3339 with nanoseconds, server-assigned"
-}
-```
 
-### Identity
-```json
-{
-  "ctx_id": "string — the public identity handle",
-  "public_key": "bytes — DER-encoded public key",
-  "algorithm": "string — Ed25519 | ES256 (server-pinned, never negotiated)",
-  "created_at": "string — RFC 3339",
-  "rotation_generation": "uint32 — monotonically increasing"
-}
-```
+#### Handshake Rules
 
-Reference `forge-standards/INTERFACES.md` for the full schema catalog including Policy definitions, Gateway request/response envelopes, and Schema Registry metadata.
+1. Both sides MUST present their `version` and `min_compatible_version`.
+2. If the peer's `version` is below the local `min_compatible_version`, the result MUST be `incompatible`. The session MUST NOT proceed. A `version.mismatch` TrustFlow event MUST be emitted.
+3. If the peer's MAJOR version differs from the local MAJOR version, the result MUST be `incompatible` (for MAJOR ≥ 1). The session MUST NOT proceed.
+4. If MINOR versions differ within the same MAJOR, the result MUST be `compatible` or `degraded`. `degraded` indicates the session will operate using only the feature set of the lower MINOR version. The `negotiated_version` field MUST reflect the effective version.
+5. If PATCH versions differ, the result MUST be `compatible` with `negotiated_version` set to the higher of the two.
+6. CTX-ID in the handshake MUST be validated by TrustLock before the handshake result is evaluated. CTX-ID validation failure means the handshake fails closed — emit `identity.failure` TrustFlow event, reject session.
+7. The handshake exchange MUST complete within the XPC 16 MB message limit.
+8. Unknown fields in handshake messages MUST be preserved but ignored — never reject a handshake for unknown fields (forward compatibility).
+9. Every handshake outcome (success or failure) MUST emit a `version.handshake` TrustFlow event with `outcome` set to the `result` value.
+10. No enforcement action, policy check, or data exchange is permitted on a session until the version handshake completes successfully.
 
-## Error Handling Rules
+---
 
-1. **Fail closed.** Any error during CTX-ID verification, VTZ validation, TrustFlow evaluation, or DTL append results in denial of the operation. There is no "soft fail" mode.
-2. **Classify errors into three categories:**
-   - **Client errors (4xx / `FORGE_CLIENT_*`):** Invalid input, expired tokens, revoked identities. Return immediately with the structured `ForgeError` envelope.
-   - **Upstream errors (5xx / `FORGE_UPSTREAM_*`):** A dependent subsystem is unavailable. Apply circuit-breaker logic; do not retry inline on the request path. Return `503` with `retry_after`.
-   - **Internal errors (5xx / `FORGE_INTERNAL_*`):** Bugs, assertion failures, OOM. Log at ERROR with full trace context, return generic `500` with trace_id — no stack trace in the response.
-3. **Banned patterns:**
-   - `catch (Exception e) { return ok(); }` — swallowing errors is a fireable offense.
-   - Returning HTTP `200` with an error payload in the body.
-   - Using string matching on error messages for control flow — use `forge_error_code` exclusively.
-   - Logging and re-throwing without adding context — wrap with subsystem and operation.
-4. **Timeout defaults:** All inter-subsystem calls enforce a 2-second deadline. If a subsystem does not respond, treat as `FORGE_UPSTREAM_TIMEOUT` and fail closed.
-5. **Circuit breaker thresholds:** 5 consecutive failures or >50% error rate in a 10-second window opens the circuit. Half-open after 30 seconds with a single probe request.
-6. **DTL write failures:** If the DTL append fails after 2 retries (exponential backoff, max 500ms total), the originating operation MUST fail. Do not proceed without an audit record.
+## XPC Wire Contract Summary
 
-## Testing Requirements
+- All XPC messages MUST include a `type` field.
+- Unknown `type` values MUST be discarded and logged — never raise unhandled exceptions.
+- Maximum XPC message size: **16 MB**. Reject and log messages exceeding this limit.
+- The `version.handshake.request` and `version.handshake.response` message types are reserved for the version handshake protocol defined above.
 
-1. **Minimum 90% line coverage on every subsystem.** CI blocks merge on any drop below this threshold.
-2. **Every public interface method has:**
-   - At least one positive test (happy path with valid inputs).
-   - At least one negative test per documented precondition (e.g., expired VTZ, revoked CTX-ID, wildcard scope).
-   - At least one boundary test (e.g., `ttl_seconds == 0`, `ttl_seconds == MAX_VTZ_TTL`, clock skew at exactly ±5s).
-3. **Fuzz targets are mandatory for:**
-   - VTZ token parsing (`VtzService.Validate` with arbitrary byte input).
-   - CTX-ID signature verification (`CtxIdService.Verify` with malformed signatures).
-   - DTL entry deserialization (`DtlService.Query` response parsing).
-   - Policy Engine rule evaluation (random policy + random request context).
-4. **Integration tests run against the full subsystem graph.** Use `docker-compose.test.yml` to spin up all services. Integration tests must exercise:
-   - Full request flow: Gateway → CTX-ID → VTZ → TrustFlow → Policy Engine → DTL.
-   - Failure injection: kill each subsystem one at a time and verify fail-closed behavior.
-   - Clock skew simulation: offset VTZ validation node by 6 seconds and verify rejection.
-5. **No test may depend on execution order.** All tests run in parallel by default.
-6. **Mocks are allowed only at subsystem boundaries.** Never mock internal functions within a subsystem — test the real implementation.
-7. **Performance benchmarks run nightly.** Regressions >10% on p99 latency trigger an automatic alert and block the next release.
+---
 
-Reference `forge-standards/TESTING.md` for the complete test matrix and CI pipeline configuration.
+## Enforcement Order (Every Entry Point)
 
-## File Naming and Directory Layout
+1. **CTX-ID Validation** → fail closed on failure
+2. **Version Handshake** (if new session/connection) → fail closed on `incompatible`
+3. **VTZ Policy Check** → deny by default
+4. **DTL Label Verification** (if data crosses trust boundary) → block unlabeled data
+5. **Action Execution**
+6. **TrustFlow Event Emission** (synchronous, in enforcement path)
 
-```
-forge/
-├── CLAUDE.md                          # THIS FILE — read first
-├── forge-docs/                        # Source TRDs and PRDs (authoritative specs)
-│   ├── trd-ctx-id.md
-│   ├── trd-vtz.md
-│   ├── trd-trustflow.md
-│   ├── trd-dtl.md
-│   ├── trd-policy-engine.md
-│   ├── trd-gateway.md
-│   └── prd-forge-platform.md
-├── forge-standards/                   # Synthesised engineering standards
-│   ├── ARCHITECTURE.md
-│   ├── INTERFACES.md
-│   ├── DECISIONS.md
-│   ├── SECURITY.md
-│   └── TESTING.md
-├── src/
-│   ├── gateway/                       # Ingress/egress enforcement
-│   │
+No step may be reordered. No step may be skipped.
