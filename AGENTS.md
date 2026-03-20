@@ -1,305 +1,284 @@
+# AGENTS.md — Consensus Dev Agent
 
+Instructions for AI agents working in this repository. Read this before making any change.
 
-# AGENTS.md — Forge Platform
+---
 
-Forge is a trust-aware distributed platform that enforces identity verification, contextual authorization, and cryptographic audit integrity at runtime through its CTX-ID, VTZ, TrustFlow, and DTL subsystems — every request that cannot be verified is rejected.
+## Repository Identity
 
-## How to Use This File
+**Product:** Consensus Dev Agent — a native macOS AI coding agent.
+**Architecture:** Two-process. Swift shell (UI, auth, Keychain, XPC) + Python backend (consensus, pipeline, GitHub).
+**Specification:** 12 TRDs in `forge-docs/`. They are the source of truth. Code must match them.
+**Security model:** TRD-11 governs all components. Read it before touching security-relevant code.
 
-This file is the baseline context for all LLM-assisted development on the Forge platform; read it completely before writing any code. For subsystem-specific detail, see `forge-docs/` for the full TRDs and PRDs, and `forge-standards/` for synthesised architecture, interface contracts, and decision records — the exact paths are listed below.
+---
 
-**Key reference files to load when you need deeper context:**
+## Before You Write Any Code
 
-- `forge-standards/ARCHITECTURE.md` — canonical subsystem map and dependency graph
-- `forge-standards/INTERFACES.md` — all inter-subsystem wire formats and contracts
-- `forge-standards/DECISIONS.md` — architectural decision records with rationale
-- `forge-standards/ENGINEERING_STANDARDS.md` — complete coding and review standards
-- `forge-standards/SECURITY.md` — threat model, control matrix, crypto requirements
+1. **Find the TRD that owns the component you are modifying.** Check the TRD Index in `README.md`.
+2. **Read the relevant TRD sections** — especially: interfaces, error contracts, security, testing requirements.
+3. **Check TRD-11** if your change touches credentials, external content, generated code, or CI.
+4. **Run the existing tests** before making changes: `cd src && pytest ../tests/ -v --tb=short`
 
-## Document Index
+---
 
-| Document Name | Type | Repo Path | What It Covers |
-|---|---|---|---|
-| CTX-ID Technical Requirements | TRD | `forge-docs/trd-ctx-id.md` | Context-identity binding, token lifecycle, CTX-ID issuance and validation |
-| VTZ Technical Requirements | TRD | `forge-docs/trd-vtz.md` | Verification Trust Zones — zone definitions, boundary enforcement, zone transitions |
-| TrustFlow Technical Requirements | TRD | `forge-docs/trd-trustflow.md` | Trust propagation engine — scoring model, decay rules, delegation chains |
-| DTL Technical Requirements | TRD | `forge-docs/trd-dtl.md` | Distributed Trust Ledger — append-only audit log, Merkle proofs, replication |
-| Forge Platform PRD | PRD | `forge-docs/prd-forge-platform.md` | Product requirements, user personas, acceptance criteria, launch gates |
-| Architecture Reference | Standard | `forge-standards/ARCHITECTURE.md` | Subsystem map, dependency graph, deployment topology |
-| Interface Contracts | Standard | `forge-standards/INTERFACES.md` | All RPC/event schemas, wire formats, versioning rules |
-| Decision Records | Standard | `forge-standards/DECISIONS.md` | ADRs — why each architectural choice was made |
-| Engineering Standards | Standard | `forge-standards/ENGINEERING_STANDARDS.md` | Code style, review gates, CI/CD rules, dependency policy |
-| Security Reference | Standard | `forge-standards/SECURITY.md` | Threat model, control matrix, cryptographic requirements |
-| API Reference | Docs | `docs/api-reference.md` | Public API surface, authentication flows, rate limits |
-| Deployment Guide | Docs | `docs/deployment.md` | Infrastructure requirements, configuration, rollout procedures |
-| Runbook | Docs | `docs/runbook.md` | Incident response, operational procedures, escalation paths |
-
-## Critical Rules — Non-Negotiable
-
-1. **Never skip CTX-ID validation.** Every inbound request must carry a valid CTX-ID; reject requests with missing, expired, or malformed CTX-IDs with a `401` before any business logic executes.
-2. **Fail closed on all trust decisions.** If TrustFlow scoring returns an error or timeout, deny the operation — never default to a permissive trust score.
-3. **Never mutate a DTL record.** The Distributed Trust Ledger is append-only; any code path that updates or deletes an existing DTL entry is a critical defect.
-4. **Enforce VTZ boundaries at the service mesh layer.** Cross-zone calls must present a valid zone-transition token issued by CTX-ID; do not rely on application-level checks alone.
-5. **Sign every DTL entry with the originating service's private key.** Unsigned or self-signed entries must be rejected by all DTL replicas.
-6. **Validate Merkle proofs on DTL reads.** Consumers of DTL data must verify the Merkle inclusion proof before trusting any audit record.
-7. **Never log CTX-ID tokens, private keys, or raw trust scores to stdout, files, or external logging services.** Emit only token fingerprints (first 8 chars of SHA-256).
-8. **Use exactly the schemas defined in `forge-standards/INTERFACES.md` for all inter-subsystem communication.** Do not invent ad-hoc payloads.
-9. **Apply TrustFlow decay on every score read.** Trust scores are time-decayed; never cache a score without reapplying the decay function at read time.
-10. **Reject unknown fields in all inbound payloads.** Forge APIs use strict deserialization — unknown fields cause a `400`, not silent ignoring.
-11. **Gate every PR on passing the full test suite with ≥ 90% line coverage for the changed subsystem.** No merge without green CI.
-12. **Pin all cryptographic dependencies to exact versions.** No semver ranges for any library that touches key material, hashing, or signatures.
-13. **Propagate trace context (OpenTelemetry `traceparent`) through every inter-subsystem call.** Broken traces are a P2 bug.
-14. **Never embed secrets in source.** All key material loads from the secrets manager at runtime; environment variable fallback is permitted only in local-dev profile.
-15. **Run `forge lint` and `forge typecheck` before committing.** Both must pass with zero warnings; `--fix` is acceptable but the diff must be reviewed.
-
-## Architecture Overview
+## Repository Structure
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                      API Gateway                         │
-│  Terminates TLS, extracts CTX-ID, enforces rate limits   │
-└──────────┬──────────────────────────────────┬────────────┘
-           │                                  │
-     ┌─────▼─────┐                    ┌───────▼───────┐
-     │   CTX-ID   │◄────────────────►│   TrustFlow    │
-     │  Service   │                   │    Engine      │
-     └─────┬─────┘                    └───────┬───────┘
-           │                                  │
-     ┌─────▼─────┐                    ┌───────▼───────┐
-     │    VTZ     │                   │     DTL        │
-     │  Enforcer  │                   │    Ledger      │
-     └───────────┘                    └───────────────┘
+forge-docs/                      ← ALL TRDs and PRDs live here. Read before building.
+  TRD-1-v1.1-macOS-App-Shell.docx
+  TRD-2-Consensus-Engine.docx
+  TRD-3-Build-Pipeline.docx
+  TRD-4-Multi-Agent-Coordination.docx
+  TRD-5-GitHub-Integration.docx
+  TRD-6-Holistic-Code-Review.docx
+  TRD-7-TRD-Development-Workflow.docx
+  TRD-8-UIUX-Design-System.docx
+  TRD-9-Mac-CI-Runner.docx
+  TRD-10-Document-Store.docx
+  TRD-11-Security-Threat-Model.docx
+  TRD-12-Backend-Runtime-Startup.docx
+
+forge-standards/                 ← Coding standards, interface contracts, decisions
+  ARCHITECTURE.md
+  INTERFACES.md
+  DECISIONS.md
+  CONVENTIONS.md
+
+src/                             ← Python backend
+  agent.py                       ← Entry point, REPL, version
+  build_director.py              ← Pipeline orchestration (calls consensus.run())
+  consensus.py                   ← ConsensusEngine — parallel generation + arbitration
+  providers.py                   ← ClaudeProvider, OpenAIProvider, GitHubProvider
+  build_ledger.py                ← BuildLedger — multi-engineer coordination
+  github_tools.py                ← GitHubTool — all GitHub API calls
+  document_store.py              ← DocumentStore — embeddings, FAISS, retrieval
+  ci_workflow.py                 ← forge-ci.yml and forge-ci-macos.yml generation
+  config.py                      ← AgentConfig — all configuration
+  api_errors.py                  ← classify_api_error(), is_transient_error()
+  path_security.py               ← validate_write_path() — must be called before every write
+
+ForgeAgent/                      ← Swift/SwiftUI application shell (TRD-1)
+ForgeAgentTests/                 ← XCTest suites (TRD-9)
+tests/                           ← Python test suite
+.github/workflows/
+  forge-ci.yml                   ← Ubuntu CI (Python, Go, TypeScript, Rust)
+  forge-ci-macos.yml             ← Mac CI (Swift, xcodebuild) — requires self-hosted runner
 ```
 
-### CTX-ID Service
-- **Enforces:** Identity binding — issues, validates, and revokes context-identity tokens.
-- **Called by:** API Gateway (on every request), TrustFlow (for identity resolution during scoring).
-- **Calls:** DTL (to log issuance/revocation events), VTZ (to determine zone affinity of the identity).
-- **Must NEVER:** Issue a CTX-ID without verifying the upstream authentication credential. Must NEVER extend token expiry beyond the configured maximum TTL.
+---
 
-### VTZ Enforcer
-- **Enforces:** Zone boundaries — validates that a request is authorized to operate within or transition between Verification Trust Zones.
-- **Called by:** API Gateway (pre-routing), CTX-ID (zone affinity lookup), application services (for zone-scoped operations).
-- **Calls:** CTX-ID (to validate zone-transition tokens), DTL (to audit zone transitions).
-- **Must NEVER:** Allow a cross-zone call without a valid zone-transition token. Must NEVER cache zone policy beyond the configured refresh interval.
+## The Core Loop
 
-### TrustFlow Engine
-- **Enforces:** Trust scoring — computes, propagates, and decays trust scores across entities and delegation chains.
-- **Called by:** API Gateway (authorization decisions), application services (trust-gated features).
-- **Calls:** CTX-ID (identity resolution), DTL (to read historical trust events and write score change events).
-- **Must NEVER:** Return a cached score without applying time-decay. Must NEVER propagate trust through a revoked CTX-ID.
-
-### DTL (Distributed Trust Ledger)
-- **Enforces:** Audit integrity — provides an append-only, Merkle-tree-backed ledger of all trust-relevant events.
-- **Called by:** CTX-ID, VTZ, TrustFlow (all write audit events), any service (reads with proof verification).
-- **Calls:** Peer DTL replicas (for replication and consistency).
-- **Must NEVER:** Accept an unsigned entry. Must NEVER delete, update, or compact existing entries. Must NEVER serve a record without an accompanying Merkle inclusion proof.
-
-### API Gateway
-- **Enforces:** TLS termination, CTX-ID extraction, rate limiting, request routing.
-- **Called by:** External clients.
-- **Calls:** CTX-ID (validation), VTZ (zone routing), TrustFlow (authorization).
-- **Must NEVER:** Forward a request with an invalid or missing CTX-ID to any downstream service.
-
-## Interface Contracts — All Subsystems
-
-### CTX-ID ↔ API Gateway
-- **Protocol:** gRPC over mTLS
-- **Method:** `ValidateCTXID(ValidateCTXIDRequest) → ValidateCTXIDResponse`
-- **Timeout:** 50ms hard, 30ms soft (p99 target)
-- **Retry:** 1 retry with 10ms jitter; fail closed on second failure
-- **Idempotency:** Safe (read-only validation)
-
-### CTX-ID ↔ TrustFlow
-- **Protocol:** gRPC over mTLS
-- **Method:** `ResolveIdentity(ResolveIdentityRequest) → ResolveIdentityResponse`
-- **Timeout:** 100ms hard
-- **Retry:** 0 retries; fail closed immediately
-- **Contract:** TrustFlow must not call `ResolveIdentity` for identities it has resolved within the last 5s (local cache with decay-aware invalidation)
-
-### TrustFlow ↔ DTL
-- **Protocol:** gRPC over mTLS
-- **Methods:** `AppendTrustEvent(TrustEvent) → AppendResponse`, `QueryTrustHistory(HistoryQuery) → HistoryResponse`
-- **Timeout:** 200ms hard for writes, 500ms for reads
-- **Contract:** Every `TrustEvent` must include the originating service signature and the CTX-ID that triggered it
-
-### VTZ ↔ CTX-ID
-- **Protocol:** gRPC over mTLS
-- **Method:** `ValidateZoneTransition(ZoneTransitionRequest) → ZoneTransitionResponse`
-- **Timeout:** 50ms hard
-- **Contract:** Transition tokens are single-use; CTX-ID must mark them consumed atomically
-
-### All Services → DTL (Audit Write)
-- **Protocol:** Async via event bus (Kafka/NATS) with gRPC fallback
-- **Schema:** `AuditEntry` protobuf (see Wire Formats below)
-- **Delivery guarantee:** At-least-once; DTL deduplicates by `entry_id`
-- **Contract:** Every audit entry must include `entry_id` (UUIDv7), `ctx_id`, `service_signature`, `timestamp_utc`, and `event_type`
-
-Refer to `forge-standards/INTERFACES.md` for the complete protobuf definitions, field-level validation rules, and backwards-compatibility policy.
-
-## Wire Formats and Schemas
-
-### CTX-ID Token (JWT-based)
-```
-{
-  "header": {
-    "alg": "EdDSA",             // Ed25519 only; no RSA, no ECDSA
-    "typ": "CTX-ID",
-    "kid": "<key-id>"           // references signing key in key registry
-  },
-  "payload": {
-    "sub":      "<entity-id>",        // UUIDv7
-    "ctx":      "<context-hash>",     // SHA-256 of the request context
-    "vtz_zone": "<zone-id>",          // VTZ zone the identity is bound to
-    "trust":    <float64>,            // TrustFlow score snapshot (decay-applied)
-    "iat":      <unix-epoch-seconds>,
-    "exp":      <unix-epoch-seconds>, // max TTL: 3600s
-    "jti":      "<token-id>"          // UUIDv7, unique per issuance
-  }
-}
-```
-
-### DTL AuditEntry (Protobuf)
-```protobuf
-message AuditEntry {
-  string entry_id = 1;            // UUIDv7
-  string ctx_id = 2;              // the CTX-ID token ID (jti)
-  string event_type = 3;          // enum: ISSUANCE | REVOCATION | ZONE_TRANSITION | TRUST_CHANGE | ACCESS_DECISION
-  string source_service = 4;      // service name emitting the event
-  bytes  service_signature = 5;   // Ed25519 signature over fields 1-4,6-8
-  int64  timestamp_utc = 6;       // Unix epoch millis
-  bytes  payload = 7;             // event-type-specific protobuf, max 64KB
-  bytes  merkle_proof = 8;        // populated on read, empty on write
-}
-```
-
-### TrustFlow Score Record
-```protobuf
-message TrustScore {
-  string entity_id = 1;           // UUIDv7
-  double raw_score = 2;           // 0.0–1.0, pre-decay
-  double decayed_score = 3;       // 0.0–1.0, post-decay at query time
-  int64  last_updated_utc = 4;    // Unix epoch millis
-  double decay_rate = 5;          // per-second decay coefficient
-  repeated string delegation_chain = 6; // ordered list of entity IDs
-}
-```
-
-Refer to `forge-standards/INTERFACES.md` for the complete set of protobuf definitions, enum values, and field validation constraints.
-
-## Error Handling Rules
-
-### Fail-Closed Requirement
-Every trust-critical code path must fail closed. If a subsystem is unreachable, returns an error, or times out, the calling service must deny the operation. There is no "degrade to open" mode in Forge.
-
-### Error Classification and Response
-
-| Failure Type | Action | HTTP Status | Log Level |
-|---|---|---|---|
-| CTX-ID validation failure | Reject request immediately | 401 | WARN |
-| CTX-ID expired | Reject; do not auto-renew server-side | 401 | INFO |
-| VTZ zone-transition denied | Reject; audit to DTL | 403 | WARN |
-| TrustFlow score below threshold | Reject; include `X-Trust-Decision: denied` header | 403 | INFO |
-| TrustFlow timeout | Reject (fail closed) | 503 | ERROR |
-| DTL write failure | Retry once, then reject the originating operation | 503 | ERROR |
-| DTL Merkle proof invalid | Discard record; raise alert | — | CRITICAL |
-| Unknown/unexpected error | Reject; do not expose internal details | 500 | ERROR |
-
-### Banned Patterns
-- **Never catch and swallow errors.** Every error must be logged, propagated, or explicitly converted to a typed Forge error.
-- **Never return `200 OK` with an error in the body.** Use appropriate HTTP status codes.
-- **Never retry indefinitely.** All retries have a hard cap (specified per-interface in the contracts above).
-- **Never expose stack traces, internal service names, or infrastructure details in client-facing error responses.**
-- **Never use string matching on error messages for control flow.** Use typed error codes from the Forge error enum.
-
-### Error Response Schema
-```json
-{
-  "error": {
-    "code": "FORGE_CTX_ID_EXPIRED",
-    "message": "Context identity token has expired.",
-    "trace_id": "<OpenTelemetry trace ID>",
-    "timestamp": "<ISO 8601>"
-  }
-}
-```
-
-## Testing Requirements
-
-### Coverage Rules
-- **90% line coverage minimum** for every subsystem on every PR. CI blocks merge if any subsystem drops below this threshold.
-- **100% branch coverage** for all code paths in CTX-ID validation, VTZ boundary enforcement, and TrustFlow scoring.
-- Coverage is measured per-subsystem, not globally — a high-coverage utility module does not offset a low-coverage security module.
-
-### Mandatory Test Categories
-
-| Category | Requirement | Where |
-|---|---|---|
-| Unit tests | Every public function; every error branch | `src/<subsystem>/tests/unit/` |
-| Integration tests | Every inter-subsystem contract | `tests/integration/` |
-| Negative tests | Every rejection path (expired token, invalid zone, revoked identity, low trust score, malformed payload) | Alongside unit tests |
-| Boundary tests | Max TTL, score range [0.0, 1.0], payload size 64KB limit, delegation chain max depth | Alongside unit tests |
-| Fuzz targets | CTX-ID token parsing, DTL entry deserialization, TrustFlow score computation | `tests/fuzz/` |
-| Chaos tests | DTL replica failure, TrustFlow timeout, CTX-ID service unavailable | `tests/chaos/` |
-
-### Fuzz Testing
-- Maintain fuzz targets for all deserialization paths and all cryptographic verification paths.
-- Fuzz targets run nightly in CI for a minimum of 10 minutes each.
-- Any fuzz finding is a P1 bug.
-
-### Test Naming Convention
-```
-test_<subsystem>_<function>_<scenario>_<expected_outcome>
-```
-Example: `test_ctxid_validate_expired_token_returns_401`
-
-## File Naming and Directory Layout
+When `/prd start <intent>` is called:
 
 ```
-forge/
-├── CLAUDE.md                          # This file
-├── forge-docs/                        # Source TRDs and PRDs
-│   ├── trd-ctx-id.md
-│   ├── trd-vtz.md
-│   ├── trd-trustflow.md
-│   ├── trd-dtl.md
-│   └── prd-forge-platform.md
-├── forge-standards/                   # Synthesised architecture & standards
-│   ├── ARCHITECTURE.md
-│   ├── INTERFACES.md
-│   ├── DECISIONS.md
-│   ├── ENGINEERING_STANDARDS.md
-│   └── SECURITY.md
-├── docs/                              # Operational and API documentation
-│   ├── api-reference.md
-│   ├── deployment.md
-│   └── runbook.md
-├── proto/                             # Protobuf definitions (source of truth)
-│   ├── ctx_id.proto
-│   ├── vtz.proto
-│   ├── trustflow.proto
-│   ├── dtl.proto
-│   └── common.proto
-├── src/
-│   ├── gateway/                       # API Gateway
-│   │   ├── middleware/                # CTX-ID extraction, rate limiting
-│   │   ├── routing/                   # VTZ-aware request routing
-│   │   └── tests/
-│   ├── ctx-id/                        # CTX-ID Service
-│   │   ├── issuance/                  # Token creation
-│   │   ├── validation/                # Token verification
-│   │   ├── revocation/                # Token revocation
-│   │   ├── keys/                      # Key management and rotation
-│   │   └── tests/
-│   ├── vtz/                           # VTZ Enforcer
-│   │   ├── zones/                     # Zone definitions and policy
-│   │   ├── transitions/               # Zone-transition validation
-│   │   └── tests/
-│   ├── trustflow/                     # TrustFlow Engine
-│   │   ├── scoring/                   # Score computation
-│   │   ├── decay/                     # Time-decay functions
-│   │   ├── delegation/                # Delegation chain resolution
-│   │   └── tests/
-│   ├── dtl/                           # Distributed Trust Ledger
-│   │   ├── ledger/                    # Append-only storage
-│   │   ├── merkle/                
+ScopeStage → PRDPlanStage → PRDGenStage → PRPlanStage
+    → for each PR:
+        CodeGenStage → ThreePassReview → CIGateStage → OperatorGateStage
+```
+
+Each stage is a separate class. Max cyclomatic complexity 15 per function. State checkpointed after every stage via `ThreadStateStore`. Never modify the stage sequence — it is in TRD-3.
+
+---
+
+## Consensus Engine Usage
+
+Always pass language:
+
+```python
+result = await self._consensus.run(
+    task=f"Implement: {spec.title}",
+    context=context_string,
+    language=spec.language,   # "python" | "swift" | "go" | "typescript" | "rust"
+)
+code = result.final_code
+```
+
+`language="swift"` selects `SWIFT_GENERATION_SYSTEM` — 14 Swift-specific rules.
+`language="python"` selects `GENERATION_SYSTEM` — security-focused Python rules.
+
+Never call providers directly from pipeline code. Always go through `ConsensusEngine.run()`.
+
+---
+
+## Document Store Usage
+
+```python
+# Context for generation (primary use case)
+ctx = self._doc_store.auto_context(
+    query=f"{thread.subsystem} {spec.title}",
+    project_id=project_id,
+    doc_filter=thread.relevant_docs or None,   # restrict to relevant TRDs
+    max_chars=24_000,
+)
+
+# Load a specific document (e.g. PRODUCT_CONTEXT.md)
+content = self._doc_store.get_document_content("PRODUCT_CONTEXT.md", project_id)
+```
+
+`auto_context()` returns text already wrapped in injection-defense delimiters. Append it to the user prompt — never the system prompt.
+
+---
+
+## GitHub Operations
+
+```python
+# ALL GitHub ops go through GitHubTool. Never use the GitHub API directly.
+self._github.commit_file(branch, path, content, message)
+self._github.create_pr(branch, title, body)
+self._github.get_file(path)
+
+# Validate paths before ANY write
+from path_security import validate_write_path
+safe_path = validate_write_path(user_supplied_path)  # raises on traversal
+```
+
+Branch naming convention (mandatory):
+`forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}`
+
+---
+
+## Error Handling Patterns
+
+**Transient API errors (529, 500):**
+```python
+# In _claude_json: retry after 10s, then fall back to OpenAI
+# In consensus.py: retry with the other provider
+# Never retry indefinitely — max 3 attempts total
+```
+
+**GitHub rate limits:**
+```python
+# 403 primary: exponential backoff starting at 60s
+# 429 secondary: respect Retry-After header exactly
+# ETag caching on all polling endpoints
+```
+
+**Gate failures:**
+```python
+# Gates never auto-resolve. They wait.
+# If backend restarts mid-gate: gate state is lost, operator must re-approve.
+# No undo on gate decisions — document this explicitly.
+```
+
+**SECURITY_REFUSAL in LLM output:**
+```python
+# STOP. Do not retry. Do not rephrase.
+# Emit error card. Gate. Log full prompt context.
+# Operator must explicitly override.
+```
+
+---
+
+## CI Routing
+
+| Language | Runner | Workflow file |
+|----------|--------|--------------|
+| Python, Go, TypeScript, Rust | `ubuntu-latest` | `forge-ci.yml` |
+| Swift | `[self-hosted, macos, xcode, x64]` | `forge-ci-macos.yml` |
+
+If Swift files change and the Mac runner is offline: CI job queues and waits. Never mark Swift CI as passed without the Mac runner result.
+
+If `swiftc` is not available locally: log a warning, return synthetic pass for the type-check step, note that real validation requires the Mac runner. Do not fail the pipeline.
+
+---
+
+## Version Management
+
+VERSION file and `pyproject.toml` must always match. The test `TestVersionConsistency.test_version_matches_pyproject` enforces this.
+
+When bumping version: update BOTH files.
+```bash
+echo "38.XX.0" > VERSION
+sed -i 's/version = "38.YY.0"/version = "38.XX.0"/' pyproject.toml
+```
+
+---
+
+## Security Checklist (Run Before Every PR)
+
+- [ ] No hardcoded credentials, keys, or tokens in any string literal
+- [ ] No `shell=True` in any subprocess call
+- [ ] No `eval()` or `exec()` on any external content
+- [ ] No HTTP response bodies in log statements
+- [ ] All new file write paths pass through `path_security.validate_write_path()`
+- [ ] All new document chunks pass through `_scan_for_injection()` before storage
+- [ ] External content only in user prompt — never system prompt
+- [ ] New LLM generation calls use `self._gen_system` (language-aware), not hardcoded string
+- [ ] New XPC message types: unknown message types are discarded, not raised
+
+---
+
+## What Generates What
+
+| You want | Call this |
+|----------|-----------|
+| Implementation code for a PR | `ConsensusEngine.run(task, context, language)` |
+| Tests for a PR | `PRPlanner.generate_tests(spec, impl_code)` |
+| PRD document | `PRDPlanner.generate_prd(item, context)` |
+| PR plan for a PRD | `PRPlanner.plan_prs(prd_result, thread)` |
+| TRD document | `TRDWorkflow.generate_trd(session)` |
+| Holistic review | `ReviewDirector.run(branch, scope, lenses)` |
+| Context string for any of the above | `DocumentStore.auto_context(query, project_id)` |
+
+---
+
+## Critical Files — Read Before Modifying
+
+| File | Why It Matters |
+|------|---------------|
+| `src/consensus.py` | Core generation loop — changes here affect every PR the agent builds |
+| `src/build_director.py` | Pipeline orchestration — complexity 15 limit strictly enforced |
+| `src/github_tools.py` | All GitHub I/O — path validation, rate limiting, SHA protocol |
+| `src/path_security.py` | Security boundary — every write path must pass through here |
+| `src/ci_workflow.py` | Generates the YAML that runs in CI — template bugs break every build |
+| `ForgeAgent/XPCBridge.swift` | The bridge between Swift and Python — wire protocol is TRD-1 S6 |
+| `ForgeAgent/AuthManager.swift` | Touch ID + Keychain — biometric failures must lock session, not degrade |
+| `.github/workflows/forge-ci-macos.yml` | Mac runner workflow — YAML errors break all Swift CI |
+
+---
+
+## Forbidden Patterns
+
+These will fail code review. Do not write them.
+
+```python
+# FORBIDDEN: shell injection
+subprocess.run(cmd, shell=True)
+
+# FORBIDDEN: credential in log
+logger.info(f"Using key: {api_key}")
+
+# FORBIDDEN: credential in prompt
+system = f"Use this key: {self._config.anthropic_api_key}"
+
+# FORBIDDEN: direct execution of generated code
+exec(result.final_code)
+eval(result.final_code)
+
+# FORBIDDEN: path traversal
+open(f"../{user_input}")  # must use path_security.validate_write_path()
+
+# FORBIDDEN: blind GitHub write (no SHA)
+github.create_file(path, content)  # use commit_file() which handles SHA
+
+# FORBIDDEN: context in system prompt
+system = f"Context: {doc_store.auto_context(query)}"  # context goes in user prompt
+
+# FORBIDDEN: ignoring SECURITY_REFUSAL
+if "SECURITY_REFUSAL" in output:
+    output = await self._generate_openai(prompt)  # WRONG — do not retry
+```
+
+```swift
+// FORBIDDEN: force unwrap
+let value = optional!
+
+// FORBIDDEN: LLM API call from Swift
+let client = AnthropicClient(apiKey: keychainValue)
+
+// FORBIDDEN: Keychain read for backend
+let token = KeychainKit.read("github_token")  // Python reads nothing from Keychain
+// Only Swift reads Keychain, only to deliver via XPC
+```
