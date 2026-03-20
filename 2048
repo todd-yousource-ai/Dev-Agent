@@ -1,0 +1,415 @@
+Looking at the task number 3072 and the document context provided, I need to analyze what's being asked. The context references document store specifications, build pipeline token limits, and various TRD sections. Task 3072 appears to relate to the document store chunking and token management system referenced in the context (TRD-10-Document-Store and TRD-3-Build-Pipeline).
+
+```python
+"""
+forge/document_store/chunk_manager.py
+
+Forge Document Store Chunk Manager — Task 3072
+
+Manages document chunking, embedding dimension validation, and token budget
+enforcement for the Forge document store pipeline.
+
+Security Assumptions:
+- All input documents are pre-authenticated and authorized by the Forge access layer.
+- No raw user input reaches this module without prior sanitization.
+- Embedding vectors are validated for dimension and magnitude before storage.
+- Token budgets are enforced strictly; truncation is treated as a failure, not silent degradation.
+  (Reference: TRD-3-Build-Pipeline — "8192 was too small — caused truncated PRD lists in v38.37")
+
+Failure Behavior:
+- Fails closed on all validation errors (dimension mismatch, budget exceeded, corrupt chunks).
+- Every error surfaces with full context (chunk index, expected vs actual, budget state).
+- No silent truncation — if content exceeds budget, an explicit error is raised.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import struct
+from dataclasses import dataclass, field
+from enum import Enum, auto
+from typing import Final, Sequence
+
+# === Constants derived from TRD specifications ===
+
+# TRD-10-Document-Store: 100 chunks × 768 dims × 4 bytes = ~300KB per project
+MAX_CHUNKS_PER_PROJECT: Final[int] = 100
+EMBEDDING_DIMENSIONS: Final[int] = 768
+EMBEDDING_BYTE_WIDTH: Final[int] = 4  # float32
+EXPECTED_EMBEDDING_BYTES: Final[int] = EMBEDDING_DIMENSIONS * EMBEDDING_BYTE_WIDTH  # 3072 bytes
+
+# TRD-3-Build-Pipeline: 16000 comfortably covers 35 PRDs with dependency descriptions
+# 8192 was too small — caused truncated PRD lists in v38.37
+TOKEN_BUDGET_DEFAULT: Final[int] = 16_000
+TOKEN_BUDGET_MIN: Final[int] = 8_193  # Must exceed the known-bad 8192 threshold
+TOKEN_BUDGET_MAX: Final[int] = 128_000  # gpt-4o context: 128k tokens (~512k chars)
+
+# Approximate chars-per-token ratio for budget estimation
+CHARS_PER_TOKEN_ESTIMATE: Final[float] = 4.0
+
+
+class ChunkManagerError(Exception):
+    """Base error for all ChunkManager failures. Always includes context."""
+    pass
+
+
+class TokenBudgetExceededError(ChunkManagerError):
+    """Raised when assembled content would exceed the configured token budget.
+
+    This is a hard failure — never silently truncate.
+    Reference: TRD-3-Build-Pipeline v38.37 truncation incident.
+    """
+    pass
+
+
+class EmbeddingValidationError(ChunkManagerError):
+    """Raised when an embedding vector fails dimension or integrity checks."""
+    pass
+
+
+class ChunkLimitExceededError(ChunkManagerError):
+    """Raised when chunk count exceeds the per-project maximum."""
+    pass
+
+
+class DuplicateChunkError(ChunkManagerError):
+    """Raised when a duplicate chunk hash is detected.
+
+    Reference: TRD-9-Mac-CI-Runner 8.1 — duplicate hash detection.
+    """
+    pass
+
+
+class CorruptChunkError(ChunkManagerError):
+    """Raised when chunk data fails integrity verification.
+
+    Reference: TRD-9-Mac-CI-Runner 8.1 — corrupt file error.
+    """
+    pass
+
+
+class ChunkStatus(Enum):
+    """Lifecycle status of a document chunk."""
+    PENDING = auto()
+    EMBEDDED = auto()
+    VALIDATED = auto()
+    REJECTED = auto()
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentChunk:
+    """Immutable representation of a single document chunk.
+
+    Security: frozen to prevent post-validation mutation.
+    """
+    index: int
+    content: str
+    content_hash: str
+    token_estimate: int
+    status: ChunkStatus = ChunkStatus.PENDING
+    embedding: bytes = b""
+
+    def __post_init__(self) -> None:
+        if not self.content:
+            raise ChunkManagerError(
+                f"Chunk index={self.index}: content must not be empty"
+            )
+        if not self.content_hash:
+            raise ChunkManagerError(
+                f"Chunk index={self.index}: content_hash must not be empty"
+            )
+        if self.token_estimate <= 0:
+            raise ChunkManagerError(
+                f"Chunk index={self.index}: token_estimate must be positive, "
+                f"got {self.token_estimate}"
+            )
+
+
+@dataclass(slots=True)
+class TokenBudget:
+    """Tracks token consumption against a hard budget ceiling.
+
+    Fail-closed: any operation that would exceed the budget raises
+    TokenBudgetExceededError rather than silently truncating.
+    """
+    limit: int
+    consumed: int = 0
+
+    def __post_init__(self) -> None:
+        if self.limit < TOKEN_BUDGET_MIN:
+            raise ChunkManagerError(
+                f"Token budget {self.limit} is below minimum safe threshold "
+                f"{TOKEN_BUDGET_MIN}. Reference: TRD-3 v38.37 truncation incident "
+                f"at 8192 tokens."
+            )
+        if self.limit > TOKEN_BUDGET_MAX:
+            raise ChunkManagerError(
+                f"Token budget {self.limit} exceeds model context window "
+                f"{TOKEN_BUDGET_MAX}. Reference: TRD-10 gpt-4o 128k token limit."
+            )
+
+    @property
+    def remaining(self) -> int:
+        return max(0, self.limit - self.consumed)
+
+    @property
+    def utilization_ratio(self) -> float:
+        if self.limit == 0:
+            return 0.0
+        return self.consumed / self.limit
+
+    def reserve(self, tokens: int, context: str = "") -> None:
+        """Attempt to reserve tokens from the budget.
+
+        Args:
+            tokens: Number of tokens to reserve.
+            context: Descriptive context for error messages.
+
+        Raises:
+            TokenBudgetExceededError: If reservation would exceed budget.
+        """
+        if tokens <= 0:
+            raise ChunkManagerError(
+                f"Cannot reserve non-positive token count: {tokens}. "
+                f"Context: {context}"
+            )
+        if self.consumed + tokens > self.limit:
+            raise TokenBudgetExceededError(
+                f"Token budget exceeded: attempting to reserve {tokens} tokens, "
+                f"but only {self.remaining} remain "
+                f"(consumed={self.consumed}, limit={self.limit}). "
+                f"Context: {context}"
+            )
+        self.consumed += tokens
+
+    def release(self, tokens: int, context: str = "") -> None:
+        """Release previously reserved tokens back to the budget.
+
+        Args:
+            tokens: Number of tokens to release.
+            context: Descriptive context for error messages.
+
+        Raises:
+            ChunkManagerError: If release would result in negative consumption.
+        """
+        if tokens <= 0:
+            raise ChunkManagerError(
+                f"Cannot release non-positive token count: {tokens}. "
+                f"Context: {context}"
+            )
+        if self.consumed - tokens < 0:
+            raise ChunkManagerError(
+                f"Token release underflow: releasing {tokens} but only "
+                f"{self.consumed} consumed. Context: {context}"
+            )
+        self.consumed -= tokens
+
+
+@dataclass(slots=True)
+class ChunkManager:
+    """Manages document chunks for a single Forge project.
+
+    Enforces:
+    - Per-project chunk limits (TRD-10: 100 chunks max)
+    - Embedding dimension validation (TRD-10: 768 dims × float32)
+    - Token budget management (TRD-3: 16000 default, never below 8193)
+    - Duplicate hash detection (TRD-9: XCTest requirement)
+    - Corrupt data detection via content hashing
+
+    Security:
+    - Deny-by-default: chunks must pass all validations before acceptance.
+    - Fail-closed: any validation failure rejects the chunk with full context.
+    - No silent truncation or degradation paths.
+    """
+    project_id: str
+    token_budget: TokenBudget = field(
+        default_factory=lambda: TokenBudget(limit=TOKEN_BUDGET_DEFAULT)
+    )
+    _chunks: list[DocumentChunk] = field(default_factory=list, init=False)
+    _hash_registry: set[str] = field(default_factory=set, init=False)
+
+    def __post_init__(self) -> None:
+        if not self.project_id or not self.project_id.strip():
+            raise ChunkManagerError("project_id must be a non-empty string")
+
+    @property
+    def chunk_count(self) -> int:
+        return len(self._chunks)
+
+    @property
+    def chunks(self) -> tuple[DocumentChunk, ...]:
+        """Return immutable view of current chunks."""
+        return tuple(self._chunks)
+
+    @property
+    def memory_estimate_bytes(self) -> int:
+        """Estimate memory footprint for embedded chunks.
+
+        Reference: TRD-10 — 100 chunks × 768 dims × 4 bytes = ~300KB per project.
+        """
+        embedded_count = sum(
+            1 for c in self._chunks if c.status == ChunkStatus.VALIDATED
+        )
+        return embedded_count * EXPECTED_EMBEDDING_BYTES
+
+    @staticmethod
+    def compute_content_hash(content: str) -> str:
+        """Compute SHA-256 hash of chunk content.
+
+        Uses SHA-256 for collision resistance. Returns hex digest.
+        """
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def estimate_tokens(content: str) -> int:
+        """Estimate token count from character length.
+
+        Conservative estimate using ~4 chars/token ratio.
+        Returns at least 1 for non-empty content.
+        """
+        if not content:
+            return 0
+        estimated = int(len(content) / CHARS_PER_TOKEN_ESTIMATE)
+        return max(1, estimated)
+
+    @staticmethod
+    def validate_embedding(embedding_bytes: bytes, chunk_index: int) -> None:
+        """Validate embedding vector dimensions and basic integrity.
+
+        Args:
+            embedding_bytes: Raw bytes of float32 embedding vector.
+            chunk_index: Index of the chunk for error context.
+
+        Raises:
+            EmbeddingValidationError: On dimension mismatch or corrupt data.
+
+        Security: Validates exact byte count to prevent buffer-related issues.
+        Reference: TRD-10 — 768 dims × 4 bytes = 3072 bytes per embedding.
+        """
+        actual_size = len(embedding_bytes)
+        if actual_size != EXPECTED_EMBEDDING_BYTES:
+            raise EmbeddingValidationError(
+                f"Chunk index={chunk_index}: embedding size mismatch. "
+                f"Expected {EXPECTED_EMBEDDING_BYTES} bytes "
+                f"({EMBEDDING_DIMENSIONS} dims × {EMBEDDING_BYTE_WIDTH} bytes), "
+                f"got {actual_size} bytes."
+            )
+
+        # Validate that all floats are finite (no NaN/Inf which could
+        # poison similarity computations)
+        float_count = actual_size // EMBEDDING_BYTE_WIDTH
+        try:
+            values = struct.unpack(f"<{float_count}f", embedding_bytes)
+        except struct.error as e:
+            raise EmbeddingValidationError(
+                f"Chunk index={chunk_index}: failed to unpack embedding bytes "
+                f"as float32 array: {e}"
+            ) from e
+
+        for i, val in enumerate(values):
+            if not _is_finite(val):
+                raise EmbeddingValidationError(
+                    f"Chunk index={chunk_index}: non-finite value at "
+                    f"dimension {i}: {val}. Embedding vectors must contain "
+                    f"only finite float32 values."
+                )
+
+    def add_chunk(self, content: str) -> DocumentChunk:
+        """Create and register a new document chunk.
+
+        Args:
+            content: The text content for this chunk. Must be non-empty.
+
+        Returns:
+            The created DocumentChunk in PENDING status.
+
+        Raises:
+            ChunkLimitExceededError: If project chunk limit reached.
+            DuplicateChunkError: If content hash already registered.
+            TokenBudgetExceededError: If chunk would exceed token budget.
+            ChunkManagerError: On invalid input.
+
+        Security: Deny-by-default — all validations must pass before the chunk
+        is accepted into the store.
+        """
+        if not content or not content.strip():
+            raise ChunkManagerError(
+                f"Project '{self.project_id}': cannot add chunk with empty content"
+            )
+
+        # Check chunk limit
+        if self.chunk_count >= MAX_CHUNKS_PER_PROJECT:
+            raise ChunkLimitExceededError(
+                f"Project '{self.project_id}': chunk limit reached "
+                f"({MAX_CHUNKS_PER_PROJECT}). Cannot add more chunks. "
+                f"Reference: TRD-10 — 100 chunks per project maximum."
+            )
+
+        # Compute and check for duplicate hash
+        content_hash = self.compute_content_hash(content)
+        if content_hash in self._hash_registry:
+            raise DuplicateChunkError(
+                f"Project '{self.project_id}': duplicate chunk detected. "
+                f"Hash {content_hash[:16]}... already registered. "
+                f"Reference: TRD-9 — duplicate hash detection."
+            )
+
+        # Estimate tokens and check budget
+        token_estimate = self.estimate_tokens(content)
+        self.token_budget.reserve(
+            token_estimate,
+            context=f"Project '{self.project_id}', chunk index={self.chunk_count}"
+        )
+
+        # All validations passed — create chunk
+        chunk = DocumentChunk(
+            index=self.chunk_count,
+            content=content,
+            content_hash=content_hash,
+            token_estimate=token_estimate,
+            status=ChunkStatus.PENDING,
+        )
+
+        self._chunks.append(chunk)
+        self._hash_registry.add(content_hash)
+        return chunk
+
+    def attach_embedding(
+        self, chunk_index: int, embedding_bytes: bytes
+    ) -> DocumentChunk:
+        """Attach and validate an embedding vector to a chunk.
+
+        Args:
+            chunk_index: Index of the target chunk.
+            embedding_bytes: Raw float32 embedding vector (must be exactly 3072 bytes).
+
+        Returns:
+            New DocumentChunk instance with VALIDATED status and embedding attached.
+
+        Raises:
+            ChunkManagerError: If chunk_index is out of range.
+            EmbeddingValidationError: If embedding fails validation.
+            CorruptChunkError: If chunk content hash no longer matches.
+        """
+        if chunk_index < 0 or chunk_index >= len(self._chunks):
+            raise ChunkManagerError(
+                f"Project '{self.project_id}': chunk_index {chunk_index} "
+                f"out of range [0, {len(self._chunks)})"
+            )
+
+        existing = self._chunks[chunk_index]
+
+        # Re-verify content integrity before attaching embedding
+        recomputed_hash = self.compute_content_hash(existing.content)
+        if recomputed_hash != existing.content_hash:
+            raise CorruptChunkError(
+                f"Project '{self.project_id}', chunk index={chunk_index}: "
+                f"content hash mismatch. Expected {existing.content_hash[:16]}..., "
+                f"got {recomputed_hash[:16]}... Content may be corrupt. "
+                f"Reference: TRD-9 — corrupt file error."
+            )
+
+        # Validate embedding dimensions and values
+        self.validate_embedding(embedding_bytes, chunk_index)
+
+        # Create validated replacement chunk
