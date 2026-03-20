@@ -4,7 +4,7 @@
   "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Deve Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture.",
   "scope_statement": "Build the complete Consensus Dev Agent \u2014 a native macOS AI coding agent with a two-process architecture (Swift shell + Python backend) that uses dual-LLM consensus (Claude + GPT-4o with Claude arbitrating) to autonomously decompose build intents into ordered PRDs and PRs, generate implementation and tests via parallel consensus generation, run 3-pass review cycles, execute CI, and gate on operator approval before merging. The system encompasses all 12 TRD-specified subsystems: macOS Application Shell (TRD-1), Consensus Engine (TRD-2), Build Pipeline with 8 stages and 3-pass review (TRD-3), Multi-Agent Coordination via BuildLedger (TRD-4), GitHub Integration Layer (TRD-5), Holistic Code Review with 5 lenses (TRD-6), TRD Development Workflow with 8-phase facilitation (TRD-7), UI/UX Design System (TRD-8), Mac CI Runner Infrastructure (TRD-9), Document Store with FAISS vector retrieval (TRD-10), Security Threat Model enforcement (TRD-11), Backend Runtime Startup and Version Handshake (TRD-12), and Recovery/State Management (TRD-13). All subsystems are governed by the security controls in TRD-11 (SEC-CRED-*, SEC-CTX-*, SEC-CODE-*, SEC-LOG-*) and must conform to the two-process isolation boundary where Swift never calls LLM APIs and Python never reads Keychain directly.\n\nClarifications:\n  - finalize the spec in the PRDs\n  - rename to the best approach and make consistent through out the PRDs\\\n  - optimize based on best practices in the PRDs\n  - include this as an ask in the PRDs\n  - still being determined\n  - Determine the very best implementation order for the PRDs to ensure that the code development is maximum efficient",
   "created_at": 1773968555.775106,
-  "updated_at": 1773969313.590945,
+  "updated_at": 1773972496.8528059,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -135,10 +135,10 @@
       "pr_num": 1,
       "title": "Define canonical naming constants and cross-TRD glossary module",
       "branch": "",
-      "status": "available",
-      "engineer_id": "",
+      "status": "claimed",
+      "engineer_id": "todd-gould",
       "pr_url": null,
-      "claimed_at": null,
+      "claimed_at": 1773972496.8528059,
       "started_at": null,
       "completed_at": null,
       "depends_on_prs": [],
@@ -424,7 +424,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 2,
+  "version": 3,
   "schema_version": 2,
   "agent_version": "38.72.0"
 }
