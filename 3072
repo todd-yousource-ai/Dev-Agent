@@ -1,0 +1,361 @@
+Looking at the context, this task relates to the buffer/chunk size issue where 8192 was too small and caused truncated PRD lists in v38.37. I need to implement a secure, configurable buffer size module that prevents truncation.
+
+```python
+"""
+forge/core/buffer_config.py
+
+Secure buffer configuration module for Forge platform.
+
+Security Assumptions:
+- Buffer sizes are validated against known safe bounds to prevent
+  resource exhaustion (DoS) and truncation bugs (data loss).
+- No hardcoded secrets; all values are configuration constants with
+  explicit rationale documented.
+- Fail closed: if a requested buffer size is outside validated bounds,
+  a ValueError is raised with full context — never silently truncated.
+
+Failure Behavior:
+- Invalid buffer sizes raise ValueError with descriptive context.
+- All public functions validate inputs; no silent defaults.
+- Type mismatches raise TypeError immediately.
+
+History:
+- TRD-3-Build-Pipeline: 8192 was too small — caused truncated PRD lists in v38.37.
+  Minimum raised to 16384; default raised to 65536.
+- TRD-10-Document-Store: gpt-4o context is 128k tokens (~512k chars);
+  chunk math: 100 chunks × 768 dims × 4 bytes = ~300KB per project.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from enum import IntEnum, unique
+from typing import Optional
+
+
+@unique
+class BufferPreset(IntEnum):
+    """
+    Named buffer size presets with documented rationale.
+
+    Each value is chosen to avoid the truncation class of bugs
+    seen in v38.37 (TRD-3) while staying within safe memory bounds.
+    """
+
+    SMALL = 16_384        # 16 KB — minimum safe size post-v38.37 fix
+    MEDIUM = 65_536       # 64 KB — default for most pipeline operations
+    LARGE = 262_144       # 256 KB — for full PRD list aggregation
+    XLARGE = 524_288      # 512 KB — for document store chunk batches (~300KB typical)
+    CONTEXT = 1_048_576   # 1 MB — upper bound for single-context operations
+
+
+# Hard bounds — deny-by-default outside these
+_ABSOLUTE_MIN: int = 16_384       # Never allow < 16KB (v38.37 lesson)
+_ABSOLUTE_MAX: int = 16_777_216   # 16 MB — prevent resource exhaustion
+_ENV_VAR_NAME: str = "FORGE_BUFFER_SIZE"
+
+
+def _validate_int(value: object, name: str) -> int:
+    """Validate that value is a positive integer. Fail closed on bad type/value."""
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError(
+            f"{name} must be int, got {type(value).__name__}: {value!r}"
+        )
+    return value
+
+
+def _validate_bounds(size: int, *, label: str = "buffer_size") -> int:
+    """
+    Validate buffer size is within absolute safe bounds.
+
+    Raises ValueError with full context on violation — never silently clamps.
+    This is the primary defense against both truncation (too small)
+    and resource exhaustion (too large).
+    """
+    size = _validate_int(size, label)
+    if size < _ABSOLUTE_MIN:
+        raise ValueError(
+            f"{label}={size} is below absolute minimum {_ABSOLUTE_MIN}. "
+            f"Sizes below {_ABSOLUTE_MIN} cause truncation (see TRD-3, v38.37). "
+            f"Refusing to proceed — fail closed."
+        )
+    if size > _ABSOLUTE_MAX:
+        raise ValueError(
+            f"{label}={size} exceeds absolute maximum {_ABSOLUTE_MAX}. "
+            f"This risks resource exhaustion. Refusing to proceed — fail closed."
+        )
+    return size
+
+
+@dataclass(frozen=True, slots=True)
+class BufferConfig:
+    """
+    Immutable, validated buffer configuration.
+
+    Security Properties:
+    - All sizes validated at construction time; invalid configs cannot exist.
+    - Immutable after creation (frozen dataclass) — no TOCTOU issues.
+    - chunk_size and max_chunks are independently validated so their product
+      cannot silently exceed max_buffer_size.
+
+    Failure Behavior:
+    - __post_init__ raises ValueError/TypeError on any invalid parameter.
+    - No defaults that could silently mask the v38.37 truncation bug class.
+    """
+
+    buffer_size: int = BufferPreset.MEDIUM
+    chunk_size: int = 4_096
+    max_chunks: int = 256
+    max_buffer_size: int = BufferPreset.CONTEXT
+
+    def __post_init__(self) -> None:
+        """Validate all fields at construction. Fail closed on any violation."""
+        # Validate types and bounds for each field
+        _validate_bounds(self.buffer_size, label="buffer_size")
+        _validate_bounds(self.max_buffer_size, label="max_buffer_size")
+
+        chunk_size = _validate_int(self.chunk_size, "chunk_size")
+        if chunk_size < 512:
+            raise ValueError(
+                f"chunk_size={chunk_size} is below minimum 512 bytes. "
+                f"Small chunks cause excessive overhead."
+            )
+        if chunk_size > self.buffer_size:
+            raise ValueError(
+                f"chunk_size={chunk_size} exceeds buffer_size={self.buffer_size}. "
+                f"A single chunk must fit within the buffer."
+            )
+
+        max_chunks = _validate_int(self.max_chunks, "max_chunks")
+        if max_chunks < 1:
+            raise ValueError(
+                f"max_chunks={max_chunks} must be >= 1."
+            )
+
+        # Verify the product of chunk_size * max_chunks doesn't exceed max_buffer_size
+        total_chunk_capacity = chunk_size * max_chunks
+        if total_chunk_capacity > self.max_buffer_size:
+            raise ValueError(
+                f"chunk_size({chunk_size}) × max_chunks({max_chunks}) = "
+                f"{total_chunk_capacity} exceeds max_buffer_size={self.max_buffer_size}. "
+                f"Refusing to create config that could exceed memory bounds."
+            )
+
+        if self.buffer_size > self.max_buffer_size:
+            raise ValueError(
+                f"buffer_size={self.buffer_size} exceeds "
+                f"max_buffer_size={self.max_buffer_size}. "
+                f"Fail closed — buffer cannot exceed its own stated maximum."
+            )
+
+
+def resolve_buffer_size(
+    explicit: Optional[int] = None,
+    *,
+    preset: BufferPreset = BufferPreset.MEDIUM,
+    allow_env_override: bool = True,
+) -> int:
+    """
+    Resolve the effective buffer size from explicit value, env var, or preset.
+
+    Priority (highest to lowest):
+    1. explicit parameter (if provided)
+    2. FORGE_BUFFER_SIZE environment variable (if allow_env_override=True)
+    3. preset default
+
+    All resolved values are validated against absolute bounds.
+    Malformed env var values cause immediate failure (fail closed, no fallback).
+
+    Args:
+        explicit: Caller-specified buffer size. Takes highest priority.
+        preset: Named preset to use as default.
+        allow_env_override: Whether to check FORGE_BUFFER_SIZE env var.
+
+    Returns:
+        Validated buffer size as int.
+
+    Raises:
+        ValueError: If resolved size is outside absolute bounds.
+        ValueError: If env var is set but not a valid integer.
+        TypeError: If explicit is not int/None.
+    """
+    if explicit is not None:
+        size = _validate_int(explicit, "explicit")
+        return _validate_bounds(size, label="explicit_buffer_size")
+
+    if allow_env_override:
+        env_raw = os.environ.get(_ENV_VAR_NAME)
+        if env_raw is not None:
+            env_raw_stripped = env_raw.strip()
+            if not env_raw_stripped:
+                raise ValueError(
+                    f"Environment variable {_ENV_VAR_NAME} is set but empty. "
+                    f"Fail closed — refusing to fall back to default silently."
+                )
+            try:
+                env_size = int(env_raw_stripped)
+            except ValueError:
+                raise ValueError(
+                    f"Environment variable {_ENV_VAR_NAME}={env_raw!r} "
+                    f"is not a valid integer. Fail closed — no silent fallback."
+                ) from None
+            return _validate_bounds(env_size, label=f"env:{_ENV_VAR_NAME}")
+
+    return _validate_bounds(int(preset), label=f"preset:{preset.name}")
+
+
+def create_prd_list_buffer_config() -> BufferConfig:
+    """
+    Factory for PRD list aggregation buffers.
+
+    Uses LARGE preset (256KB) to prevent the truncation bug from v38.37
+    where 8192 bytes was insufficient for full PRD list serialization.
+
+    The chunk math:
+    - Typical PRD entry: ~2KB serialized
+    - Typical project: 50-100 PRDs
+    - Required: ~100KB-200KB → LARGE (256KB) provides safe margin
+
+    Returns:
+        BufferConfig validated for PRD list operations.
+    """
+    resolved_size = resolve_buffer_size(preset=BufferPreset.LARGE)
+    return BufferConfig(
+        buffer_size=resolved_size,
+        chunk_size=4_096,
+        max_chunks=128,
+        max_buffer_size=BufferPreset.CONTEXT,
+    )
+
+
+def create_document_store_buffer_config() -> BufferConfig:
+    """
+    Factory for document store chunk batch buffers.
+
+    Per TRD-10: 100 chunks × 768 dims × 4 bytes = ~300KB per project.
+    Uses XLARGE preset (512KB) to accommodate with margin.
+
+    Returns:
+        BufferConfig validated for document store operations.
+    """
+    resolved_size = resolve_buffer_size(preset=BufferPreset.XLARGE)
+    return BufferConfig(
+        buffer_size=resolved_size,
+        chunk_size=8_192,
+        max_chunks=64,
+        max_buffer_size=BufferPreset.CONTEXT,
+    )
+
+
+class SecureBuffer:
+    """
+    Fixed-capacity byte buffer that fails closed on overflow.
+
+    Security Properties:
+    - Pre-allocated to config.buffer_size; no dynamic growth past limit.
+    - write() raises OverflowError on truncation attempt — never silently drops data.
+    - All operations report current position and remaining capacity in errors.
+
+    This directly prevents the v38.37 truncation class of bug: if data doesn't fit,
+    the caller is forced to handle it explicitly.
+    """
+
+    __slots__ = ("_config", "_data", "_pos")
+
+    def __init__(self, config: BufferConfig) -> None:
+        """
+        Initialize buffer with validated config.
+
+        Args:
+            config: Validated BufferConfig instance.
+
+        Raises:
+            TypeError: If config is not a BufferConfig.
+        """
+        if not isinstance(config, BufferConfig):
+            raise TypeError(
+                f"config must be BufferConfig, got {type(config).__name__}"
+            )
+        self._config = config
+        self._data = bytearray(config.buffer_size)
+        self._pos = 0
+
+    @property
+    def capacity(self) -> int:
+        """Total buffer capacity in bytes."""
+        return self._config.buffer_size
+
+    @property
+    def remaining(self) -> int:
+        """Remaining writable bytes."""
+        return self._config.buffer_size - self._pos
+
+    @property
+    def position(self) -> int:
+        """Current write position."""
+        return self._pos
+
+    def write(self, data: bytes) -> int:
+        """
+        Write data to buffer. Fail closed on overflow — never truncate.
+
+        Args:
+            data: Bytes to write.
+
+        Returns:
+            Number of bytes written (always == len(data) on success).
+
+        Raises:
+            TypeError: If data is not bytes or bytearray.
+            OverflowError: If data would exceed buffer capacity.
+                Error message includes full context for debugging.
+        """
+        if not isinstance(data, (bytes, bytearray)):
+            raise TypeError(
+                f"data must be bytes or bytearray, got {type(data).__name__}"
+            )
+
+        data_len = len(data)
+        if data_len == 0:
+            return 0
+
+        if data_len > self.remaining:
+            raise OverflowError(
+                f"Write of {data_len} bytes would exceed buffer capacity. "
+                f"position={self._pos}, remaining={self.remaining}, "
+                f"capacity={self.capacity}. "
+                f"Fail closed — refusing to truncate data. "
+                f"Consider using a larger BufferPreset (current config: "
+                f"buffer_size={self._config.buffer_size})."
+            )
+
+        end = self._pos + data_len
+        self._data[self._pos:end] = data
+        self._pos = end
+        return data_len
+
+    def read(self) -> bytes:
+        """
+        Read all written data as immutable bytes.
+
+        Returns:
+            Bytes from position 0 to current write position.
+        """
+        return bytes(self._data[:self._pos])
+
+    def reset(self) -> None:
+        """Reset write position to 0. Does not zero memory."""
+        self._pos = 0
+
+    def secure_reset(self) -> None:
+        """Reset and zero all buffer memory. Use when buffer held sensitive data."""
+        self._data[:] = b'\x00' * len(self._data)
+        self._pos = 0
+
+    def __repr__(self) -> str:
+        return (
+            f"SecureBuffer(pos={self._pos}, remaining={self.remaining}, "
+            f"capacity={self.capacity})"
+        )
+```
