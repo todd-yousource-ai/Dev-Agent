@@ -1,284 +1,79 @@
-# AGENTS.md — Consensus Dev Agent
-
-Instructions for AI agents working in this repository. Read this before making any change.
-
----
-
-## Repository Identity
+# AGENTS.md - Forge Platform
 
-**Product:** Consensus Dev Agent — a native macOS AI coding agent.
-**Architecture:** Two-process. Swift shell (UI, auth, Keychain, XPC) + Python backend (consensus, pipeline, GitHub).
-**Specification:** 12 TRDs in `forge-docs/`. They are the source of truth. Code must match them.
-**Security model:** TRD-11 governs all components. Read it before touching security-relevant code.
-
----
-
-## Before You Write Any Code
-
-1. **Find the TRD that owns the component you are modifying.** Check the TRD Index in `README.md`.
-2. **Read the relevant TRD sections** — especially: interfaces, error contracts, security, testing requirements.
-3. **Check TRD-11** if your change touches credentials, external content, generated code, or CI.
-4. **Run the existing tests** before making changes: `cd src && pytest ../tests/ -v --tb=short`
-
----
+Forge is a trust-enforcement platform for AI agent operations that binds every agent action to a cryptographically verified identity (CTX-ID), confines it within a Virtual Trust Zone (VTZ), labels all data via DTL, and emits an immutable TrustFlow audit stream — rejecting any action that fails validation at any layer.
 
-## Repository Structure
+## Critical Rules - Read Before Writing Any Code
 
-```
-forge-docs/                      ← ALL TRDs and PRDs live here. Read before building.
-  TRD-1-v1.1-macOS-App-Shell.docx
-  TRD-2-Consensus-Engine.docx
-  TRD-3-Build-Pipeline.docx
-  TRD-4-Multi-Agent-Coordination.docx
-  TRD-5-GitHub-Integration.docx
-  TRD-6-Holistic-Code-Review.docx
-  TRD-7-TRD-Development-Workflow.docx
-  TRD-8-UIUX-Design-System.docx
-  TRD-9-Mac-CI-Runner.docx
-  TRD-10-Document-Store.docx
-  TRD-11-Security-Threat-Model.docx
-  TRD-12-Backend-Runtime-Startup.docx
+1. Every enforcement entry point MUST call CTX-ID validation FIRST — before any processing, parsing, or side effects occur; validation failure means immediate rejection with no partial work.
+2. TrustFlow events MUST be emitted synchronously in the enforcement path for every action outcome (`allow`, `restrict`, `block`) — async buffering is forbidden, and emission failure MUST be logged at WARN level, never silently skipped.
+3. VTZ policy MUST be checked BEFORE execution of any agent action — cross-VTZ tool calls require explicit policy authorization; implicit access is denied.
+4. All trust, identity, policy, and cryptographic failures MUST fail closed: reject the action, log the event, surface to the caller — `try/except/pass` is BANNED in enforcement code.
+5. Secrets, keys, tokens, and credentials MUST never appear in logs, error messages, generated code, or error payloads — Python stores credentials in memory only, never in env vars or on disk.
+6. All external input (documents, PR comments, CI output, XPC messages) is untrusted — validate strictly before use; context from external documents goes in the USER prompt, never the SYSTEM prompt.
+7. Generated code is never executed by the agent — no `eval()`, no `exec()`, no `subprocess` of generated content, no `shell=True`.
+8. Gates wait indefinitely for operator input — no auto-approve, no auto-merge ever; the human is in the loop at every gate.
+9. All file writes MUST pass `path_security.validate_write_path()` before execution — no exceptions.
+10. DTL labels are assigned at data ingestion and are immutable; derived data inherits the HIGHEST classification of any source; unlabeled data MUST be treated as CONFIDENTIAL.
+11. CTX-ID tokens are IMMUTABLE once issued — rotation creates a new token and immediately invalidates the old one; expired CTX-IDs MUST be rejected; missing CTX-ID MUST be treated as UNTRUSTED — never infer identity from session context, UI state, or call site.
+12. If a `SECURITY_REFUSAL` output is received, stop — do not retry with rephrasing, do not fall back to another provider; gate and log.
+13. Discard and log unknown XPC message types — never raise them as uncaught exceptions in the transport path.
 
-forge-standards/                 ← Coding standards, interface contracts, decisions
-  ARCHITECTURE.md
-  INTERFACES.md
-  DECISIONS.md
-  CONVENTIONS.md
+## Architecture Overview
 
-src/                             ← Python backend
-  agent.py                       ← Entry point, REPL, version
-  build_director.py              ← Pipeline orchestration (calls consensus.run())
-  consensus.py                   ← ConsensusEngine — parallel generation + arbitration
-  providers.py                   ← ClaudeProvider, OpenAIProvider, GitHubProvider
-  build_ledger.py                ← BuildLedger — multi-engineer coordination
-  github_tools.py                ← GitHubTool — all GitHub API calls
-  document_store.py              ← DocumentStore — embeddings, FAISS, retrieval
-  ci_workflow.py                 ← forge-ci.yml and forge-ci-macos.yml generation
-  config.py                      ← AgentConfig — all configuration
-  api_errors.py                  ← classify_api_error(), is_transient_error()
-  path_security.py               ← validate_write_path() — must be called before every write
-
-ForgeAgent/                      ← Swift/SwiftUI application shell (TRD-1)
-ForgeAgentTests/                 ← XCTest suites (TRD-9)
-tests/                           ← Python test suite
-.github/workflows/
-  forge-ci.yml                   ← Ubuntu CI (Python, Go, TypeScript, Rust)
-  forge-ci-macos.yml             ← Mac CI (Swift, xcodebuild) — requires self-hosted runner
-```
-
----
-
-## The Core Loop
-
-When `/prd start <intent>` is called:
-
-```
-ScopeStage → PRDPlanStage → PRDGenStage → PRPlanStage
-    → for each PR:
-        CodeGenStage → ThreePassReview → CIGateStage → OperatorGateStage
-```
-
-Each stage is a separate class. Max cyclomatic complexity 15 per function. State checkpointed after every stage via `ThreadStateStore`. Never modify the stage sequence — it is in TRD-3.
-
----
-
-## Consensus Engine Usage
-
-Always pass language:
+### Two-Process Architecture (No Exceptions)
 
-```python
-result = await self._consensus.run(
-    task=f"Implement: {spec.title}",
-    context=context_string,
-    language=spec.language,   # "python" | "swift" | "go" | "typescript" | "rust"
-)
-code = result.final_code
-```
+**Swift Shell** (macOS app): Owns SwiftUI interface, Touch ID biometric gate, Keychain storage, XPC channel, Python process lifecycle. Swift MUST NEVER call LLM APIs, read Keychain for the backend, or execute generated code.
 
-`language="swift"` selects `SWIFT_GENERATION_SYSTEM` — 14 Swift-specific rules.
-`language="python"` selects `GENERATION_SYSTEM` — security-focused Python rules.
+**Python Backend**: Owns ConsensusEngine, BuildPipeline, GitHubTool, BuildLedger, DocumentStore, HolisticReview, TRDWorkflow, CommandRouter. Python MUST NEVER read Keychain directly, access the UI, or persist credentials to disk.
 
-Never call providers directly from pipeline code. Always go through `ConsensusEngine.run()`.
+**Credential Flow**: Touch ID → Swift reads Keychain → delivers via XPC credential message → Python holds in memory only → credential is never written to disk, env vars, or logs.
 
----
+### Directory Contracts
 
-## Document Store Usage
+- `src/cal/` — Conversation Abstraction Layer enforcement entry points. MUST validate CTX-ID first, then VTZ, then emit TrustFlow. MUST NOT partially process actions before validation completes.
+- `src/vtz/` — Virtual Trust Zone policy enforcement. MUST bind each session to exactly one VTZ and deny implicit cross-VTZ calls. MUST NOT allow application code to bypass VTZ boundaries.
+- `src/dtl/` — Data Trust Label handling. MUST assign labels at ingestion and verify labels before any boundary crossing. MUST NOT permit silent relabeling or label stripping.
+- `src/trustflow/` — TrustFlow audit stream. MUST synchronously emit events on every outcome. MUST NOT async-buffer enforcement-path emissions.
+- `src/trustlock/` — Cryptographic machine identity and CTX-ID validation rooted in TrustLock public key material. MUST reject software-only validation. MUST NOT accept unverifiable CTX-ID tokens.
+- `src/mcp/` — MCP Policy Engine. MUST make explicit policy decisions before tool use or cross-boundary actions. MUST NOT act as advisory-only logic.
+- `src/rewind/` — Replay and reconstruction engine. MUST support replay from append-only audit records alone. MUST NOT require hidden external state to reconstruct a session.
 
-```python
-# Context for generation (primary use case)
-ctx = self._doc_store.auto_context(
-    query=f"{thread.subsystem} {spec.title}",
-    project_id=project_id,
-    doc_filter=thread.relevant_docs or None,   # restrict to relevant TRDs
-    max_chars=24_000,
-)
+### TrustFlow Event Wire Format
 
-# Load a specific document (e.g. PRODUCT_CONTEXT.md)
-content = self._doc_store.get_document_content("PRODUCT_CONTEXT.md", project_id)
-```
+Every TrustFlow event MUST contain the following fields:
 
-`auto_context()` returns text already wrapped in injection-defense delimiters. Append it to the user prompt — never the system prompt.
+| Field | Type | Description |
+|---|---|---|
+| `event_id` | `string (UUID v4)` | Unique identifier for this event |
+| `session_id` | `string (UUID v4)` | Session that produced the event |
+| `ctx_id` | `string` | CTX-ID of the acting identity |
+| `ts` | `string (ISO 8601)` | Timestamp of event emission |
+| `event_type` | `enum: allow, restrict, block` | Outcome of the enforcement decision |
+| `payload_hash` | `string (SHA-256 hex)` | Hash of the action payload |
+| `vtz_id` | `string` | VTZ in which the action was evaluated |
+| `dtl_label` | `string` | Highest DTL classification of data involved |
 
----
+All fields are REQUIRED. Events with missing fields MUST be rejected by the audit stream.
 
-## GitHub Operations
+### Shared Contract Base Classes
 
-```python
-# ALL GitHub ops go through GitHubTool. Never use the GitHub API directly.
-self._github.commit_file(branch, path, content, message)
-self._github.create_pr(branch, title, body)
-self._github.get_file(path)
+All enforcement subsystems MUST extend from shared base classes in `src/contracts/`:
 
-# Validate paths before ANY write
-from path_security import validate_write_path
-safe_path = validate_write_path(user_supplied_path)  # raises on traversal
-```
+- `EnforcementBase` — abstract base requiring `validate_ctx_id()`, `check_vtz_policy()`, `emit_trustflow_event()` in that order.
+- `TrustFlowEmitter` — shared emitter ensuring synchronous emission with the required wire format fields.
+- `DTLHandler` — shared label assignment and propagation logic enforcing immutability and highest-classification inheritance.
 
-Branch naming convention (mandatory):
-`forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}`
-
----
+### Registry
 
-## Error Handling Patterns
+All subsystems MUST register with the central `EnforcementRegistry` at startup. The registry:
+- Tracks all active enforcement modules and their VTZ bindings.
+- Rejects duplicate registrations for the same VTZ.
+- Provides introspection for audit and replay.
+- MUST fail closed if any required subsystem fails to register.
 
-**Transient API errors (529, 500):**
-```python
-# In _claude_json: retry after 10s, then fall back to OpenAI
-# In consensus.py: retry with the other provider
-# Never retry indefinitely — max 3 attempts total
-```
+### Schema Export
 
-**GitHub rate limits:**
-```python
-# 403 primary: exponential backoff starting at 60s
-# 429 secondary: respect Retry-After header exactly
-# ETag caching on all polling endpoints
-```
-
-**Gate failures:**
-```python
-# Gates never auto-resolve. They wait.
-# If backend restarts mid-gate: gate state is lost, operator must re-approve.
-# No undo on gate decisions — document this explicitly.
-```
-
-**SECURITY_REFUSAL in LLM output:**
-```python
-# STOP. Do not retry. Do not rephrase.
-# Emit error card. Gate. Log full prompt context.
-# Operator must explicitly override.
-```
-
----
-
-## CI Routing
-
-| Language | Runner | Workflow file |
-|----------|--------|--------------|
-| Python, Go, TypeScript, Rust | `ubuntu-latest` | `forge-ci.yml` |
-| Swift | `[self-hosted, macos, xcode, x64]` | `forge-ci-macos.yml` |
-
-If Swift files change and the Mac runner is offline: CI job queues and waits. Never mark Swift CI as passed without the Mac runner result.
-
-If `swiftc` is not available locally: log a warning, return synthetic pass for the type-check step, note that real validation requires the Mac runner. Do not fail the pipeline.
-
----
-
-## Version Management
-
-VERSION file and `pyproject.toml` must always match. The test `TestVersionConsistency.test_version_matches_pyproject` enforces this.
-
-When bumping version: update BOTH files.
-```bash
-echo "38.XX.0" > VERSION
-sed -i 's/version = "38.YY.0"/version = "38.XX.0"/' pyproject.toml
-```
-
----
-
-## Security Checklist (Run Before Every PR)
-
-- [ ] No hardcoded credentials, keys, or tokens in any string literal
-- [ ] No `shell=True` in any subprocess call
-- [ ] No `eval()` or `exec()` on any external content
-- [ ] No HTTP response bodies in log statements
-- [ ] All new file write paths pass through `path_security.validate_write_path()`
-- [ ] All new document chunks pass through `_scan_for_injection()` before storage
-- [ ] External content only in user prompt — never system prompt
-- [ ] New LLM generation calls use `self._gen_system` (language-aware), not hardcoded string
-- [ ] New XPC message types: unknown message types are discarded, not raised
-
----
-
-## What Generates What
-
-| You want | Call this |
-|----------|-----------|
-| Implementation code for a PR | `ConsensusEngine.run(task, context, language)` |
-| Tests for a PR | `PRPlanner.generate_tests(spec, impl_code)` |
-| PRD document | `PRDPlanner.generate_prd(item, context)` |
-| PR plan for a PRD | `PRPlanner.plan_prs(prd_result, thread)` |
-| TRD document | `TRDWorkflow.generate_trd(session)` |
-| Holistic review | `ReviewDirector.run(branch, scope, lenses)` |
-| Context string for any of the above | `DocumentStore.auto_context(query, project_id)` |
-
----
-
-## Critical Files — Read Before Modifying
-
-| File | Why It Matters |
-|------|---------------|
-| `src/consensus.py` | Core generation loop — changes here affect every PR the agent builds |
-| `src/build_director.py` | Pipeline orchestration — complexity 15 limit strictly enforced |
-| `src/github_tools.py` | All GitHub I/O — path validation, rate limiting, SHA protocol |
-| `src/path_security.py` | Security boundary — every write path must pass through here |
-| `src/ci_workflow.py` | Generates the YAML that runs in CI — template bugs break every build |
-| `ForgeAgent/XPCBridge.swift` | The bridge between Swift and Python — wire protocol is TRD-1 S6 |
-| `ForgeAgent/AuthManager.swift` | Touch ID + Keychain — biometric failures must lock session, not degrade |
-| `.github/workflows/forge-ci-macos.yml` | Mac runner workflow — YAML errors break all Swift CI |
-
----
-
-## Forbidden Patterns
-
-These will fail code review. Do not write them.
-
-```python
-# FORBIDDEN: shell injection
-subprocess.run(cmd, shell=True)
-
-# FORBIDDEN: credential in log
-logger.info(f"Using key: {api_key}")
-
-# FORBIDDEN: credential in prompt
-system = f"Use this key: {self._config.anthropic_api_key}"
-
-# FORBIDDEN: direct execution of generated code
-exec(result.final_code)
-eval(result.final_code)
-
-# FORBIDDEN: path traversal
-open(f"../{user_input}")  # must use path_security.validate_write_path()
-
-# FORBIDDEN: blind GitHub write (no SHA)
-github.create_file(path, content)  # use commit_file() which handles SHA
-
-# FORBIDDEN: context in system prompt
-system = f"Context: {doc_store.auto_context(query)}"  # context goes in user prompt
-
-# FORBIDDEN: ignoring SECURITY_REFUSAL
-if "SECURITY_REFUSAL" in output:
-    output = await self._generate_openai(prompt)  # WRONG — do not retry
-```
-
-```swift
-// FORBIDDEN: force unwrap
-let value = optional!
-
-// FORBIDDEN: LLM API call from Swift
-let client = AnthropicClient(apiKey: keychainValue)
-
-// FORBIDDEN: Keychain read for backend
-let token = KeychainKit.read("github_token")  // Python reads nothing from Keychain
-// Only Swift reads Keychain, only to deliver via XPC
-```
+The `src/contracts/schema_export.py` tool MUST:
+- Export JSON Schema definitions for all TrustFlow event types, DTL label enums, VTZ policy structures, and CTX-ID token formats.
+- Be runnable as `python -m src.contracts.schema_export` to produce a single `forge_schemas.json` artifact.
+- Validate that all exported schemas match the canonical wire format — schema drift MUST cause CI failure.
