@@ -1,0 +1,121 @@
+{
+  "build_id": "consensusdevagent-e3b064f9",
+  "subsystem": "ConsensusDevAgent",
+  "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Deve Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture.",
+  "scope_statement": "Build the complete Consensus Dev Agent \u2014 a native macOS AI coding agent with a two-process architecture (Swift shell + Python backend) that uses dual-LLM consensus (Claude + GPT-4o with Claude arbitrating) to autonomously decompose build intents into ordered PRDs and PRs, generate implementation and tests via parallel consensus generation, run 3-pass review cycles, execute CI, and gate on operator approval before merging. The system encompasses all 12 TRD-specified subsystems: macOS Application Shell (TRD-1), Consensus Engine (TRD-2), Build Pipeline with 8 stages and 3-pass review (TRD-3), Multi-Agent Coordination via BuildLedger (TRD-4), GitHub Integration Layer (TRD-5), Holistic Code Review with 5 lenses (TRD-6), TRD Development Workflow with 8-phase facilitation (TRD-7), UI/UX Design System (TRD-8), Mac CI Runner Infrastructure (TRD-9), Document Store with FAISS vector retrieval (TRD-10), Security Threat Model enforcement (TRD-11), Backend Runtime Startup and Version Handshake (TRD-12), and Recovery/State Management (TRD-13). All subsystems are governed by the security controls in TRD-11 (SEC-CRED-*, SEC-CTX-*, SEC-CODE-*, SEC-LOG-*) and must conform to the two-process isolation boundary where Swift never calls LLM APIs and Python never reads Keychain directly.\n\nClarifications:\n  - finalize the spec in the PRDs\n  - rename to the best approach and make consistent through out the PRDs\\\n  - optimize based on best practices in the PRDs\n  - include this as an ask in the PRDs\n  - still being determined\n  - Determine the very best implementation order for the PRDs to ensure that the code development is maximum efficient",
+  "created_at": 1773968555.775106,
+  "updated_at": 1773968555.775176,
+  "updated_by": "todd-gould",
+  "prd_plan": [
+    {
+      "prd_id": "PRD-001",
+      "title": "Platform Foundation, Naming Normalization, and Canonical Contracts",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-002",
+      "title": "Security Control Plane and Cross-Boundary Enforcement",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-003",
+      "title": "Backend Runtime, Agent Bridge Protocol, Startup Handshake, and Process Recovery Base",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-004",
+      "title": "State Persistence, Checkpointing, Save/Restore, and Recovery Lifecycle",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-005",
+      "title": "Document Intelligence Platform and Trusted Context Retrieval",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-006",
+      "title": "GitHub Repository Control Plane and CI-Aware Integration Layer",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-007",
+      "title": "Consensus Generation Core and Provider Arbitration Engine",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-008",
+      "title": "Build Orchestration Pipeline and Operator Gate Workflow",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-009",
+      "title": "Three-Pass Build Review and Fix Loop Execution",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-010",
+      "title": "Multi-Agent Build Ledger and Team Coordination",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-011",
+      "title": "Holistic Code Review Workflow with Five Lenses",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-012",
+      "title": "TRD Development Workflow and Specification Authoring Engine",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-013",
+      "title": "Native macOS Application Shell, Operator Experience, and Secure Secret Management",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-014",
+      "title": "macOS Design System, Build Stream UX, and Specialized Workflow Views",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-015",
+      "title": "Mac CI Runner Infrastructure, Swift Validation, Signing, and Release Pipeline",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    }
+  ],
+  "pr_entries": {},
+  "knowledge_notes": [],
+  "version": 1,
+  "schema_version": 2,
+  "agent_version": "38.72.0"
+}
