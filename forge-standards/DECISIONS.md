@@ -1,231 +1,64 @@
 # DECISIONS.md
 
-## Native macOS shell with bundled Python backend
+## Documentation repository is the source of truth
 **Status:** Accepted  
-**Context:** The platform is specified as a native macOS product, not a web app or editor plugin. It must provide a desktop UI, local secret handling, repository access, autonomous orchestration, and local execution of controlled workflows while preserving strong separation between trusted platform code and model-driven logic.  
-**Decision:** Forge is implemented as a two-process desktop system: a native Swift/SwiftUI macOS shell and a bundled Python 3.12 backend. The Swift shell owns UI, application lifecycle, auth, Keychain, local permissions, update flow, and trusted orchestration boundaries. The Python backend owns planning, consensus generation, review pipeline, documentation handling, and GitHub/repository automation.  
-**Consequences:** Clear trust boundaries are established. UI and secrets remain in the native process. Intelligence and pipeline logic can evolve faster in Python. Packaging, IPC, lifecycle, and compatibility management become first-class concerns. The product is constrained to macOS 13+ and native distribution.  
-**Rejected alternatives:**  
-- Single-process Swift-only app — rejected because model/pipeline logic and ecosystem integrations are faster to develop and maintain in Python.  
-- Electron or web-based shell — rejected because native macOS integration, Keychain access, local trust boundaries, and system UX are core requirements.  
-- Remote SaaS orchestration — rejected because the platform is designed for local repository control and local secret custody.
+**Context:** The subsystem operates within a repository structure where technical requirements and product requirements are authored and stored separately from implementation. The TRDs explicitly state that all TRDs and PRDs live under `forge-docs/`, and the repository layout defines that directory as the authoritative document location. ConsensusDevAgent must be constrained to consume and produce artifacts in a predictable place so planning, auditing, and downstream stages are deterministic.  
+**Decision:** Treat `forge-docs/` as the sole source-of-truth location for all TRDs and PRDs, and require ConsensusDevAgent to read governing design inputs from `forge-docs/` before implementation or planning actions.  
+**Consequences:** ConsensusDevAgent must not infer requirements from ad hoc files, chat history, or alternative document locations when a corresponding document exists in `forge-docs/`. Any generated PRD-, plan-, or audit-linked document references must point back to artifacts in `forge-docs/`. Repository traversal, indexing, and validation logic must privilege `forge-docs/` over all other locations for requirements discovery.  
+**Rejected alternatives:** Storing working copies of TRDs/PRDs under `src/` or subsystem-local folders was rejected because it creates ambiguity and drift. Treating README content or transient operator instructions as equal to TRDs/PRDs was rejected because the TRDs define `forge-docs/` as authoritative. Allowing multiple document roots was rejected because it weakens traceability and complicates auditability.
 
-## Authenticated local IPC over Unix domain socket with line-delimited JSON
+## Standards and architectural constraints live outside implementation code
 **Status:** Accepted  
-**Context:** The shell and backend must communicate across a process boundary with a protocol that is observable, debuggable, structured, and secure against unintended local access.  
-**Decision:** Inter-process communication uses an authenticated Unix domain socket and line-delimited JSON messages. The shell is the authority for process launch and session establishment. Message contracts are explicit and versioned by implementation control rather than ad hoc serialization.  
-**Consequences:** Communication is simple to inspect and test. Process isolation is preserved without requiring network exposure. Both sides must implement robust framing, validation, timeout, and error handling. Protocol changes require coordinated updates.  
-**Rejected alternatives:**  
-- XPC for all communication — rejected because the Python backend is a first-class process and JSON IPC is more portable and easier to debug across language boundaries.  
-- HTTP on localhost — rejected because it expands attack surface and introduces unnecessary server semantics.  
-- STDIN/STDOUT pipes — rejected because socket lifecycle, authentication, and bidirectional structured exchange are cleaner for long-running sessions.
+**Context:** The repository layout separates implementation from governing standards by placing architecture and decision documents under `forge-standards/`. ConsensusDevAgent must operate with clear boundaries between executable code and normative guidance so that standards remain inspectable, versioned, and stable across subsystem changes.  
+**Decision:** Keep subsystem-governing architecture, interface, decision, and convention documents in `forge-standards/`, and require ConsensusDevAgent to treat those documents as binding implementation constraints rather than embedding equivalent normative policy only in code.  
+**Consequences:** Implementation under `src/` must not become the only place where behavior-defining standards are expressed. Changes to subsystem behavior that alter architecture, interfaces, or conventions require corresponding updates in `forge-standards/`. ConsensusDevAgent outputs should preserve traceability from implementation choices back to standards documents.  
+**Rejected alternatives:** Encoding all design decisions only in code comments was rejected because it reduces discoverability and reviewability. Keeping standards adjacent to subsystem code was rejected because repository-level consistency is required across agents and subsystems. Duplicating standards in multiple locations was rejected because it increases the risk of divergence.
 
-## Swift shell owns secrets, identity, and security-sensitive OS integrations
+## ConsensusDevAgent must align to the staged build pipeline
 **Status:** Accepted  
-**Context:** The system handles provider credentials, GitHub tokens, biometric access, local repository access, and privileged operating-system integrations. These functions require a strongly trusted boundary.  
-**Decision:** All secrets, credential storage, biometric gates, session unlock behavior, and sensitive OS integration points are owned by the Swift shell. Secrets are stored in Keychain and not delegated to the Python backend except as narrowly scoped runtime access required by defined interfaces.  
-**Consequences:** The backend cannot become the system of record for credentials. Security review is concentrated in the shell. Backend features must be designed around least-privilege access patterns. Some integration work is more complex because data must cross an explicit trust boundary only when necessary.  
-**Rejected alternatives:**  
-- Letting Python manage secrets directly — rejected due to weaker platform-native secret handling and larger trusted surface.  
-- Environment-variable credential model — rejected because it is brittle, leaks easily, and does not meet the platform security posture.  
-- Browser/session-only auth without local secure storage — rejected because the product requires persistent, local, user-controlled credentials.
+**Context:** The build pipeline is the core execution loop and is triggered from `/prd start <intent>`. The pipeline defines ordered stages from scoping through PRD planning, PRD generation, PR planning, code generation, three-pass review, and subsequent integration gates. ConsensusDevAgent is a subsystem within that operating model and must not invent an independent lifecycle.  
+**Decision:** Implement ConsensusDevAgent as a stage-conforming subsystem that consumes and emits artifacts compatible with the repository’s defined build pipeline, rather than as a standalone orchestration flow.  
+**Consequences:** Inputs, outputs, status transitions, and audit events produced by ConsensusDevAgent must map cleanly onto pipeline stages, especially planning, generation, and review handoffs. The subsystem must preserve stage order and must not skip required review or gating phases. Integration points should assume the pipeline is authoritative for progression control.  
+**Rejected alternatives:** A free-form agent loop with dynamic stage skipping was rejected because the repository defines a fixed build pipeline. Embedding bespoke lifecycle control within ConsensusDevAgent was rejected because it would conflict with central orchestration and reduce observability. Allowing operator-controlled arbitrary stage reordering was rejected because it undermines consistency and auditability.
 
-## Backend owns intelligence, generation, and repository automation
+## Gate decisions are final and must never support undo
 **Status:** Accepted  
-**Context:** The platform’s differentiator is autonomous planning, multi-model generation, review, and pull-request production. These capabilities require rapid iteration, rich library support, and isolation from UI concerns.  
-**Decision:** The Python backend owns decomposition, consensus orchestration, prompt pipelines, review passes, CI coordination logic, documentation regeneration logic, and GitHub operations. The shell invokes capabilities and renders state but does not implement core intelligence logic.  
-**Consequences:** Core agent behavior can evolve without UI redesign. Pipeline testing can be concentrated in Python. The shell remains a thin trusted controller rather than an AI runtime. Interface discipline is required to prevent leakage of business logic into Swift.  
-**Rejected alternatives:**  
-- Splitting planning across shell and backend — rejected because it creates duplicated state and unclear authority.  
-- Keeping GitHub logic in Swift — rejected because repository automation belongs with generation and review workflow ownership.  
-- Moving all intelligence to remote services — rejected because the product is specified as a local application with local orchestration boundaries.
+**Context:** The requirements explicitly state “No undo on gate decisions” and repeat this in build pipeline references. Gate outcomes are part of the audit trail and security posture, especially when refusals, escalations, and human review checkpoints are involved. ConsensusDevAgent must therefore enforce finality at the gate boundary.  
+**Decision:** Treat every gate decision as immutable and final once recorded; do not implement undo, rollback, silent reconsideration, or automatic bypass for gate outcomes.  
+**Consequences:** State models must represent gate decisions as append-only events. If a previously gated item needs reconsideration, the subsystem must create a new review or remediation flow rather than mutating prior decisions. User interfaces, APIs, and background workers must not expose “undo gate” behavior. Audit records must clearly preserve the original gate result and any subsequent follow-up as separate events.  
+**Rejected alternatives:** Supporting operator undo for convenience was rejected because the TRD explicitly forbids undo on gate decisions. Allowing automatic re-opening of failed gates after code changes was rejected because it mutates decision history; a new gate evaluation must be created instead. Hard-deleting gate records was rejected because it breaks auditability.
 
-## Consensus generation uses multiple model providers with deterministic orchestration
+## SECURITY_REFUSAL is a hard stop, not a recoverable warning
 **Status:** Accepted  
-**Context:** The platform is explicitly built around a consensus development model rather than a single-provider coding agent. Quality and robustness depend on obtaining multiple candidate outputs and adjudicating among them.  
-**Decision:** Forge uses a multi-provider consensus engine. Distinct providers generate outputs in parallel, and arbitration is performed through a defined orchestration flow rather than informal fallback. Provider adapters implement a common contract so models are interchangeable at the integration layer.  
-**Consequences:** The system gains resilience to provider variance and improved output quality at the cost of higher latency, higher token spend, and more complex orchestration. Adapter boundaries become critical. Testing must include disagreement and partial-failure scenarios.  
-**Rejected alternatives:**  
-- Single best model strategy — rejected because the product’s core value proposition is consensus-based development.  
-- Manual user choice of model per step — rejected because the platform is intended to be autonomous and directed, not an interactive prompt workbench.  
-- Hard-coded provider-specific logic throughout pipeline — rejected because it would make evolution and substitution costly.
+**Context:** The security controls require `SECURITY_REFUSAL` rules in every generation system prompt and explicitly state that when `SECURITY_REFUSAL` appears in LLM output, the PR must stop, gate, and log, with no auto-bypass. ConsensusDevAgent, as a consensus- and generation-adjacent subsystem, must preserve that behavior exactly.  
+**Decision:** Treat any `SECURITY_REFUSAL` emitted by a model or detected in controlled generation output as an immediate hard-stop event that halts progression, creates a gate, and records an audit log entry; never auto-bypass or downgrade it.  
+**Consequences:** ConsensusDevAgent arbitration logic must not “vote around” a refusal by relying on other model outputs. Pipeline continuation after a refusal requires explicit human handling through the defined gate process, not automated retry-based suppression. Error handling and telemetry must distinguish security refusals from ordinary task failures.  
+**Rejected alternatives:** Ignoring a single-model refusal when another model produced usable output was rejected because security refusals are mandatory hard stops. Auto-retrying until the refusal disappears was rejected because it effectively bypasses the control. Converting refusals into low-severity warnings was rejected because it conflicts with mandatory security controls.
 
-## Claude acts as the final arbiter in consensus and review flows
+## Security review is mandatory before generated changes progress
 **Status:** Accepted  
-**Context:** The product definition specifies a two-model workflow where outputs are compared and one model is used as the final arbiter. A stable arbitration policy is required to make behavior predictable.  
-**Decision:** Claude is the final arbiter for consensus resolution and review outcomes where arbitration is required by the pipeline design. Other providers participate as peers in generation, but final selection and adjudication are routed through the arbitration role.  
-**Consequences:** The platform behavior is consistent with the product promise and easier to reason about operationally. Arbitration quality depends on Claude availability and output quality. Arbitration failure modes require explicit handling so the pipeline can stop safely or degrade predictably.  
-**Rejected alternatives:**  
-- Dynamic arbiter selection — rejected because it reduces predictability and complicates validation.  
-- Human-required arbitration for every disagreement — rejected because it undermines autonomous throughput.  
-- Simple majority vote without designated arbiter — rejected because two-provider workflows need a deterministic tie-breaking mechanism.
+**Context:** The build and security requirements mandate a three-pass review sequence, including a security pass, and require generated code to pass security review including bandit. ConsensusDevAgent may participate in generation and arbitration, but it cannot treat consensus as a substitute for security validation.  
+**Decision:** Require all generated or consensus-selected code changes handled by ConsensusDevAgent to pass the repository’s mandatory security review stage before progression, regardless of confidence, agreement level, or prior review outcomes.  
+**Consequences:** Consensus quality metrics must not short-circuit Pass 3 security review. The subsystem must produce artifacts and metadata compatible with downstream security checks and must block advancement on security review failure. Any optimization for throughput must preserve the mandatory security pass.  
+**Rejected alternatives:** Skipping security review when both models agree was rejected because consensus does not prove safety. Running only correctness and performance review for low-risk changes was rejected because the mandatory controls require security review for generated code. Replacing formal security review with heuristic model self-critique was rejected because the TRD requires an explicit security pass and tooling such as bandit.
 
-## Intent-to-PRD-to-PR pipeline is the core execution model
+## All file writes must use validated repository paths
 **Status:** Accepted  
-**Context:** The platform is not a chat assistant. It is a directed build system that turns user intent and technical specifications into sequenced implementation work. The workflow must be structured enough to support autonomy, review, and traceability.  
-**Decision:** User input is transformed into an ordered PRD plan, and each PRD is decomposed into a sequence of pull requests. Each PR is an independently reviewable unit that flows through generation, review, CI, and draft PR creation before the next PR proceeds.  
-**Consequences:** Work is incremental, inspectable, and resumable. The system must maintain plan state and PR sequencing. Throughput is bounded by the granularity of PR decomposition and review gates. The platform is not optimized for free-form conversational exploration.  
-**Rejected alternatives:**  
-- Generating one giant branch for the entire intent — rejected because it harms reviewability, rollback, and CI isolation.  
-- Pure chat-loop tasking — rejected because it does not provide the directed autonomy required by the product.  
-- Direct file-edit mode without PR planning — rejected because it weakens traceability and governance.
+**Context:** The security controls require `path_security.validate_write_path()` on every file path before write. ConsensusDevAgent may generate, merge, or materialize outputs across documents and code, so path handling is a primary attack surface.  
+**Decision:** Validate every file write path through `path_security.validate_write_path()` before any write, overwrite, move, or generated artifact materialization performed by ConsensusDevAgent.  
+**Consequences:** The subsystem must centralize write operations through path-validated I/O helpers and must not permit direct raw filesystem writes in normal execution paths. Artifact generation, temporary output handling, and patch application must all enforce repository-bounded path validation. Failures in path validation must halt the write and surface as security-relevant errors.  
+**Rejected alternatives:** Validating only user-supplied paths was rejected because generated or transformed paths can also be unsafe. Relying on path normalization alone was rejected because normalization does not enforce policy. Restricting validation to production mode was rejected because the requirement applies on every file path before write.
 
-## One pull request per logical unit of change
+## Untrusted review content must remain explicitly labeled and non-authoritative
 **Status:** Accepted  
-**Context:** The product promise emphasizes reviewable, sequenced development. PR size strongly affects CI signal, human review burden, and rollback safety.  
-**Decision:** Forge creates one pull request per logical unit of change, with decomposition designed to preserve coherent review scope and dependency order.  
-**Consequences:** PRs remain comprehensible and easier to validate. The system must invest in decomposition quality and dependency management. Some intents will require many PRs, increasing orchestration overhead.  
-**Rejected alternatives:**  
-- Batch many unrelated changes into a single PR — rejected because it degrades review quality and recovery.  
-- One file per PR — rejected because it creates excessive operational noise and loses semantic grouping.  
-- User-manual PR splitting — rejected because the platform is intended to perform this planning autonomously.
+**Context:** Security controls specify that PR review comments must be labeled `[UNTRUSTED REVIEWER COMMENT]` in prompts. ConsensusDevAgent may consume review feedback during arbitration or revision planning, and that content can be adversarial or malformed. The subsystem must preserve provenance and trust boundaries.  
+**Decision:** Treat external reviewer comments and equivalent review-derived text as untrusted input, preserve explicit labeling in any prompt or internal representation that forwards such content to models, and never elevate that content to authoritative instruction without separate validation.  
+**Consequences:** Prompt construction and context assembly must maintain trust labels for review-derived content. Consensus and planning logic must not allow untrusted reviewer text to override TRDs, standards, gate decisions, or security controls. Audit data should retain provenance showing where review feedback influenced outcomes.  
+**Rejected alternatives:** Stripping labels before prompting for cleaner model context was rejected because it removes a required trust boundary. Treating PR comments as equivalent to operator instructions was rejected because reviewer content is explicitly untrusted. Ignoring review comments entirely was rejected because they are useful inputs when handled safely.
 
-## Three-pass review cycle before CI and PR creation
+## Flagged document chunks require operator gating before use in generation
 **Status:** Accepted  
-**Context:** Generated code quality cannot rely on first-pass synthesis alone. The platform requires internal validation before exposing changes as candidate work.  
-**Decision:** Every PR candidate goes through a defined three-pass review cycle prior to final CI evaluation and draft pull request creation. Review is a required stage of the pipeline, not an optional enhancement.  
-**Consequences:** Quality improves and obvious defects are filtered earlier. Latency and token cost increase. Review artifacts and outcomes must be modeled in state and logs. Pipelines must halt safely when review does not converge.  
-**Rejected alternatives:**  
-- Single-pass generation only — rejected because it does not meet the quality bar for autonomous PR production.  
-- Unlimited iterative review loop — rejected because it risks non-termination and unpredictable costs.  
-- Human-only review before CI — rejected because it shifts too much validation burden to users.
-
-## CI is mandatory before opening a draft pull request
-**Status:** Accepted  
-**Context:** Autonomous code generation must be bounded by executable validation. Opening PRs without CI would overload users with low-signal output and weaken trust in the agent.  
-**Decision:** Forge runs the defined CI workflow for each candidate PR and only opens a draft PR after required checks pass according to repository and pipeline policy.  
-**Consequences:** Users receive higher-signal PRs. Build time increases and CI integration becomes a required subsystem. Repositories without stable tests or build scripts may need onboarding remediation before the platform performs well.  
-**Rejected alternatives:**  
-- Open PRs before CI and let users inspect failures — rejected because it lowers trust and review efficiency.  
-- Skip CI for documentation or “small” changes — rejected because exceptions are brittle and misclassification risk is high.  
-- Execute arbitrary generated code outside controlled CI/test flows — rejected by the security model.
-
-## Generated code is never executed arbitrarily by the agent
-**Status:** Accepted  
-**Context:** The security model requires strict handling of untrusted generated content. Generated code can contain harmful side effects, persistence attempts, exfiltration logic, or destructive actions.  
-**Decision:** Forge never executes generated code as an ad hoc action. Code may only be validated through bounded, repository-defined test/build/CI mechanisms allowed by policy. No free-form “run this generated script” capability exists in the agent.  
-**Consequences:** The attack surface is reduced and behavior is auditable. Some classes of autonomous experimentation are intentionally unsupported. Repositories must expose safe, structured validation commands for effective operation.  
-**Rejected alternatives:**  
-- Allowing the model to run arbitrary generated commands locally — rejected for security reasons.  
-- Sandboxing arbitrary execution as a general feature — rejected because it adds major complexity and still expands risk.  
-- Trusting provider safety filters alone — rejected because local execution risk must be controlled by platform design.
-
-## Repository-defined tests are the validation boundary
-**Status:** Accepted  
-**Context:** The platform needs a principled way to validate changes without inventing bespoke runtime behavior per task. Existing repository workflows are the most authoritative executable definition of correctness.  
-**Decision:** Forge validates generated changes through repository-defined tests, build scripts, and CI workflows configured during onboarding and governed by policy. The platform does not invent hidden validation semantics outside those declared mechanisms.  
-**Consequences:** Validation stays aligned with the repository’s real quality gates. Weak repositories will produce weak validation unless improved. Onboarding must identify and normalize project-specific commands and requirements.  
-**Rejected alternatives:**  
-- Universal built-in test harness independent of repository conventions — rejected because it cannot cover heterogeneous codebases.  
-- Model-judged correctness without execution — rejected because it is insufficiently reliable.  
-- Task-specific custom execution assembled on the fly — rejected because it is unpredictable and hard to secure.
-
-## GitHub pull requests are the primary integration artifact
-**Status:** Accepted  
-**Context:** The product promise centers on autonomous development that produces reviewable units in standard engineering workflows. The artifact must fit existing team processes.  
-**Decision:** Forge outputs work primarily as GitHub draft pull requests, one per logical unit, with associated branches, CI results, and review context. GitHub is the canonical remote collaboration target for the platform.  
-**Consequences:** The platform fits standard repository review processes and branch-based governance. GitHub integration depth is required. Other SCM platforms are not first-class in the initial architecture.  
-**Rejected alternatives:**  
-- Direct commits to the main branch — rejected because it removes review and governance controls.  
-- Email or patch-file output — rejected because it does not integrate with modern team workflows.  
-- Equal first-class support for all git hosting providers at launch — rejected to maintain focus and product coherence.
-
-## User approval gates progression between pull requests
-**Status:** Accepted  
-**Context:** The product is autonomous but user-governed. Users must be able to inspect and approve each completed unit before the system proceeds to the next dependent unit.  
-**Decision:** After Forge creates a PR, progression to the next PR in the plan requires user approval according to the platform’s gating model. The agent can prepare work, but human governance controls release of sequential implementation.  
-**Consequences:** Users retain control over repository evolution. End-to-end throughput depends on review responsiveness. The system must model paused, awaiting-approval, approved, and resumed states cleanly.  
-**Rejected alternatives:**  
-- Fully automatic merge-and-continue — rejected because it exceeds the intended human governance level.  
-- Manual triggering of every internal pipeline stage — rejected because it sacrifices autonomy.  
-- Approval only at the end of the entire plan — rejected because it removes incremental control.
-
-## Documentation regeneration is optional and explicit
-**Status:** Accepted  
-**Context:** The product may update documentation after implementation, but code and reviewable PR delivery are the primary mission. Documentation work should not destabilize the main build pipeline.  
-**Decision:** Documentation regeneration is supported as an optional, explicit capability that can run after implementation completion or as configured by plan/policy. It is not a hidden side effect of every code change.  
-**Consequences:** Users can choose whether to incur extra generation and review overhead. Documentation updates remain traceable. The platform avoids silently mutating product docs beyond agreed scope.  
-**Rejected alternatives:**  
-- Always regenerate all documentation after every PR — rejected because it is noisy, expensive, and often unnecessary.  
-- Never support docs regeneration — rejected because maintaining technical documents is part of the product value.  
-- Silent in-place docs edits outside PR flow — rejected because they bypass reviewability.
-
-## SwiftUI-based native interface for orchestration, status, and review
-**Status:** Accepted  
-**Context:** The shell must provide a native macOS user experience for onboarding, status visibility, gating, and review workflows. Platform consistency and trust are important to adoption.  
-**Decision:** The user interface is built with SwiftUI in the native shell. It presents plans, PR progression, provider status, authentication state, review controls, and security-relevant prompts as first-class application surfaces.  
-**Consequences:** The app aligns with macOS UX conventions and system capabilities. UI state must be synchronized carefully with backend process state. Some complex desktop UI patterns may require additional architecture discipline in SwiftUI.  
-**Rejected alternatives:**  
-- Embedded web UI — rejected because it weakens native integration and trust posture.  
-- CLI-first product — rejected because the specification defines a desktop application shell.  
-- Heavy AppKit-only implementation — rejected because SwiftUI is the specified primary framework.
-
-## Sparkle-based application updates with standard macOS distribution
-**Status:** Accepted  
-**Context:** The shell must support desktop distribution and updates appropriate for a native macOS application outside the App Store model.  
-**Decision:** Forge is distributed as a standard macOS application bundle with drag-to-Applications installation and Sparkle-based auto-update support.  
-**Consequences:** The app can update independently while preserving native installation expectations. Update signing and release discipline are required. App Store-specific constraints do not drive the architecture.  
-**Rejected alternatives:**  
-- Mac App Store distribution as the primary channel — rejected because platform behavior and bundled backend requirements are better served by direct distribution.  
-- Manual update-only model — rejected because it degrades security and operability.  
-- Self-updating custom updater — rejected because Sparkle is the established solution for this class of macOS application.
-
-## Provider integrations use adapter interfaces, not provider-specific pipeline logic
-**Status:** Accepted  
-**Context:** The consensus engine depends on multiple LLM providers whose APIs, capabilities, and failure modes differ. The core pipeline should not be tightly coupled to any one provider.  
-**Decision:** Model providers are integrated through adapter interfaces with normalized request/response, error, timeout, and metadata contracts. The consensus and review pipeline consumes provider abstractions rather than raw provider APIs.  
-**Consequences:** Providers can be added, swapped, or versioned with limited blast radius. Adapter design becomes a critical abstraction layer. Some provider-specific features may be inaccessible unless promoted intentionally into shared contracts.  
-**Rejected alternatives:**  
-- Hard-coding Anthropic and OpenAI logic directly into pipeline stages — rejected because it would entangle orchestration and integration concerns.  
-- Lowest-common-denominator text-only interface with no metadata — rejected because the pipeline needs richer semantics.  
-- Separate pipeline per provider — rejected because it duplicates orchestration logic.
-
-## Fail closed on authentication, provider, and pipeline uncertainty
-**Status:** Accepted  
-**Context:** The platform performs high-impact actions in user repositories and remote systems. Ambiguous state or partial trust should not produce autonomous continuation.  
-**Decision:** When authentication validity, provider outcomes, repository state, or pipeline invariants are uncertain, Forge stops or pauses in a safe state rather than continuing optimistically. This applies across session handling, provider arbitration, branch operations, and review/CI gates.  
-**Consequences:** Safety and predictability improve, but some workflows will halt more often and require explicit recovery actions. Error handling and resumability must be designed carefully.  
-**Rejected alternatives:**  
-- Best-effort continuation through ambiguous state — rejected because it can create incorrect or unsafe repository changes.  
-- Silent retries indefinitely — rejected because it obscures failure and risks runaway behavior.  
-- Automatic override of failed gates — rejected because it violates governance and security principles.
-
-## Explicit state machines govern sessions and pipeline progression
-**Status:** Accepted  
-**Context:** The application spans onboarding, authentication, planning, generation, review, CI, PR creation, approval, and resume flows across two processes. Implicit state would be fragile and difficult to recover.  
-**Decision:** Major subsystems use explicit state machines and defined transitions for session lifecycle, backend connectivity, job execution, PR progression, and approval gates.  
-**Consequences:** Recovery, testing, and UI rendering become more deterministic. Invalid transitions can be prevented systematically. Implementation requires disciplined event modeling and state synchronization.  
-**Rejected alternatives:**  
-- Ad hoc boolean flags and loosely coupled callbacks — rejected because they are difficult to reason about in a multi-stage autonomous system.  
-- Entirely event-sourced architecture — rejected as unnecessary complexity for the current product scope.  
-- Stateless task invocation — rejected because long-running autonomous workflows require durable progression state.
-
-## Local-first repository operation with remote collaboration through GitHub
-**Status:** Accepted  
-**Context:** The product operates on user repositories in a desktop environment while collaborating through hosted pull requests. The architecture must balance local control and remote team workflows.  
-**Decision:** Forge works against local repository checkouts for generation, validation, and branch preparation, and uses GitHub as the remote system for PR publication and collaboration.  
-**Consequences:** Users retain local control and visibility into repository state. The app must handle local git state, branch hygiene, and sync issues robustly. Cloud-only repository manipulation is not the primary operating mode.  
-**Rejected alternatives:**  
-- Remote-only hosted workspace execution — rejected because the desktop product is designed around local repos and local trust boundaries.  
-- PR generation without local checkout — rejected because meaningful validation and structured edits require repository context.  
-- Direct editing inside GitHub via API only — rejected because it is insufficient for the platform’s workflow.
-
-## Security requirements in TRD-11 override convenience in all subsystems
-**Status:** Accepted  
-**Context:** Multiple subsystems handle secrets, external content, generated code, CI actions, and repository mutations. A single cross-cutting security authority is necessary to avoid local optimizations that weaken the platform.  
-**Decision:** TRD-11 is the governing security authority across all Forge subsystems. Where convenience, performance, or feature flexibility conflicts with TRD-11 controls, security requirements prevail.  
-**Consequences:** Security review has architectural priority. Some user-desired shortcuts will be intentionally unsupported. Cross-subsystem designs must be checked against a common control set.  
-**Rejected alternatives:**  
-- Letting each subsystem define its own local security tradeoffs — rejected because it leads to inconsistency and control gaps.  
-- Treating security guidance as non-binding best practice — rejected because the platform performs high-impact automation.  
-- Prioritizing speed-to-feature over explicit controls — rejected because trust is fundamental to product viability.
-
-## TRDs are the authoritative specification, not inferred behavior
-**Status:** Accepted  
-**Context:** The platform is fully specified across a set of TRDs, and multiple implementations and agents may work on the codebase over time. A stable source of truth is required.  
-**Decision:** The TRDs in `forge-docs/` are the source of truth for platform behavior. Code, tests, and future changes must conform to documented interfaces, error contracts, security requirements, and ownership boundaries rather than inferred or accidental implementation behavior.  
-**Consequences:** Design drift is reduced and change control is clearer. Contributors must consult the owning TRD before modifying subsystems. Unspecified behavior should be clarified in documentation rather than invented in code.  
-**Rejected alternatives:**  
-- Code-as-specification only — rejected because the platform spans many subsystems and requires explicit cross-cutting contracts.  
-- Relying on README-level summaries — rejected because they are too high level to govern implementation.  
-- Allowing AI agents to infer missing requirements ad hoc — rejected because it creates inconsistency and drift.
+**Context:** The security controls state that when a flagged chunk is used in generation, a gate card must be shown to the operator before proceeding. ConsensusDevAgent may aggregate or select contextual material from documents, making it responsible for honoring this escalation requirement.  
+**Decision:** Before using any flagged document chunk in generation or consensus evaluation, require an operator-visible gate and do not proceed until that gate is resolved through the defined process.  
+**Consequences:** Retrieval and context-packaging components must carry flag metadata through to generation-time decisions. The subsystem must not silently include flagged content in prompts or deliberation context. Operator workflows and audit logs must record the flagged-chunk usage decision separately from ordinary generation events.  
+**Rejected alternatives:** Automatically excluding all flagged chunks was rejected because some workflows may require operator-approved use. Automatically including flagged chunks with logging only was rejected because the requirement calls for gating before proceeding. Deferring the decision until after generation was rejected because the control applies before use.
