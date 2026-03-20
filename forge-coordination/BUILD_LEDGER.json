@@ -1,0 +1,198 @@
+{
+  "build_id": "consensusdevagent-fda404f8",
+  "subsystem": "ConsensusDevAgent",
+  "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture.",
+  "scope_statement": "Build the complete Consensus Dev Agent \u2014 a native macOS AI coding agent with a two-process architecture (Swift shell + Python backend) that uses a dual-LLM consensus engine (Claude + GPT-4o, Claude arbitrates) to autonomously decompose build intents into ordered PRD plans, generate implementation and tests for each PR via parallel generation with 3-pass review, execute CI, and gate on operator approval before merging. The system encompasses 12 TRD-specified subsystems: macOS Application Shell (TRD-1), Consensus Engine (TRD-2), Build Pipeline with 8 stages and 3-pass review (TRD-3), Multi-Agent Coordination via BuildLedger (TRD-4), GitHub Integration Layer (TRD-5), Holistic Code Review with 5 lenses (TRD-6), TRD Development Workflow with 8 phases (TRD-7), UI/UX Design System (TRD-8), Mac CI Runner Infrastructure (TRD-9), Document Store with FAISS vector retrieval (TRD-10), Security Threat Model with mandatory SEC-* controls (TRD-11), Backend Runtime Startup and Version Handshake (TRD-12), and Recovery/State Management with checkpoint-first architecture (TRD-13). All code must conform to the security controls in TRD-11 (authoritative over all other TRDs), the two-process isolation boundary (Swift never calls LLM APIs, Python never reads Keychain), and the engineering standards in CLAUDE.md and AGENTS.md.\n\nClarifications:\n  - resolve any constraints or undefined issues during the PRD creation.\n  - chose the best naming convention based on best practices\n  - resolve any constraints or undefined issues during the PRD creation.\n  - resolve any constraints or undefined issues during the PRD creation.\n  - resolve any constraints or undefined issues during the PRD creation.\n  - resolve any constraints or undefined issues during the PRD creation.",
+  "created_at": 1774021257.23136,
+  "updated_at": 1774021257.231466,
+  "updated_by": "todd-gould",
+  "prd_plan": [
+    {
+      "prd_id": "PRD-001",
+      "title": "Cross-TRD Architecture Baseline and Canonical Contracts",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-002",
+      "title": "Security Control Framework and Trust Boundary Enforcement",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-003",
+      "title": "Swift macOS Application Shell Foundation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-004",
+      "title": "Authentication, Keychain, and Session Lifecycle",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-005",
+      "title": "Authenticated XPC/Unix-Socket Bridge and Message Protocol",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-006",
+      "title": "Backend Runtime Startup, Health Model, and Graceful Shutdown",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-007",
+      "title": "Version Handshake and Compatibility Enforcement",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-008",
+      "title": "Document Store, Parsing, FAISS Retrieval, and Context Assembly",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-009",
+      "title": "Consensus Engine Core with Parallel Generation and Arbitration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-010",
+      "title": "Build Pipeline State Model, ThreadStateStore, and Stage Framework",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-011",
+      "title": "GitHub Integration Layer and Repository Bootstrap",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-012",
+      "title": "Operator Gate System and Approval Flow",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-013",
+      "title": "ScopeStage and PRDPlanStage for Intent Decomposition",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-014",
+      "title": "PRD Generation and PR Planning Stages",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-015",
+      "title": "Code Generation Stage with Dependency Context and Path Safety",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-016",
+      "title": "Three-Pass Review Stage and Security Review Tooling",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-017",
+      "title": "Local Test Stage, Failure Routing, and CI Gate Stage",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-018",
+      "title": "BuildLedger Multi-Agent Coordination",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-019",
+      "title": "Recovery, Save/Restore, Continue, and Checkpoint-First Architecture",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-020",
+      "title": "Holistic Code Review Workflow",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-021",
+      "title": "TRD Development Workflow",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-022",
+      "title": "Swift UI/UX Design System and Operator Experience",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-023",
+      "title": "Document Import, Preview, and Project Document Management UI",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-024",
+      "title": "Mac CI Runner Infrastructure and Workflow Generation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-025",
+      "title": "Observability, Audit Trail, and Operational Diagnostics",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-026",
+      "title": "End-to-End Integration, Compliance Validation, and Release Readiness",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    }
+  ],
+  "pr_entries": {},
+  "knowledge_notes": [],
+  "version": 1,
+  "schema_version": 3,
+  "agent_version": "38.75.0"
+}
