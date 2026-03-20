@@ -1,135 +1,412 @@
+# Architecture - ConsensusDevAgent
 
+## What This Subsystem Does
 
-# Architecture — Forge Platform
+ConsensusDevAgent is the build-orchestration subsystem for Forge’s native macOS AI coding agent. It owns the end-to-end execution state of a build request after intent intake, including:
 
-## System Overview
+- decomposing a build intent into an ordered PR plan
+- tracking build progress at PRD and PR granularity
+- coordinating multi-provider code generation and arbitration
+- driving review, CI, and operator approval gates
+- persisting and restoring execution state across restarts
+- detecting and resolving divergence between local and GitHub-backed recovery state
 
-Forge is a native macOS AI coding agent that builds software autonomously from technical specifications. The operator provides a repository, a set of Technical Requirements Documents (TRDs), and a plain-language intent. Forge decomposes that intent into an ordered plan, generates implementation and tests using a two-model consensus engine (Claude + GPT-4o with Claude as arbiter), runs a multi-pass review cycle, executes CI, and opens draft pull requests for human review. The operator gates every merge. The agent proceeds to the next unit of work while the operator reads the last one.
+This subsystem is responsible for **stateful build continuation**. In particular:
 
-**Process Architecture:** Two cooperating processes.
+- `/continue` resumes execution from the current thread state
+- `/restore` reloads saved recovery state
+- recovery state may exist in two layers:
+  - local persisted state
+  - GitHub-backed persisted state
+- when restoring without an explicit target, the subsystem compares both layers and detects divergence
 
-| Process | Language | Owns | Communicates via |
-|---------|----------|------|------------------|
-| **Shell** (macOS Application Shell) | Swift 5.9+ / SwiftUI | UI, authentication, biometric gate, Keychain secrets, XPC bridge, auto-update, installation lifecycle | Authenticated Unix domain socket (line-delimited JSON) |
-| **Backend** (Python Engine) | Python 3.12 (bundled) | Consensus engine, provider adapters, pipeline orchestration, document store, code review, GitHub operations, CI integration | Same Unix domain socket (inbound from Shell) |
+Expected `/continue` operator-visible output:
 
-Neither process ever executes generated code. All generated artifacts are committed to branches and validated through CI. The Shell process spawns the Python backend and owns its lifecycle. The Python backend never touches the Keychain, never renders UI, and never authenticates the user.
+```text
+▶ Resuming ConsensusDevAgent — PRD-00X, PR #N: [title]
+```
 
-**Specification Authority:** 12 TRDs in `forge-docs/` are the single source of truth. Every interface, error contract, state machine, security control, and performance requirement is documented there. Code must match TRDs. TRD-11 governs all security-relevant decisions across every subsystem.
+The subsystem does **not** bypass approval gates, auto-merge without operator participation, or execute generated code. It is orchestration and state-management logic, not a sandbox runner or autonomous merge authority.
 
 ---
 
-## Subsystem Map
+## Component Boundaries
 
-### 1. macOS Application Shell (TRD-1)
+### Owned by ConsensusDevAgent
 
-**What it does:** Packages the entire product as a signed `.app` bundle (Developer ID). Manages drag-to-Applications installation, Sparkle-based auto-update, biometric authentication (Touch ID / Apple Watch), Keychain-based secret storage, session lifecycle, and the Swift module architecture. Owns the SwiftUI view hierarchy, the application state machine, and the XPC bridge that connects to the Python backend. Spawns, monitors, and terminates the Python process.
+The subsystem owns:
 
-**What it enforces:**
-- Biometric gate must complete before any backend communication occurs. Gate re-challenges on foreground return after timeout.
-- All credentials (API keys, GitHub tokens) are stored exclusively in the macOS Keychain, never in files, environment variables, or user defaults.
-- The Unix domain socket is authenticated: the Shell writes a per-session HMAC token into the socket handshake; the Python process must echo it back.
-- Concurrency model is Swift structured concurrency (`async`/`await`, actors). No Combine, no Grand Central Dispatch queues for business logic.
-- Minimum deployment target: macOS 13.0 (Ventura).
+- build execution state for the current thread/session
+- PRD-to-PR planning progress
+- completed PR tracking
+- recovery state serialization/deserialization
+- divergence detection between local and GitHub recovery layers
+- restore conflict prompting and operator selection handling
+- build-stage dispatch orchestration through the pipeline
+- emission of protocol messages representing progress and gates
 
-### 2. Consensus Engine (TRD-2)
+Primary implementation surfaces from repository structure:
 
-**What it does:** The intelligence core. Takes a generation request (prompt + context), fans it out to two LLM providers (Claude as primary, GPT-4o as secondary) in parallel via provider adapters, collects both responses, and runs a Claude-arbitrated consensus pass that selects, merges, or rejects the outputs. Returns a single canonical result with provenance metadata (which provider contributed what, confidence score, arbitration rationale).
+- `src/build_director.py`
+  - `BuildPipeline` orchestration
+  - stage dispatch
+- `src/build_ledger.py`
+  - `BuildLedger`
+  - durable tracking of build state/progress
+- `src/consensus.py`
+  - `ConsensusEngine`
+  - provider arbitration and generation coordination
+- `src/github_tools.py`
+  - `GitHubTool`
+  - all GitHub interactions used by this subsystem
 
-**What it enforces:**
-- Every generation passes through consensus. There is no single-model fast path in production.
-- Claude is always the arbiter. GPT-4o never arbitrates.
-- Context injection from the Document Store (`auto_context()`) is called per generation request — the engine never generates without retrieving relevant specification context.
-- Provider adapter failures are isolated: if one provider fails, the engine degrades to single-provider mode with a degradation flag on the result. It does not silently pretend consensus occurred.
-- Token budgets and rate limits are enforced per provider adapter, not globally.
+### Explicitly not owned by ConsensusDevAgent
 
-### 3. Pipeline Engine (TRD-3)
+This subsystem does **not** own:
 
-**What it does:** Orchestrates the end-to-end build pipeline: intent decomposition → PRD plan → PR sequence → per-PR generation → 3-pass review → CI execution → draft PR. Manages stage transitions, checkpointing, retry logic, and operator gates. Each stage produces a `StageResult` that determines whether the pipeline advances, retries, or stops.
+- direct GitHub API usage outside `GitHubTool`
+- arbitrary filesystem writes without path validation
+- execution of generated source code, tests, or scripts via eval/exec/subprocess of model output
+- authentication, credential issuance, or identity policy
+- operator intent approval semantics beyond presenting gates and waiting
+- document-store embedding implementation details
+- transport-level XPC parsing rules beyond consuming valid protocol messages
 
-**What it enforces:**
-- Pipeline stages execute in strict sequence. No stage may be skipped.
-- Operator gates are blocking: the pipeline halts and waits for explicit human approval (`"yes"` / `"approve"`) or rejection (`"no"` / `"stop"`). The agent never auto-answers a gate.
-- Checkpointing occurs after every stage completion. On crash recovery: if mid-PR, retry from scratch; if between PRs, start the next PR; if between PRDs, start the next PRD.
-- Document filter (`doc_filter`) is applied at Stage 1 and Stage 5 to scope which specifications are relevant to the current unit of work.
-- Stage 1 (decomposition) and Stage 5 (review) both pull context from the Document Store (TRD-10).
+### External interaction boundaries
 
-### 4. XPC Bridge / IPC Protocol (TRD-1 §XPC, TRD-4)
+#### UI / transport boundary
+ConsensusDevAgent emits structured cards over Forge’s XPC protocol:
 
-**What it does:** Provides the bidirectional communication channel between the Swift shell and the Python backend. Implemented as an authenticated Unix domain socket using line-delimited JSON messages. Each message has a type discriminator, a correlation ID, and a payload. The Swift side is implemented in `ForgeAgent/XPCBridge.swift`; the Python side connects as a client after the Shell spawns it and passes the socket path and session token.
+- `build_card`
+  - streamed progress/status updates to `BuildStreamView`
+- `gate_card`
+  - blocking operator decision requests
 
-**What it enforces:**
-- Every message must include a valid session HMAC token. Messages without valid tokens are dropped and logged.
-- Message schema is strictly typed on both sides. Unknown message types are rejected, not ignored.
-- Progress messages flow from Python → Swift for UI updates (stage transitions, generation progress, CI status).
-- Credential delivery flows from Swift → Python: API keys are sent over the socket on demand, never written to disk or environment variables.
-- Deadlock in the credential delivery path is treated as a fatal error (TRD-11 concern).
+It also consumes operator responses and thread commands such as `/continue` and `/restore`.
 
-### 5. GitHub Operations (TRD-5)
+#### GitHub boundary
+All GitHub operations must go through `GitHubTool`. Direct GitHub API calls are forbidden.
 
-**What it does:** Manages all interactions with GitHub: repository cloning, branch creation, commit authoring, push, pull request creation (draft mode), PR status polling, and merge-after-approval. Handles OAuth token lifecycle and repository permissions validation.
+This includes:
 
-**What it enforces:**
-- One PR per logical unit of work. The agent never creates monolithic PRs spanning multiple concerns.
-- All PRs are opened as drafts. The operator must explicitly promote and merge.
-- Commit messages follow a structured format: `"forge-agent[{engineer_id}]: {message}"` for PR-scoped commits, and `"forge-agent: {message}"` for bootstrap operations.
-- Branch naming is deterministic and collision-resistant: `{product_slug}-{YYYY-MM-DD}` prefix.
-- GitHub tokens are received from the Shell over the XPC bridge, never read from disk.
+- persisted recovery state synchronization
+- PR metadata reads/writes
+- polling and webhook-driven coordination as implemented by platform components
 
-### 6. Code Review Engine (TRD-6)
+#### Filesystem boundary
+All writes performed by this subsystem must be validated via:
 
-**What it does:** Runs a 3-pass automated review cycle on every generated PR before it reaches the operator. Pass 1: structural lint and formatting. Pass 2: semantic review against the relevant TRD specification (context from TRD-10). Pass 3: security-focused review against TRD-11 controls. Each pass produces findings with severity, location, and suggested fixes. Critical findings block PR creation.
+- `path_security.validate_write_path()`
 
-**What it enforces:**
-- All three review passes must complete before a PR is opened. No pass may be skipped.
-- Review context is injected from the Document Store (TRD-10) — the reviewer always has the specification available.
-- Security review (Pass 3) is mandatory and cannot be disabled by configuration.
-- Findings are attached to the PR as structured metadata, not just inline comments.
+No write occurs before path validation succeeds.
 
-### 7. PRD Planner / Intent Decomposition (TRD-7)
+---
 
-**What it does:** Takes the operator's plain-language intent and the loaded TRDs, decomposes the intent into an ordered sequence of PRDs (Product Requirement Documents), then decomposes each PRD into an ordered sequence of PRs. Manages the planning conversation with the operator, including scope adjustment, file/directory exclusions, and TRD boundary management (add, remove, merge, split, transfer ownership).
+## Data Flow
 
-**What it enforces:**
-- `PRODUCT_CONTEXT` is auto-loaded from the Document Store at planning start.
-- The operator can adjust scope at any point during planning: `"adjust scope"`, `"exclude files"`, `"select lenses"`.
-- TRD boundary operations are explicit and operator-confirmed: `"add a TRD for X"`, `"merge TRD-2 and TRD-3"`, `"split TRD-3 into auth and RBAC"`, `"move X from TRD-2 to TRD-3"`, `"remove TRD-5"`.
-- Each decomposition step requires operator approval before proceeding. The planner never silently commits to a plan.
-- Estimated sections are tracked per TRD: `"TRD-4 needs a section on caching" — add section to estimated_sections`.
+### 1. Build resume flow (`/continue`)
 
-### 8. SwiftUI Interface Layer (TRD-8)
+1. Operator issues `/continue`.
+2. ConsensusDevAgent loads current thread-associated execution state.
+3. The subsystem reconstructs the current build position:
+   - active PRD
+   - active PR number
+   - active PR title/stage
+4. It emits the resume banner:
 
-**What it does:** Renders the operator-facing UI: project cards, pipeline progress panels, stage detail views, gate prompts, review findings display, and settings. Implemented entirely in SwiftUI with the Shell's state machine driving view transitions.
+   ```text
+   ▶ Resuming ConsensusDevAgent — PRD-00X, PR #N: [title]
+   ```
 
-**What it enforces:**
-- UI is read-only with respect to backend state: all mutations flow through the Shell's state machine and XPC bridge. Views never directly call Python.
-- Gate prompts are modal and blocking. The UI does not allow the operator to navigate away from an active gate without responding.
-- Progress updates arrive via XPC messages and are rendered reactively.
-- The UI never displays raw LLM output without the consensus provenance metadata.
+5. Control returns to the orchestration pipeline in `BuildPipeline`.
+6. Progress updates are streamed via `build_card`.
+7. If the next step requires human approval, a `gate_card` is emitted and execution blocks indefinitely until the operator responds.
 
-### 9. Security Model (TRD-11)
+### 2. Recovery restore flow (`/restore` without target)
 
-**What it does:** Cross-cutting security specification that governs all subsystems. Defines threat model, trust boundaries, credential lifecycle, input sanitization, output validation, injection detection, and CI security controls.
+1. The subsystem loads both recovery layers:
+   - local saved state
+   - GitHub saved state
+2. It compares the two representations field-by-field.
+3. If both agree:
+   - restore proceeds silently
+   - emit a single confirmation
+4. If they diverge:
+   - emit a conflict summary showing both states
+   - list conflicting fields
+   - prompt the operator:
 
-**What it enforces:**
-- **Credentials:** Keychain-only storage. No files, no environment variables, no hardcoded secrets. Delivery over authenticated XPC socket only.
-- **Generated code:** Never executed by the agent. All generated artifacts go to branches and are validated through CI in isolated environments.
-- **Injection detection:** All external content (TRDs, repository files, LLM responses) is scanned for prompt injection patterns. Detected injections are flagged: `"[NOTE: this chunk triggered injection pattern detection]"`.
-- **Trust boundaries:** The Shell trusts the Keychain and biometric subsystem. The Python backend trusts the Shell's authenticated socket. Neither trusts LLM output — it is always validated, never eval'd.
-- **CI isolation:** CI workflows run in ephemeral environments. Generated code is sandboxed. CI credentials are scoped to the minimum required permissions.
-- **Session lifecycle:** Biometric session expires on timeout, on sleep, and on app background. Re-authentication is required before the backend receives any further credentials.
+   ```text
+   Which to restore? (local / github / cancel)
+   ```
 
-### 10. Document Store and Retrieval Engine (TRD-10)
+5. Resolution handling:
+   - `local`
+     - restore local state
+     - update GitHub layer to match local
+   - `github`
+     - restore GitHub state
+     - update local layer to match GitHub
+   - `cancel`
+     - modify neither layer
+     - return to prompt
 
-**What it does:** Ingests, indexes, and retrieves specification documents (TRDs, PRDs, README, supporting docs). Builds a vector index (FAISS) using embeddings for semantic retrieval. Provides `auto_context()` — the function called by the Consensus Engine on every generation request to inject relevant specification fragments into the LLM prompt.
+Example divergence payload semantics:
 
-**What it enforces:**
-- Storage location: `~/Library/Application Support/ForgeAgent/cache/{project_id}/`.
-- Embedding model changes require re-embedding all documents. The index stores the model version and invalidates on mismatch.
-- FAISS indices are kept in memory once loaded (indices are small enough). No explicit unload.
-- Retrieved chunks are scanned for injection patterns before inclusion in prompts (TRD-11).
-- The Document Store is the single source of specification context for generation (TRD-2), review (TRD-6), planning (TRD-7), and pipeline filtering (TRD-3).
+- local summary: current subsystem name, PRD identifier, completed PR count
+- saved timestamp and relative age
+- GitHub summary: same shape
+- conflict fields explicitly enumerated, e.g.:
+  - `completed_prs`
+  - `pr_plans_by_prd`
 
-### 11. CI Integration (TRD-9 / forge-ci.yml, forge-ci-macos.yml)
+### 3. Non-interactive restore behavior
 
-**What it does:** Defines and executes continuous integration workflows for both the Python backend and the macOS Shell. Python CI (`forge-ci.yml`: `"Forge CI — Python / test"
+The TRD defines auto-resolution for non-interactive mode. In this subsystem, that means divergence logic must support a non-interactive decision path rather than assuming an interactive gate is always available.
+
+However, Forge-wide invariants still apply:
+
+- no silent failure paths
+- errors must surface with context
+- gate semantics may not be bypassed when operator approval is required
+
+Where non-interactive restore is supported, the resolution policy must be explicit, logged, and deterministic. It must never silently discard one layer without an auditable decision rule.
+
+### 4. Generation and review orchestration flow
+
+1. Build intent and contextual documents are supplied to generation components.
+2. `ConsensusEngine` coordinates two LLM providers in parallel.
+3. Claude arbitrates provider output.
+4. Generated implementation and tests move through a 3-pass review cycle.
+5. CI is executed by the platform pipeline.
+6. Merge or progression actions are blocked on operator gates.
+
+ConsensusDevAgent tracks the state transitions across these phases but must not execute generated code directly.
+
+### 5. State persistence flow
+
+1. Build progress is recorded in durable state via `BuildLedger`.
+2. Relevant progress may also be mirrored to GitHub-backed state.
+3. On restart or restore:
+   - local state is read
+   - GitHub state is read
+   - divergence detection is performed when required
+4. Selected restored state becomes the authoritative in-memory execution state.
+
+---
+
+## Key Invariants
+
+These are hard requirements for this subsystem.
+
+### Security and trust
+
+- Fail closed on auth, crypto, and identity errors; never degrade silently.
+- No silent failure paths; every error must surface with context.
+- Secrets never appear in logs, error messages, or generated code.
+- All external input is untrusted and must be validated:
+  - documents
+  - PR comments
+  - CI output
+  - GitHub-originated state
+- Generated code is never executed by the agent.
+- `SECURITY_REFUSAL` is terminal within the flow:
+  - do not retry
+  - do not rephrase
+  - emit error card
+  - gate
+  - log full prompt context safely without exposing secrets
+  - require explicit operator override
+
+### Human-in-the-loop gating
+
+- Gates never auto-resolve.
+- Gates wait indefinitely for operator input.
+- No auto-approve ever.
+- If backend restarts mid-gate, gate state is lost and the operator must re-approve.
+- There is no undo on gate decisions; this must remain explicit in operator-facing semantics.
+
+### Recovery correctness
+
+- Restore without target must compare both recovery layers.
+- Divergence must be surfaced explicitly, including conflicting fields.
+- `cancel` must leave both layers unchanged.
+- Selecting one layer makes it authoritative and synchronizes the other layer to match.
+- State reconciliation must be deterministic and auditable.
+
+### API and filesystem discipline
+
+- All GitHub operations go through `GitHubTool`; never use the GitHub API directly.
+- All file writes are path-validated via `path_security.validate_write_path()` before execution.
+- Blind GitHub writes are forbidden; writes must honor SHA/consistency protections.
+- XPC unknown message types are discarded and logged, never raised as exceptions.
+
+### Prompt/context handling
+
+- Context from external documents goes in the USER prompt, never the SYSTEM prompt.
+- Credentials must never appear in prompts.
+- Credential material must never appear in logs.
+
+### Retry and backoff constraints
+
+- Never retry indefinitely; maximum 3 attempts total.
+- In `_claude_json`: retry after 10s, then fall back to OpenAI.
+- In `consensus.py`: retry with the other provider.
+- GitHub/API throttling behavior:
+  - `403` primary rate limit: exponential backoff starting at 60s
+  - `429` secondary rate limit: respect `Retry-After` exactly
+- ETag caching is required on polling endpoints.
+
+---
+
+## Failure Modes
+
+### Recovery-state divergence
+
+**Condition**
+- local and GitHub recovery layers disagree on one or more tracked fields
+
+**Detection**
+- field-by-field comparison during `/restore` without explicit target
+
+**Required behavior**
+- display both state summaries
+- enumerate conflicting fields
+- request operator choice unless a defined non-interactive policy applies
+
+**Forbidden behavior**
+- silently choosing one layer
+- partially merging fields without a defined reconciliation rule
+
+### Missing or corrupt local state
+
+**Condition**
+- local state file unreadable, missing, malformed, or fails validation
+
+**Required behavior**
+- surface explicit error context
+- if GitHub state is available, permit explicit restore from GitHub path
+- do not fabricate progress state
+
+### Missing or inconsistent GitHub-backed state
+
+**Condition**
+- GitHub persistence unavailable, malformed, stale, or rejected by API constraints
+
+**Required behavior**
+- surface error context
+- fail closed on auth/identity failures
+- do not silently ignore synchronization failure when authoritative state should be mirrored
+
+### Mid-gate restart
+
+**Condition**
+- backend process restarts while waiting on operator gate
+
+**Effect**
+- gate state is lost
+
+**Required behavior**
+- operator must re-approve
+- subsystem must not infer prior approval from partially persisted execution state
+
+### Provider failure during generation
+
+**Condition**
+- one provider errors, times out, or returns unusable output
+
+**Required behavior**
+- bounded retry/fallback according to policy
+- arbitration proceeds only with valid provider outputs under consensus rules
+- surface terminal failure if retries are exhausted
+
+### Security refusal from model layer
+
+**Condition**
+- model returns `SECURITY_REFUSAL`
+
+**Required behavior**
+- stop immediately
+- do not retry or rephrase
+- emit error card
+- gate for operator action
+- log context safely
+
+### Rate limiting and transport degradation
+
+**Condition**
+- GitHub or provider APIs return `403`/`429`, or polling endpoints become stale
+
+**Required behavior**
+- apply specified backoff/retry discipline
+- respect `Retry-After`
+- use ETag caching
+- surface delays or terminal exhaustion explicitly
+
+### Unknown XPC messages
+
+**Condition**
+- transport receives unknown message type
+
+**Required behavior**
+- discard and log
+- do not raise exception into build orchestration flow
+
+### Path validation failure
+
+**Condition**
+- attempted filesystem write fails `validate_write_path()`
+
+**Required behavior**
+- abort write
+- surface explicit error
+- never continue with unvalidated path writes
+
+---
+
+## Dependencies
+
+### Internal code dependencies
+
+- `src/build_director.py`
+  - `BuildPipeline` stage orchestration and dispatch
+- `src/build_ledger.py`
+  - `BuildLedger` for durable build-state tracking
+- `src/consensus.py`
+  - `ConsensusEngine`
+  - generation coordination
+  - provider fallback behavior
+- `src/github_tools.py`
+  - `GitHubTool`
+  - required abstraction for all GitHub operations
+
+### Platform protocol dependencies
+
+ConsensusDevAgent depends on Forge XPC protocol contracts, including:
+
+- line-delimited JSON wire format
+- nonce authentication
+- max 16MB message size
+- `ready` message
+- `build_card`
+- `gate_card`
+- `credentials`
+- `doc_status`
+
+This subsystem assumes protocol-valid inputs and must tolerate unknown message types by discarding and logging them.
+
+### External service dependencies
+
+- LLM providers used in parallel generation and arbitration flow
+- GitHub for PR state and GitHub-backed recovery persistence
+- CI systems as downstream execution signals consumed by orchestration
+
+### Security/runtime dependencies
+
+- `path_security.validate_write_path()` for every file write
+- platform auth/identity mechanisms, which must fail closed
+- logging/error infrastructure that preserves context without exposing secrets
+
+### Documentary/context dependencies
+
+ConsensusDevAgent may consume external repository and product documents for generation context, but all such content is treated as untrusted input and must be placed in the USER prompt only, never the SYSTEM prompt.
