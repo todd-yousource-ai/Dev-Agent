@@ -1,144 +1,175 @@
 docs/CONFLICT_RESOLUTION.md:
-
 # Cross-TRD Conflict Resolution Hierarchy
 
-**Document Status:** Canonical Source of Truth -- Normative  
-**Version:** 1.0  
-**Author:** ConsensusDevAgent / YouSource.ai  
-**Date:** 2026-03-20  
-**Authority:** PRD-001 (Product Foundation, Repository Bootstrap, and Cross-TRD Contract Baseline)  
-**Scope:** All 16 TRDs governing the Consensus Dev Agent platform  
+**Canonical Source of Truth for Forge Platform Ambiguity Resolutions**
+
+| Field          | Value                                                        |
+|----------------|--------------------------------------------------------------|
+| Document       | Cross-TRD Conflict Resolution Hierarchy                      |
+| Version        | 1.0                                                          |
+| Status         | Active -- Binding on all implementation work                  |
+| Authority      | PRD-001 (Product Foundation, Repository Bootstrap)           |
+| Author         | Forge ConsensusDevAgent / YouSource.ai                       |
+| Date           | 2026-03-20                                                   |
+| Scope          | All 16 TRDs (TRD-1 through TRD-16)                          |
+| Quick Ref      | `forge-standards/decision-precedence.md`                     |
 
 ---
 
-## Purpose
+## 1. Purpose
 
-This document is the **single authoritative source** for resolving conflicts, ambiguities, and overlapping concerns across the 16 Technical Requirements Documents (TRDs) that govern the Forge platform. When two or more TRDs specify contradictory behavior, this document determines which specification prevails.
+This document is the **single, authoritative source of truth** for resolving conflicts, overlaps, and ambiguities across the 16 Technical Requirements Documents (TRDs) that govern the Forge platform. When two or more TRDs make contradictory or ambiguous claims about the same behavior, this document specifies which claim prevails and why.
 
-**All implementers, reviewers, and AI agents MUST consult this document when a cross-TRD ambiguity is encountered.** Guessing or inferring precedence without reference to this document is a process violation.
+**Normative language:** The keywords "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", and "MAY" in this document follow RFC 2119 semantics.
+
+All implementers -- human and AI agent alike -- MUST consult this document when encountering cross-TRD ambiguity. Guessing is never acceptable; if ambiguity is not addressed here, the Amendment Process (§7) MUST be followed before implementation proceeds.
 
 ---
 
-## Precedence Hierarchy
+## 2. Precedence Hierarchy
 
-The Forge platform enforces a strict 4-tier precedence hierarchy. When specifications conflict, the higher tier wins unconditionally within its defined scope.
+The Forge platform resolves cross-TRD conflicts using a strict 4-tier hierarchy. Higher tiers override lower tiers unconditionally within their defined scope.
 
 ### Tier 1 -- Security Override (TRD-11)
 
-**TRD-11 (Security Architecture) overrides ALL other TRDs on any matter classified as security-relevant** per the Security Conflict Classification criteria defined below.
+**TRD-11 (Security Architecture) overrides ALL other TRDs on any security-relevant matter.**
 
-- No exceptions. No escalation path bypasses this tier.
-- If TRD-11 specifies a behavior and another TRD contradicts it on a security matter, TRD-11 wins.
-- This tier applies **only** to security matters. TRD-11 does not override non-security domain decisions. See [Security Conflict Classification](#security-conflict-classification) for scoping criteria.
+- This is the highest authority in the system.
+- When a conflict involves a security concern (as defined in §3 Security Conflict Classification), TRD-11 prevails without exception.
+- No other TRD, standard, or best practice may weaken, defer, or override a TRD-11 security requirement.
+- Scope limitation: TRD-11 authority applies **only** to security matters as classified in §3. It does NOT have general override authority for non-security concerns (e.g., UI layout, build timing, formatting preferences).
 
 ### Tier 2 -- Domain Authority (Owning TRD)
 
-Each TRD has a designated **primary domain**. Within that domain, the owning TRD is authoritative.
+**The TRD that owns a specific domain is authoritative for behavior within that domain.**
 
-- If TRD-3 defines build pipeline stage ordering and TRD-14 references a different ordering, TRD-3 governs (because pipeline stages are TRD-3's primary domain).
-- Domain ownership is defined in the [Domain Ownership Map](#domain-ownership-map) below.
-- Cross-cutting concerns (where two TRDs have legitimate domain claims) are resolved by explicit entries in the [Resolved Conflicts](#resolved-conflicts) table.
+- Each TRD has a defined primary domain (see §4 Domain Ownership Map).
+- When a conflict falls within a single TRD's primary domain and is NOT security-related, that TRD's specification prevails.
+- When two TRDs have equal domain claims, escalate to Tier 3.
 
 ### Tier 3 -- Standards Tiebreak (AGENTS.md, CLAUDE.md)
 
-When two TRDs have **equal domain claim** over a matter and no explicit resolution exists in this document:
+**Project-wide standards documents break ties when two TRDs have equal domain claims on a non-security matter.**
 
-- AGENTS.md and CLAUDE.md serve as the tiebreaker.
-- If these standards documents address the matter, their guidance prevails.
-- If AGENTS.md and CLAUDE.md conflict with each other, AGENTS.md wins (it is the platform-level standard; CLAUDE.md is provider-specific).
+- AGENTS.md and CLAUDE.md define cross-cutting conventions for the Forge project.
+- If these standards address the conflict, their guidance prevails.
+- If they do not address it, escalate to Tier 4.
 
 ### Tier 4 -- Best-Practice Default
 
-When no TRD, no standards document, and no conflict resolution entry addresses a question:
+**When no TRD and no standard document addresses a question, industry best practices apply.**
 
-- Industry best practices apply.
-- The chosen practice MUST be documented with rationale in the implementing PR.
-- A follow-up amendment to this document SHOULD be filed to canonicalize the decision.
-- For security-adjacent matters at this tier, the **fail-closed** principle applies: choose the more restrictive option.
+- The chosen best practice MUST be documented with rationale in the resolution record.
+- A follow-on action SHOULD be filed to formally incorporate the resolution into the appropriate TRD.
+- Best-practice defaults MUST NOT weaken any existing security posture -- when in doubt, fail closed.
 
-### Tier Summary
+### Tier Application Summary
 
-| Tier | Source | Scope | Override Power |
-|------|--------|-------|----------------|
-| 1 | TRD-11 (Security Architecture) | Security-relevant matters only | Absolute -- overrides all TRDs |
-| 2 | Owning TRD | Primary domain of that TRD | Authoritative within domain |
-| 3 | AGENTS.md, CLAUDE.md | Tiebreaker for equal domain claims | Advisory, normative on ties |
-| 4 | Industry best practice | Unaddressed questions | Default -- must document rationale |
+```
+┌─────────────────────────────────────────────────┐
+│  TIER 1: TRD-11 Security Override               │
+│  Scope: Security matters ONLY (see §3)          │
+│  Authority: Absolute, no exceptions              │
+├─────────────────────────────────────────────────┤
+│  TIER 2: Domain Authority (Owning TRD)          │
+│  Scope: Non-security matters within one domain  │
+│  Authority: Owning TRD prevails in its domain   │
+├─────────────────────────────────────────────────┤
+│  TIER 3: Standards Tiebreak                     │
+│  Scope: Equal-claim ties between TRDs           │
+│  Authority: AGENTS.md / CLAUDE.md               │
+├─────────────────────────────────────────────────┤
+│  TIER 4: Best-Practice Default                  │
+│  Scope: Unaddressed questions                   │
+│  Authority: Industry norms + documented reason  │
+└─────────────────────────────────────────────────┘
+```
 
 ---
 
-## Security Conflict Classification
+## 3. Security Conflict Classification
 
-TRD-11's Tier 1 override is powerful and must be scoped precisely. The following criteria determine whether a conflict is **security-relevant** (and thus governed by Tier 1) or **non-security** (governed by Tier 2+).
+To prevent both **under-application** (missing a genuine security concern) and **over-application** (invoking TRD-11 override for non-security matters), the following classification criteria MUST be applied.
 
-### A conflict is security-relevant if it involves ANY of the following
+### 3.1 A Conflict Is Security-Related If It Involves Any Of
 
 | # | Criterion | Examples |
 |---|-----------|----------|
-| S1 | **Secrets or credentials** -- storage, transmission, rotation, or lifecycle of any secret material | API keys, tokens, passwords, signing keys, Keychain entries |
-| S2 | **Authentication or authorization flows** -- how identity is verified or access is granted/denied | OAuth flows, token validation, session management, identity binding |
-| S3 | **Cryptographic operations** -- selection of algorithms, key sizes, modes, or certificate handling | TLS configuration, hashing algorithms, encryption at rest |
-| S4 | **Access control boundaries** -- what subjects can access what resources under what conditions | Sandbox permissions, file system access, XPC entitlements, IPC authorization |
-| S5 | **Data protection and privacy** -- handling of sensitive user/operator data, PII, or audit-sensitive information | Log redaction, data classification, retention policies |
-| S6 | **Keychain and secure storage access** -- any interaction with macOS Keychain or equivalent secure enclaves | Keychain item creation, retrieval, ACL configuration |
-| S7 | **Input validation for security boundaries** -- validation that prevents injection, path traversal, or privilege escalation | Path validation, command injection prevention, XPC message validation |
-| S8 | **Audit and security logging** -- log entries required for security forensics or compliance | Authentication events, access denied events, secret rotation events |
-| S9 | **Fail-closed behavior** -- whether a system fails open or closed on error | Auth failure handling, crypto error handling, identity verification failure |
+| S1 | **Secrets or credentials** -- generation, storage, transmission, rotation, or destruction of secrets | API keys, Keychain entries, tokens, private keys |
+| S2 | **Authentication or authorization flows** -- verifying identity or granting access | OAuth token validation, session management, permission checks |
+| S3 | **Cryptographic operations** -- encryption, decryption, signing, verification, hashing for integrity | TLS configuration, code signing, hash verification |
+| S4 | **Access control** -- determining who or what may access a resource | File permissions, XPC entitlements, IPC authorization |
+| S5 | **Data protection** -- confidentiality, integrity, or availability of sensitive data | PII handling, audit log tamper-resistance, secure deletion |
+| S6 | **Keychain access** -- any interaction with the macOS Keychain or equivalent secure storage | Reading/writing Keychain items, Keychain ACLs |
+| S7 | **Security logging and audit** -- requirements for security-relevant event logging | Auth failure logging, intrusion detection signals |
+| S8 | **Fail-closed behavior** -- whether a component fails open or closed on error | Auth errors, crypto verification failures |
+| S9 | **Input validation for injection prevention** -- validation specifically to prevent security exploits | Path traversal prevention, command injection |
 
-### A conflict is NOT security-relevant if
+### 3.2 A Conflict Is NOT Security-Related If It Involves Only
 
-- It concerns **performance tuning** (timeouts, intervals, batch sizes) with no security implications.
-- It concerns **code style or formatting** conventions.
-- It concerns **UI/UX behavior** that does not affect access control or data protection.
-- It concerns **build ordering or CI stage sequencing** that does not affect security gate enforcement.
-- It concerns **logging verbosity** for non-security-sensitive operational data.
+| # | Criterion | Examples |
+|---|-----------|----------|
+| N1 | **Performance tuning** -- timeout values, retry counts, batch sizes with no security implications | UI refresh interval, build cache TTL |
+| N2 | **Code style or formatting** -- cosmetic code standards | Line length, import ordering, naming style |
+| N3 | **UI/UX behavior** -- visual presentation, layout, user workflow | Window size, menu placement, status bar format |
+| N4 | **Build optimization** -- CI speed, caching strategy, parallelism | Build concurrency limits, test sharding |
+| N5 | **Feature scope** -- what functionality a TRD includes or excludes | Whether TRD-7 covers documentation generation |
 
-### Edge Cases
+### 3.3 Gray Zone Resolution
 
-When a conflict has **both security and non-security dimensions**, decompose it:
+When a conflict could reasonably be classified either way:
 
-1. The security dimension is governed by Tier 1 (TRD-11).
-2. The non-security dimension is governed by Tier 2 (owning TRD).
-3. If the dimensions cannot be cleanly separated, Tier 1 governs the entire conflict. **When in doubt, classify as security-relevant.** This is fail-closed reasoning applied to classification itself.
+1. Apply the **Forge invariant**: "Fail closed on auth, crypto, and identity errors -- never degrade silently."
+2. If the conflict's resolution could create a path where a security check is weakened, bypassed, or degraded, classify it as **security-related**.
+3. Document the classification reasoning in the resolution's Rationale field.
+4. When genuinely uncertain, treat it as security-related and gate on operator review.
 
-### Over-Application Prevention
+### 3.4 Classification Anti-Patterns
 
-To prevent TRD-11 from being invoked as a blanket override for non-security matters:
+The following uses of TRD-11 override are **prohibited**:
 
-- Every Tier 1 invocation MUST cite **at least one specific criterion** (S1-S9) from the table above.
-- A Tier 1 invocation that cannot cite a specific criterion is invalid and defaults to Tier 2.
-- The amendment process (below) is available to add new security criteria if a genuine gap is found.
-
----
-
-## Domain Ownership Map
-
-Each TRD has a **primary domain** (its authoritative scope) and may have **cross-cutting concerns** (areas where it touches another TRD's domain and defers to it, or where explicit conflict resolutions apply).
-
-| TRD | Title | Primary Domain | Cross-Cutting Concerns |
-|-----|-------|---------------|----------------------|
-| TRD-1 | macOS Application Shell | Application lifecycle, XPC transport, native UI shell, Keychain integration | Security (defers to TRD-11), Health monitoring (defers to TRD-12), IPC error semantics (see CR-010) |
-| TRD-2 | Consensus Engine | LLM orchestration, dual-provider consensus, arbitration, response synthesis | Retry policies (see CR-008), IPC error codes (see CR-010), Build pipeline integration (defers to TRD-3) |
-| TRD-3 | Build Pipeline | CI/CD pipeline stages, build ordering, stage gates, artifact management | Code quality enforcement (see CR-002), Retry policies (see CR-008), Testing (defers to TRD-16) |
-| TRD-4 | Multi-Agent Coordination | Agent task assignment, conflict detection, coordination protocol, ledger writes | State management (defers to TRD-13), Security (defers to TRD-11) |
-| TRD-5 | GitHub Integration | GitHub API interactions, PR lifecycle, branch management, webhook handling | Build triggering (defers to TRD-3), Security for token handling (defers to TRD-11) |
-| TRD-6 | Holistic Code Review | Code review orchestration, review pass structure, review criteria | Code quality thresholds (defers to TRD-14), Consensus generation (defers to TRD-2) |
-| TRD-7 | TRD Development Workflow | TRD authoring, versioning, review, and publishing lifecycle | Document storage (defers to TRD-10), GitHub workflow (defers to TRD-5) |
-| TRD-8 | LLM Provider Abstraction | Provider interface contracts, model selection, token management, rate limiting | Security for API keys (defers to TRD-11), Consensus (defers to TRD-2) |
-| TRD-9 | Prompt Engineering | Prompt templates, context assembly, system/user prompt separation, prompt security | Security for prompt injection prevention (defers to TRD-11), LLM providers (defers to TRD-8) |
-| TRD-10 | Document Store | Document ingestion, indexing, retrieval, embedding management | Security for document classification (defers to TRD-11), TRD workflow (defers to TRD-7) |
-| TRD-11 | Security Architecture | Authentication, authorization, secrets management, crypto, Keychain ACLs, audit logging, input validation, sandboxing | **Cross-cutting authority on all security matters across all TRDs (Tier 1)** |
-| TRD-12 | Health & Diagnostics | Health checks, system metrics, diagnostic logging, alerting, startup probes | Startup lifecycle (see CR-001, CR-007), Logging levels (see CR-005) |
-| TRD-13 | Recovery & State Management | Crash recovery, state persistence, checkpoint/restore, session management | Build pipeline state (defers to TRD-3), Multi-agent state (defers to TRD-4) |
-| TRD-14 | Code Quality & CI Pipeline | Quality gates, linting, static analysis, coverage thresholds, formatting | Build pipeline integration (see CR-002), Testing (defers to TRD-16) |
-| TRD-15 | Runbook & Operations | Operational procedures, incident response, deployment checklists | Health diagnostics (defers to TRD-12), Recovery (defers to TRD-13) |
-| TRD-16 | Agent Testing & Validation | Test strategy, test harness, validation criteria, test execution | Build pipeline integration (defers to TRD-3), Code quality (defers to TRD-14) |
+- Invoking TRD-11 to win a timeout value dispute that has no security dimension.
+- Claiming "everything is security" to avoid domain authority analysis.
+- Using TRD-11 to override code quality thresholds that do not affect security posture.
+- Applying TRD-11 to UI/UX decisions unless the UI directly handles secrets or auth flows.
 
 ---
 
-## Resolved Conflicts
+## 4. Domain Ownership Map
 
-Each conflict resolution follows a structured format. All resolutions are **normative** -- implementers MUST follow them.
+Each TRD owns a primary domain. Within that domain, the owning TRD is authoritative (Tier 2). Cross-cutting concerns are listed where a TRD has legitimate interest in another domain's decisions.
+
+| TRD | Name | Primary Domain | Cross-Cutting Concerns |
+|-----|------|---------------|----------------------|
+| TRD-1 | macOS Application Shell | Native app lifecycle, XPC transport, Keychain integration, window management | IPC protocol definitions, startup/shutdown sequences, auth token storage |
+| TRD-2 | Consensus Engine | LLM orchestration, dual-provider consensus, arbitration, response generation | Retry policies for LLM calls, output format requirements |
+| TRD-3 | Build Pipeline | CI/CD stage execution, build ordering, stage gates, artifact management | Code quality gate invocation, retry on CI failure, test execution triggers |
+| TRD-4 | Multi-Agent Coordination | Agent task assignment, conflict detection, ledger writes, work distribution | File locking, merge conflict prevention, parallel execution limits |
+| TRD-5 | GitHub Integration | GitHub API operations, PR management, branch management, webhook handling | Repository authentication, rate limiting, file read/write via API |
+| TRD-6 | Holistic Code Review | Code review orchestration, review criteria, review output format | Quality assessment overlap with TRD-14, file access via TRD-5 |
+| TRD-7 | TRD Development Workflow | TRD authoring process, documentation standards, TRD lifecycle | Cross-references to all TRDs, documentation naming conventions |
+| TRD-8 | LLM Integration Layer | LLM provider abstraction, prompt construction, token management, model selection | API key handling (security), response parsing, provider failover |
+| TRD-9 | Prompt Engineering | Prompt templates, context assembly, system/user prompt separation, prompt security | Context injection prevention (security), prompt structure standards |
+| TRD-10 | Document Store | Document indexing, retrieval, embedding, storage format, search | Document naming, metadata schema, cross-reference format |
+| TRD-11 | Security Architecture | Authentication, authorization, encryption, Keychain policy, secret management, audit logging, fail-closed enforcement | **Cross-cutting authority on all security matters across all TRDs** |
+| TRD-12 | Health & Diagnostics | Health checks, metrics collection, logging infrastructure, system monitoring, alerting | Logging level definitions, health check intervals, diagnostic data format |
+| TRD-13 | Recovery & State Management | State persistence, crash recovery, session restoration, checkpoint management | State file format, recovery ordering, cleanup policies |
+| TRD-14 | Code Quality & CI Pipeline | Static analysis, lint rules, quality thresholds, coverage requirements, quality gate definitions | Quality gate enforcement interacts with TRD-3 build stages |
+| TRD-15 | Runbook & Operations | Operational procedures, incident response, deployment checklists, operator guidance | References procedures across all TRDs |
+| TRD-16 | Agent Testing & Validation | Test strategy, test harness, validation criteria, mock infrastructure, acceptance testing | Test execution via TRD-3, quality assertions via TRD-14 |
+
+### Domain Boundary Rules
+
+1. When a concern falls clearly within one TRD's primary domain, that TRD is authoritative.
+2. When a concern spans two domains, the TRD whose primary domain is **more specific** to the concern prevails.
+3. When specificity is equal, Tier 3 (standards tiebreak) applies.
+4. TRD-11 cross-cutting authority applies ONLY through the security classification in §3.
+
+---
+
+## 5. Resolved Conflicts
+
+Each resolution follows a structured format. All resolutions are binding on implementation.
 
 ---
 
@@ -146,11 +177,13 @@ Each conflict resolution follows a structured format. All resolutions are **norm
 
 | Field | Value |
 |-------|-------|
-| **Conflicting Sources** | TRD-1 (macOS Application Shell, §Startup Lifecycle) vs. TRD-12 (Health & Diagnostics, §Startup Probes) |
-| **Description** | TRD-1 defines application startup timeout behavior for the macOS shell (e.g., maximum time for XPC service initialization). TRD-12 defines health check startup probes with their own timeout and grace period semantics. When both apply during application launch, conflicting timeout values could cause premature termination or missed health failures. |
-| **Resolution** | **TRD-1 governs the application-level startup timeout (30 seconds maximum for full shell initialization).** TRD-12 governs the health subsystem's startup probe configuration, which MUST operate within TRD-1's startup window. Specifically: TRD-1 startup timeout = **30 seconds**. TRD-12 startup probe initial delay = **5 seconds**, with probe interval = **3 seconds**, failure threshold = **3 consecutive failures**. The health subsystem MUST NOT declare startup failure before TRD-1's startup sequence completes or times out. |
-| **Rationale** | TRD-1 owns the application lifecycle domain (Tier 2). The startup timeout is fundamentally a lifecycle concern. TRD-12's health probes are diagnostic and MUST be subordinate to the lifecycle owner during startup. Setting TRD-12's initial delay to 5s prevents false negatives during early initialization. |
-| **Scope/Impact** | Application shell startup sequence, health check initialization, XPC service readiness detection. |
+| **Conflict ID** | CR-001 |
+| **Conflicting Sources** | TRD-1 (macOS Application Shell, §startup sequence) vs TRD-12 (Health & Diagnostics, §health check configuration) |
+| **Description** | TRD-1 defines application startup timeout behavior for the native macOS shell (how long the app waits for subsystems to initialize before declaring failure). TRD-12 defines health check intervals and startup grace periods for the diagnostics subsystem. When both specify timeout values for "startup readiness," implementers face ambiguity over which value to use. |
+| **Resolution** | **TRD-1 is authoritative for the application-level startup timeout** (the maximum time from app launch to ready state). The canonical startup timeout is **30 seconds**. TRD-12 governs the **health check startup grace period** -- the window during which health checks suppress failure alerts to allow initialization. The health check grace period MUST be ≥ the TRD-1 startup timeout and is set to **45 seconds**. After the TRD-1 startup timeout expires, the app MUST fail closed (refuse to enter ready state). After the TRD-12 grace period expires, the health system MUST begin reporting failures. |
+| **Rationale** | TRD-1 owns application lifecycle (Tier 2 domain authority). TRD-12 owns health monitoring. The grace period must exceed the startup timeout to avoid false-positive health failures during normal startup. The 30s/45s split gives 15s of buffer. Fail-closed on startup timeout is consistent with Forge security invariants. |
+| **Scope/Impact** | App shell initialization, health check subsystem, operator-visible startup diagnostics. |
+| **Follow-on Guidance** | If any subsystem requires >30s for legitimate initialization, file a TRD-1 amendment -- do NOT silently extend the timeout. |
 
 ---
 
@@ -158,11 +191,13 @@ Each conflict resolution follows a structured format. All resolutions are **norm
 
 | Field | Value |
 |-------|-------|
-| **Conflicting Sources** | TRD-3 (Build Pipeline, §Stage Gates) vs. TRD-14 (Code Quality & CI Pipeline, §Quality Gates) |
-| **Description** | TRD-3 defines pipeline stage gates that include code quality checks as pass/fail criteria. TRD-14 defines detailed quality gate thresholds (coverage minimums, lint scores, complexity limits). Both claim authority over what constitutes a "passing" quality gate. |
-| **Resolution** | **TRD-14 is authoritative for quality gate threshold definitions** (what the thresholds are, which tools run, what scores pass). **TRD-3 is authoritative for gate enforcement mechanics** (when gates run in the pipeline, what happens on failure, retry behavior, stage ordering). Canonical thresholds defined by TRD-14: test coverage ≥ 80%, zero critical lint violations, cyclomatic complexity ≤ 15 per function, no security-flagged findings (this last criterion defers to TRD-11 under Tier 1). TRD-3 defines that these gates execute at Stage 4 (Quality Gate) and that failure is a hard block (no bypass without operator approval). |
-| **Rationale** | TRD-14's primary domain is code quality definitions. TRD-3's primary domain is pipeline orchestration. Splitting definition from enforcement respects both domains. |
-| **Scope/Impact** | CI pipeline configuration, quality gate tooling, PR merge requirements, coverage reporting. |
+| **Conflict ID** | CR-002 |
+| **Conflicting Sources** | TRD-3 (Build Pipeline, §stage gates) vs TRD-14 (Code Quality & CI Pipeline, §quality thresholds) |
+| **Description** | TRD-3 defines build pipeline stages including quality gate checkpoints. TRD-14 defines the specific quality thresholds (coverage %, lint pass rate, complexity limits) and the tools that enforce them. Both claim authority over what constitutes a "passing" quality gate. |
+| **Resolution** | **TRD-14 is authoritative for defining quality thresholds and rules** (what the gates check and what values constitute pass/fail). **TRD-3 is authoritative for when and how gates execute within the pipeline** (at which stages, blocking vs. advisory, retry behavior). Specifically: TRD-14 defines the minimum coverage threshold (e.g., 80%), maximum complexity scores, required lint checks, and their pass/fail criteria. TRD-3 defines that the quality gate runs at Stage 4, that it is blocking (pipeline halts on failure), and how failures are reported upstream. If TRD-3 references a specific threshold number that differs from TRD-14, TRD-14's number prevails. |
+| **Rationale** | TRD-14's primary domain is code quality definitions. TRD-3's primary domain is pipeline orchestration. This separation follows the principle of single-domain authority (Tier 2). Threshold definition is more specific to TRD-14 than to TRD-3. |
+| **Scope/Impact** | Build pipeline Stage 4, CI configuration, quality reporting dashboards. |
+| **Follow-on Guidance** | TRD-3 SHOULD reference TRD-14 for threshold values rather than duplicating them. Any threshold value appearing in TRD-3 that contradicts TRD-14 is superseded by TRD-14. |
 
 ---
 
@@ -170,12 +205,13 @@ Each conflict resolution follows a structured format. All resolutions are **norm
 
 | Field | Value |
 |-------|-------|
-| **Conflicting Sources** | TRD-1, TRD-2, TRD-3, TRD-8, TRD-12, TRD-13 (multiple TRDs define configuration keys without unified convention) |
-| **Description** | Multiple TRDs independently define configuration keys (e.g., timeout values, feature flags, thresholds) using inconsistent naming: some use `camelCase`, some use `snake_case`, some use dot-separated hierarchical keys, and some use flat keys. This creates collision risk and integration confusion. |
-| **Resolution** | **All configuration keys MUST follow this canonical convention:** `<trd_domain>.<subsystem>.<parameter>` using `snake_case` throughout. Examples: `app_shell.startup.timeout_seconds`, `consensus.arbitration.max_retries`, `build_pipeline.quality_gate.coverage_minimum`, `health.probe.interval_seconds`, `security.keychain.acl_mode`. Domain prefixes map to TRD ownership per the Domain Ownership Map. No TRD may define a key under another TRD's domain prefix without explicit cross-reference. |
-| **Rationale** | Tier 3 (AGENTS.md) mandates consistency and explicit naming. Dot-separated hierarchical naming with snake_case is the most unambiguous format, prevents collisions via domain namespacing, and aligns with industry practice for configuration systems. |
-| **Scope/Impact** | All configuration files, environment variables (converted with `__` separator: `APP_SHELL__STARTUP__TIMEOUT_SECONDS`), default value registries, documentation. |
-| **Follow-On Guidance** | Each TRD SHOULD publish its canonical key list in an appendix. A unified configuration schema registry is recommended as future work. |
+| **Conflict ID** | CR-003 |
+| **Conflicting Sources** | TRD-1, TRD-2, TRD-3, TRD-8, TRD-12, TRD-13 (multiple TRDs define configuration keys without a unified convention) |
+| **Description** | Multiple TRDs define configuration keys (timeouts, retry counts, feature flags, paths) using inconsistent naming patterns. Some use `camelCase`, some use `snake_case`, some use dot-separated hierarchies, and some use flat keys. This creates collision risk and developer confusion. |
+| **Resolution** | **All configuration keys across all TRDs MUST follow the canonical convention:** `forge.<trd_domain>.<subsystem>.<key_name>` using lowercase `snake_case` throughout. Domain prefixes are: `forge.shell.*` (TRD-1), `forge.consensus.*` (TRD-2), `forge.pipeline.*` (TRD-3), `forge.agents.*` (TRD-4), `forge.github.*` (TRD-5), `forge.review.*` (TRD-6), `forge.workflow.*` (TRD-7), `forge.llm.*` (TRD-8), `forge.prompts.*` (TRD-9), `forge.docstore.*` (TRD-10), `forge.security.*` (TRD-11), `forge.health.*` (TRD-12), `forge.recovery.*` (TRD-13), `forge.quality.*` (TRD-14), `forge.runbook.*` (TRD-15), `forge.testing.*` (TRD-16). Examples: `forge.shell.startup_timeout_seconds`, `forge.consensus.retry_max_attempts`, `forge.health.check_interval_seconds`. |
+| **Rationale** | No single TRD owns configuration naming as a primary domain, making this a Tier 3 concern. The dot-separated hierarchical pattern with snake_case is consistent with AGENTS.md coding standards and industry norms (Tier 4 tiebreak). The `forge.` prefix prevents collision with system or third-party configuration. |
+| **Scope/Impact** | All configuration files, environment variables, defaults classes, and documentation across all 16 TRDs. |
+| **Follow-on Guidance** | Each TRD SHOULD include a "Configuration Keys" appendix listing all keys it defines, using this convention. Existing non-conforming keys MUST be migrated with a deprecation period of one release cycle. |
 
 ---
 
@@ -183,36 +219,35 @@ Each conflict resolution follows a structured format. All resolutions are **norm
 
 | Field | Value |
 |-------|-------|
+| **Conflict ID** | CR-004 |
 | **Conflicting Sources** | TRD-1, TRD-2, TRD-3, TRD-4, TRD-5, TRD-8, TRD-11, TRD-12, TRD-13 (multiple TRDs define error codes/categories that can collide) |
-| **Description** | Several TRDs define error codes or error categories independently. Without reserved ranges, two TRDs could assign the same numeric error code to different error conditions, causing misrouted error handling and ambiguous diagnostics. |
-| **Resolution** | **Each TRD is assigned a non-overlapping error code range of 1000 codes.** Error codes are integers. The ranges are: |
+| **Description** | Several TRDs define their own error codes and categories. Without coordinated ranges, two TRDs may use the same numeric code for different errors, making error handling and logging ambiguous. |
+| **Resolution** | **Each TRD is assigned a non-overlapping error code range.** All error codes follow the format `FXXYYY` where `XX` is the TRD number (zero-padded) and `YYY` is the subsystem-specific code (000-999). Assigned ranges: |
 
-| TRD | Range | Domain |
-|-----|-------|--------|
-| TRD-1 | 1000-1999 | Application Shell |
-| TRD-2 | 2000-2999 | Consensus Engine |
-| TRD-3 | 3000-3999 | Build Pipeline |
-| TRD-4 | 4000-4999 | Multi-Agent Coordination |
-| TRD-5 | 5000-5999 | GitHub Integration |
-| TRD-6 | 6000-6999 | Code Review |
-| TRD-7 | 7000-7999 | TRD Workflow |
-| TRD-8 | 8000-8999 | LLM Provider |
-| TRD-9 | 9000-9999 | Prompt Engineering |
-| TRD-10 | 10000-10999 | Document Store |
-| TRD-11 | 11000-11999 | Security |
-| TRD-12 | 12000-12999 | Health & Diagnostics |
-| TRD-13 | 13000-13999 | Recovery & State |
-| TRD-14 | 14000-14999 | Code Quality |
-| TRD-15 | 15000-15999 | Runbook & Operations |
-| TRD-16 | 16000-16999 | Testing & Validation |
-| Reserved | 0-999 | Platform-wide / generic errors |
-| Reserved | 17000-19999 | Future TRDs |
-| Reserved | 20000+ | Vendor/extension codes |
+| TRD | Range | Example |
+|-----|-------|---------|
+| TRD-1 | F01000-F01999 | F01001: XPC connection timeout |
+| TRD-2 | F02000-F02999 | F02001: Consensus quorum failure |
+| TRD-3 | F03000-F03999 | F03001: Pipeline stage gate failure |
+| TRD-4 | F04000-F04999 | F04001: Agent coordination deadlock |
+| TRD-5 | F05000-F05999 | F05001: GitHub API rate limit exceeded |
+| TRD-6 | F06000-F06999 | F06001: Review pass incomplete |
+| TRD-7 | F07000-F07999 | F07001: TRD validation failure |
+| TRD-8 | F08000-F08999 | F08001: LLM provider unreachable |
+| TRD-9 | F09000-F09999 | F09001: Prompt template missing |
+| TRD-10 | F10000-F10999 | F10001: Document index corrupt |
+| TRD-11 | F11000-F11999 | F11001: Authentication failure |
+| TRD-12 | F12000-F12999 | F12001: Health check timeout |
+| TRD-13 | F13000-F13999 | F13001: State recovery failure |
+| TRD-14 | F14000-F14999 | F14001: Quality threshold not met |
+| TRD-15 | F15000-F15999 | F15001: Runbook step failure |
+| TRD-16 | F16000-F16999 | F16001: Test harness initialization failure |
 
-| Field | Value |
+| Field | Value (continued) |
 |-------|-------|
-| **Rationale** | Numeric ranges keyed to TRD number provide zero-collision guarantee and instant source identification. The 1000-code range per TRD provides ample room for granular error definitions. |
-| **Scope/Impact** | All error handling code, error logging, diagnostic output, error documentation. All existing TRD-specific error codes MUST be migrated to their assigned range. |
+| **Rationale** | No single TRD owns error taxonomy globally. The TRD-numbered range scheme guarantees zero collisions, is self-documenting (the TRD number is embedded in the code), and scales to 1000 codes per subsystem. This is a Tier 3/4 resolution combining standards guidance with industry best practice. |
+| **Scope/Impact** | All error handling, logging, monitoring, alerting, and operator-facing error messages across the platform. |
+| **Follow-on Guidance** | Each TRD MUST maintain an error code registry in its own document. Cross-TRD error wrapping MUST preserve the original error code. Security-related errors (F11xxx) MUST NOT expose internal details in user-facing messages (per TRD-11). |
 
 ---
 
@@ -220,24 +255,25 @@ Each conflict resolution follows a structured format. All resolutions are **norm
 
 | Field | Value |
 |-------|-------|
-| **Conflicting Sources** | TRD-12 (Health & Diagnostics, §Logging) vs. TRD-1, TRD-2, TRD-3, TRD-11 (various logging references with inconsistent level semantics) |
-| **Description** | TRD-12 defines a logging framework with level semantics (DEBUG, INFO, WARN, ERROR, FATAL). Other TRDs reference logging levels but use inconsistent definitions (e.g., some treat WARN as "action may be needed" while others treat it as "informational anomaly"; some TRDs use CRITICAL instead of FATAL). |
-| **Resolution** | **TRD-12 is authoritative for all logging level definitions.** The canonical levels and their semantics are: |
+| **Conflict ID** | CR-005 |
+| **Conflicting Sources** | TRD-12 (Health & Diagnostics, §logging infrastructure) vs TRD-2, TRD-3, TRD-8, TRD-11 (various TRDs referencing log levels with inconsistent semantics) |
+| **Description** | TRD-12 defines the logging infrastructure and level hierarchy. Other TRDs reference logging levels (e.g., "log at DEBUG level," "ERROR-level alert") but use level names inconsistently -- some use Python logging semantics, some use syslog semantics, and some use custom level names. |
+| **Resolution** | **TRD-12 is the sole authority for logging level definitions.** The canonical logging levels, in ascending severity, are: |
 
-| Level | Numeric | Semantics | When to Use |
-|-------|---------|-----------|-------------|
-| `TRACE` | 5 | Fine-grained diagnostic detail | Internal loop iterations, variable dumps (never in production default) |
-| `DEBUG` | 10 | Diagnostic information for developers | Function entry/exit, state transitions, decision points |
-| `INFO` | 20 | Normal operational events | Startup complete, stage transitions, successful operations |
-| `WARN` | 30 | Unexpected condition, operation continues | Retry triggered, fallback path taken, deprecated usage detected |
-| `ERROR` | 40 | Operation failed, system continues | Request failed, stage failed, recoverable fault |
-| `FATAL` | 50 | System cannot continue | Unrecoverable state, security violation requiring shutdown |
+| Level | Numeric | Semantics | Use When |
+|-------|---------|-----------|----------|
+| `TRACE` | 5 | Fine-grained diagnostic detail | Debugging individual function calls, IPC message contents (never secrets) |
+| `DEBUG` | 10 | Developer-oriented diagnostic information | Internal state transitions, configuration values loaded (never secrets) |
+| `INFO` | 20 | Normal operational events | Startup complete, stage transitions, PR created |
+| `WARNING` | 30 | Unexpected but recoverable conditions | Retry triggered, degraded mode entered, threshold approaching |
+| `ERROR` | 40 | Failure requiring attention, operation did not complete | Stage gate failure, LLM provider down, state recovery invoked |
+| `CRITICAL` | 50 | System-level failure, immediate operator attention required | Security violation, unrecoverable state, data corruption detected |
 
-| Field | Value |
+| Field | Value (continued) |
 |-------|-------|
-| **Rationale** | TRD-12's primary domain is diagnostics and logging (Tier 2). Unified level semantics prevent log analysis confusion. `CRITICAL` is **not** a valid level -- all TRDs using it MUST migrate to `FATAL`. The numeric values enable programmatic comparison. |
-| **Scope/Impact** | All logging calls across all subsystems, log aggregation configuration, alert threshold definitions. |
-| **Follow-On Guidance** | Security audit events (TRD-11) MUST be logged at `INFO` or above and MUST include the `security` log category tag regardless of level. Secrets MUST NEVER appear in log messages at any level -- this is a Tier 1 (TRD-11) constraint. |
+| **Rationale** | TRD-12's primary domain is logging infrastructure (Tier 2 domain authority). All other TRDs MUST use TRD-12's level names and semantics. The numeric values align with Python's `logging` module for implementation compatibility. `TRACE` is added below `DEBUG` for high-volume diagnostics. |
+| **Scope/Impact** | All logging calls across all subsystems. Logger configuration. Log aggregation and alerting rules. |
+| **Follow-on Guidance** | Any TRD referencing a log level MUST use the exact names from this table. Custom log levels are prohibited. Security events MUST be logged at `WARNING` or above. Secrets MUST NEVER appear at ANY log level. |
 
 ---
 
@@ -245,23 +281,27 @@ Each conflict resolution follows a structured format. All resolutions are **norm
 
 | Field | Value |
 |-------|-------|
-| **Conflicting Sources** | TRD-11 (Security Architecture) vs. all other TRDs (cross-cutting authority boundaries) |
-| **Description** | TRD-11 is designated as cross-cutting for security, but without explicit scoping, implementers may either under-apply TRD-11 (missing security requirements) or over-apply it (using TRD-11 to override non-security domain decisions). |
-| **Resolution** | **TRD-11's override authority (Tier 1) applies if and only if the conflict meets at least one criterion in the Security Conflict Classification (S1-S9) defined above.** For any cross-TRD conflict: (1) check if any S1-S9 criterion applies; (2) if yes, TRD-11 governs that dimension; (3) if no, Tier 2 (domain authority) governs. TRD-11 does NOT have authority over: pipeline stage ordering (TRD-3), consensus algorithm selection (TRD-2), UI layout (TRD-1), test strategy (TRD-16), or document formatting (TRD-7) -- unless a security dimension (S1-S9) is specifically implicated. |
-| **Rationale** | Precise scoping of Tier 1 prevents governance creep while maintaining ironclad security. The S1-S9 criteria provide an auditable checklist. |
-| **Scope/Impact** | All cross-TRD conflict resolution decisions, all code review evaluations of security requirements. |
+| **Conflict ID** | CR-006 |
+| **Conflicting Sources** | TRD-11 (Security Architecture, cross-cutting authority) vs all other TRDs (which each define some security-adjacent behavior) |
+| **Description** | TRD-11 has cross-cutting authority on security matters, but the boundary of "security matters" was not formally defined, leading to ambiguity about whether TRD-11 can override non-security decisions in other TRDs. |
+| **Resolution** | **TRD-11's override authority is strictly scoped to security matters as defined in §3 of this document (Security Conflict Classification).** TRD-11 MUST NOT be invoked to override non-security decisions. Specifically: TRD-11 IS authoritative for how tokens are stored (even if TRD-1 mentions Keychain usage -- the Keychain security policy comes from TRD-11). TRD-11 IS authoritative for fail-closed behavior on authentication and cryptographic errors. TRD-11 IS NOT authoritative for build pipeline ordering (TRD-3), code review criteria (TRD-6/TRD-14), or operational procedures (TRD-15) unless those directly involve security classification criteria from §3. |
+| **Rationale** | This resolution operationalizes the Tier 1 / Tier 2 boundary. Without explicit scoping, TRD-11 could be used to override any decision by claiming a tenuous security connection. The §3 criteria provide an objective test. |
+| **Scope/Impact** | All cross-TRD conflict resolution. This is a meta-resolution that governs how other resolutions are classified. |
+| **Follow-on Guidance** | When filing a new conflict resolution, the submitter MUST classify it using §3 criteria before determining which tier applies. |
 
 ---
 
-### CR-007: Health Check Interval vs. Startup Grace Period
+### CR-007: Health Check Interval vs Startup Grace Period
 
 | Field | Value |
 |-------|-------|
-| **Conflicting Sources** | TRD-1 (macOS Application Shell, §Lifecycle) vs. TRD-12 (Health & Diagnostics, §Health Checks) |
-| **Description** | TRD-12 defines ongoing health check intervals for runtime monitoring. TRD-1 defines a startup grace period during which the application is initializing and may not be fully healthy. If health checks fire during the grace period, they generate false-negative health reports and may trigger unnecessary recovery actions (TRD-13). |
-| **Resolution** | **TRD-1 defines the startup grace period: 30 seconds from process launch.** During this period, TRD-12 health checks MUST operate in **startup probe mode** (lenient): they record results but MUST NOT trigger alerts or recovery actions. After the grace period expires (or TRD-1 signals startup-complete, whichever comes first), TRD-12 transitions to **liveness probe mode** (strict) with standard intervals. Runtime health check interval (post-startup): **10 seconds**. Startup probe interval: **3 seconds** (higher frequency for faster readiness detection). Failure threshold for triggering recovery (post-startup only): **3 consecutive failures**. |
-| **Rationale** | TRD-1 owns lifecycle (Tier 2) and thus defines when the application is "started." TRD-12 owns health monitoring (Tier 2) and defines how checks work. The startup-complete signal bridges the two domains cleanly. |
-| **Scope/Impact** | Health check subsystem initialization, recovery trigger logic (TRD-13), startup sequence coordination. |
+| **Conflict ID** | CR-007 |
+| **Conflicting Sources** | TRD-1 (macOS Application Shell, §lifecycle management) vs TRD-12 (Health & Diagnostics, §health check scheduling) |
+| **Description** | TRD-1 defines a startup sequence with subsystem initialization phases. TRD-12 defines periodic health checks. Ambiguity exists about: (a) when health checks should begin relative to app startup, (b) what the default health check interval is, and (c) whether health check failures during startup should trigger recovery. |
+| **Resolution** | **Health checks MUST NOT begin until TRD-1's startup sequence reports subsystem ready OR the TRD-12 grace period (45 seconds, per CR-001) expires -- whichever comes first.** After the grace period, health checks run at a **10-second interval** (defined by TRD-12 as domain owner of health monitoring). Health check failures during the grace period are logged at `WARNING` but do NOT trigger recovery actions. Health check failures AFTER the grace period are logged at `ERROR` and trigger the recovery flow defined in TRD-13. |
+| **Rationale** | TRD-12 owns health check scheduling (Tier 2). TRD-1 owns startup lifecycle (Tier 2). The grace period mechanism from CR-001 bridges the two domains. The 10-second interval is TRD-12's domain decision. Suppressing recovery during grace period prevents thrashing during normal startup. |
+| **Scope/Impact** | Health check scheduler, app startup sequence, recovery trigger logic (TRD-13). |
+| **Follow-on Guidance** | If subsystem startup patterns change (e.g., lazy initialization), CR-001 and CR-007 should be reviewed together. |
 
 ---
 
@@ -269,11 +309,23 @@ Each conflict resolution follows a structured format. All resolutions are **norm
 
 | Field | Value |
 |-------|-------|
-| **Conflicting Sources** | TRD-2 (Consensus Engine, §Retry Behavior) vs. TRD-3 (Build Pipeline, §Stage Retry) |
-| **Description** | TRD-2 defines retry policies for LLM provider calls (consensus generation, arbitration). TRD-3 defines retry policies for pipeline stage execution. The two TRDs use different default values for max retries, backoff strategy, and timeout-per-attempt, creating confusion when a pipeline stage invokes the consensus engine (nested retry context). |
-| **Resolution** | **Each TRD governs retries within its own domain.** TRD-2 retry defaults (LLM provider calls): max retries = **3**, backoff = **exponential with jitter (base 2s, max 30s)**, timeout per attempt = **120 seconds**. TRD-3 retry defaults (pipeline stages): max retries = **2**, backoff = **linear (10s interval)**, timeout per stage = **300 seconds**. **Nested retry rule:** When a pipeline stage (TRD-3) invokes the consensus engine (TRD-2), retries are NOT multiplicative. The TRD-2 retry budget executes within a single TRD-3 attempt. TRD-3 counts a stage attempt as failed only after TRD-2 has exhausted its own retry budget. Maximum wall-clock time for a stage invoking consensus: TRD-3 timeout (300s) is the outer bound; TRD-2 retries must complete within this window. |
-| **Rationale** | Domain authority (Tier 2) assigns each TRD control over its own retry behavior. The nested retry rule prevents retry explosion (3 TRD-2 retries × 2 TRD-3 retries = 6 attempts is acceptable; multiplicative would be 3×2 per attempt = unbounded). |
-| **Scope/Impact** | Consensus engine invocations from pipeline stages, LLM API call retry logic, pipeline stage timeout configuration. |
+| **Conflict ID** | CR-008 |
+| **Conflicting Sources** | TRD-2 (Consensus Engine, §LLM call retry) vs TRD-3 (Build Pipeline, §stage retry policy) |
+| **Description** | TRD-2 defines retry behavior for LLM provider calls (how many times to retry a failed LLM request, backoff strategy). TRD-3 defines retry behavior for build pipeline stages (how many times to retry a failed CI stage). Both use the term "retry policy" but with different defaults and different semantics. |
+| **Resolution** | **Each TRD is authoritative for retry policy within its own domain.** The term "retry policy" MUST always be qualified with its domain context. Canonical defaults: |
+
+| Domain | Owner | Max Retries | Backoff Strategy | Base Delay | Max Delay |
+|--------|-------|-------------|-------------------|------------|-----------|
+| LLM provider calls | TRD-2 | 3 | Exponential with jitter | 1 second | 30 seconds |
+| Build pipeline stages | TRD-3 | 2 | Linear | 5 seconds | 30 seconds |
+| GitHub API calls | TRD-5 | 3 | Exponential with jitter | 2 seconds | 60 seconds |
+| Health check retries | TRD-12 | 1 | None (immediate) | 0 | 0 |
+
+| Field | Value (continued) |
+|-------|-------|
+| **Rationale** | Retry policies are domain-specific (Tier 2). LLM calls benefit from exponential backoff due to rate limiting. Pipeline stages use linear backoff because failures are typically deterministic (retry is for transient infra issues). Configuration keys follow CR-003: `forge.consensus.retry_max_attempts`, `forge.pipeline.retry_max_attempts`, etc. |
+| **Scope/Impact** | All retry logic across the platform. Monitoring dashboards showing retry rates. |
+| **Follow-on Guidance** | Any new subsystem defining retry behavior MUST register its defaults in this table via the amendment process. Retry policies MUST NOT retry on authentication failures (per TRD-11 fail-closed -- see CR-009). |
 
 ---
 
@@ -281,11 +333,13 @@ Each conflict resolution follows a structured format. All resolutions are **norm
 
 | Field | Value |
 |-------|-------|
-| **Conflicting Sources** | TRD-1 (macOS Application Shell, §Keychain Integration) vs. TRD-11 (Security Architecture, §Secrets Management) |
-| **Description** | TRD-1 describes Keychain integration for storing authentication tokens as part of the macOS application shell. TRD-11 defines comprehensive secrets management policies including token lifecycle, rotation, and access control. Where TRD-1 specifies Keychain storage mechanics and TRD-11 specifies security policies for token handling, overlap exists. |
-| **Resolution** | **This is a security matter (criteria S1: secrets/credentials, S2: authentication flows, S6: Keychain access). TRD-11 governs under Tier 1.** Specifically: TRD-11 defines token lifecycle policy (rotation frequency, expiration handling, revocation). TRD-11 defines Keychain ACL requirements (which processes may access tokens). TRD-11 defines the prohibition on token logging or inclusion in error messages. TRD-1 implements the Keychain storage mechanics (how to call Keychain APIs, where to store items) but MUST comply with TRD-11's security policies. TRD-1 MUST NOT define its own token expiration, rotation, or access policies that contradict TRD-11. |
-| **Rationale** | Token handling is unambiguously security-relevant under multiple S-criteria. Tier 1 applies. TRD-1 retains implementation authority for the Keychain API integration layer, but all policy decisions are TRD-11's. |
-| **Scope/Impact** | Keychain integration code, token refresh logic, authentication flows, secret rotation automation. |
+| **Conflict ID** | CR-009 |
+| **Conflicting Sources** | TRD-1 (macOS Application Shell, §Keychain integration) vs TRD-11 (Security Architecture, §secret management and authentication) |
+| **Description** | TRD-1 specifies that the macOS Application Shell manages Keychain access for storing authentication tokens. TRD-11 specifies security policies for all secret management including token storage, rotation, and access control. Overlap exists in: (a) who defines the Keychain access policy, (b) token refresh/rotation behavior, (c) what happens on token validation failure. |
+| **Resolution** | **This is a security matter (§3 criteria S1, S2, S6). TRD-11 prevails (Tier 1).** Specifically: TRD-11 defines the Keychain access policy (which entitlements, ACL requirements, access groups). TRD-11 defines token rotation requirements and refresh behavior. TRD-11 defines fail-closed behavior on token validation failure -- the system MUST deny access and surface the error; it MUST NOT fall back to cached/expired tokens. TRD-1 is responsible for the **implementation mechanism** (the Swift Keychain API calls, the XPC transport for token requests) but MUST conform to TRD-11's policy. TRD-1 MUST NOT independently define security policy for tokens. |
+| **Rationale** | Token handling directly involves secrets (S1), authentication flows (S2), and Keychain access (S6) -- all security classification criteria. Tier 1 applies unambiguously. TRD-1 provides the mechanism; TRD-11 provides the policy. This separation ensures security policy is defined in one place. |
+| **Scope/Impact** | Keychain access layer, authentication middleware, token refresh logic, all API-authenticated operations. |
+| **Follow-on Guidance** | Any new token type (e.g., for a new LLM provider) MUST be registered with TRD-11's token inventory before implementation. Tokens MUST NEVER appear in log output at any level. |
 
 ---
 
@@ -293,31 +347,6 @@ Each conflict resolution follows a structured format. All resolutions are **norm
 
 | Field | Value |
 |-------|-------|
-| **Conflicting Sources** | TRD-1 (macOS Application Shell, §XPC Transport) vs. TRD-2 (Consensus Engine, §IPC Error Handling) |
-| **Description** | TRD-1 defines XPC transport-level error semantics (connection failures, message encoding errors, timeout). TRD-2 defines consensus-engine-level IPC errors (provider unavailable, arbitration failure, consensus timeout). Both use the term "IPC error" and could assign overlapping error codes. Additionally, the Forge invariant states "XPC unknown message types are discarded and logged -- never raised as exceptions," which must be respected by both. |
-| **Resolution** | **TRD-1 governs transport-level IPC errors (XPC layer).** TRD-2 governs application-level IPC errors (consensus protocol layer). Error code ranges from CR-004 apply: TRD-1 uses 1000-1999, TRD-2 uses 2000-2999. Semantic separation: Transport errors (TRD-1, 1000-range) = connection refused, message serialization failed, XPC timeout, unknown message type discarded. Application errors (TRD-2, 2000-range) = provider returned error, arbitration deadlock, consensus not reached, response validation failed. **Unknown XPC message types** are handled per the Forge invariant: discard and log at WARN level (per CR-005 level semantics). This is a TRD-1 transport concern. TRD-2 MUST NOT receive unknown message types -- TRD-1's transport layer filters them before they reach the consensus engine. |
-| **Rationale** | Clean layering: transport errors (TRD-1) vs. application protocol errors (TRD-2). The error code ranges from CR-004 guarantee non-collision. The Forge invariant on unknown XPC messages is a security matter (S7: input validation) reinforced by Tier 1. |
-| **Scope/Impact** | XPC message handling, consensus engine error paths, error code constants, diagnostic logging for IPC failures. |
-
----
-
-### CR-011: Recovery Trigger Authority
-
-| Field | Value |
-|-------|-------|
-| **Conflicting Sources** | TRD-12 (Health & Diagnostics) vs. TRD-13 (Recovery & State Management) |
-| **Description** | TRD-12 detects failures via health checks. TRD-13 defines recovery procedures. Ambiguity exists about which TRD decides when to trigger recovery: TRD-12 (because it detects the failure) or TRD-13 (because it owns the recovery domain). |
-| **Resolution** | **TRD-12 is authoritative for failure detection and declaring a component unhealthy.** TRD-13 is authoritative for recovery actions once a failure is declared. TRD-12 emits a health-failure event after its failure threshold is met (per CR-007: 3 consecutive failures post-startup). TRD-13 subscribes to this event and executes the appropriate recovery procedure. TRD-13 MUST NOT independently poll for health -- it relies on TRD-12's declarations. TRD-12 MUST NOT execute recovery actions -- it relies on TRD-13's handlers. |
-| **Rationale** | Clean separation of detection (TRD-12 domain) from remediation (TRD-13 domain). Event-driven coupling prevents circular dependencies. |
-| **Scope/Impact** | Health check failure handlers, recovery trigger events, state checkpoint decisions. |
-
----
-
-### CR-012: Gate Approval Authority
-
-| Field | Value |
-|-------|-------|
-| **Conflicting Sources** | TRD-3 (Build Pipeline, §Operator Gates) vs. TRD-6 (Code Review, §Review Approval) vs. TRD-11 (Security Architecture, §Security Gates) |
-| **Description** | Multiple TRDs define gate/approval points. TRD-3 defines pipeline stage gates. TRD-6 defines review approval criteria. TRD-11 defines security review gates. When multiple gates apply to the same PR, the interaction is ambiguous. |
-| **Resolution** | **All gates are conjunctive (AND logic): every applicable gate MUST pass.** No gate can override another. TRD-3 pipeline gates enforce build/test passing. TRD-14 quality gates (enforced by TRD-3 per CR-002) enforce code quality thresholds. TRD-6 review gates enforce review pass completion. TRD-11 security gates enforce security review passing. The Forge invariant applies: "Gates wait indefinitely for operator input -- no auto-approve ever." This is a Tier 1 security constraint (S2: authorization). |
-| **Rationale** | Conjunctive gates are fail-closed by design. No single subsystem can bypass another's
+| **Conflict ID** | CR-010 |
+| **Conflicting Sources** | TRD-1 (macOS Application Shell, §XPC protocol) vs TRD-2 (Consensus Engine, §IPC error handling) |
+| **Description** | TRD-1 defines XPC-based IPC protocols including error conditions for message transport (connection lost, timeout, invalid message format). TRD-2 defines error handling for consensus engine communication which also uses IPC.
