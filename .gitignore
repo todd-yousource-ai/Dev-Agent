@@ -1,0 +1,1001 @@
+I need to carefully re-read the task. The target files include `.gitignore`, many `.gitkeep` files, Python `__init__.py` files, and `scripts/validate_structure.py`. Despite the note at the bottom about documentation, the actual target files are code and config files. Let me implement all of them.
+
+--- .gitignore ---
+
+# Forge -- Repository .gitignore
+# Comprehensive ignore patterns for Python, Swift, macOS, IDEs, sensitive files, and project artifacts.
+# Security: Ensures secrets, credentials, and runtime state are never committed.
+
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+.eggs/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Linting
+.ruff_cache/
+
+# Jupyter (should not exist, but guard against accidental creation)
+.ipynb_checkpoints/
+
+# =============================================================================
+# Swift / Xcode
+# =============================================================================
+.build/
+DerivedData/
+*.xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+!default.pbxuser
+!default.mode1v3
+!default.mode2v3
+!default.perspectivev3
+xcuserdata/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+Pods/
+Carthage/Build/
+*.resolved
+Package.resolved
+
+# Swift Package Manager
+.swiftpm/
+.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+
+# =============================================================================
+# macOS
+# =============================================================================
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# =============================================================================
+# IDEs and Editors
+# =============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+*.tmproj
+*.tmproject
+tmtags
+
+# =============================================================================
+# Sensitive Files -- NEVER commit secrets
+# =============================================================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+*.keystore
+*.jks
+secrets/
+credentials/
+*.secret
+
+# =============================================================================
+# Project-Specific: Runtime State and Build Artifacts
+# =============================================================================
+# Contents of state/ and artifacts/ are runtime-generated and must not be committed.
+# The directories themselves are preserved via .gitkeep sentinel files.
+state/*
+!state/.gitkeep
+artifacts/*
+!artifacts/.gitkeep
+
+# =============================================================================
+# Miscellaneous
+# =============================================================================
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+.cache/
+tmp/
+temp/
+
+--- ForgeApp/Sources/ForgeApp/App/.gitkeep ---
+
+
+--- ForgeApp/Sources/ForgeApp/IPC/.gitkeep ---
+
+
+--- ForgeApp/Sources/ForgeApp/UI/.gitkeep ---
+
+
+--- ForgeApp/Sources/ForgeApp/Services/.gitkeep ---
+
+
+--- ForgeApp/ForgeAgent/.gitkeep ---
+
+
+--- ForgeApp/ForgeAgentTests/.gitkeep ---
+
+
+--- ForgeApp/Resources/.gitkeep ---
+
+
+--- src/forge/__init__.py ---
+# Copyright 2026 YouSource.ai -- Consensus Dev Agent
+# SPDX-License-Identifier: PROPRIETARY
+"""Forge -- Root package for the Python backend.
+
+This is the top-level package for the Forge platform's Python backend,
+encompassing the consensus engine, build pipeline, GitHub integration,
+review cycle, document store, error recovery, and all supporting modules.
+
+Security assumptions:
+    - All subpackages validate their own inputs; this package provides
+      namespace structure only.
+    - No secrets or credentials are imported or stored at the package level.
+
+Failure behavior:
+    - Import errors in subpackages propagate immediately; no silent suppression.
+"""
+
+__version__ = "0.0.0-dev"
+
+--- src/forge/consensus/__init__.py ---
+# Copyright 2026 YouSource.ai -- Consensus Dev Agent
+# SPDX-License-Identifier: PROPRIETARY
+"""Forge consensus engine package (TRD-2).
+
+Implements multi-provider LLM consensus with Claude arbitration.
+Parallel generation from two providers, deterministic merge resolution,
+and fail-closed behavior on provider disagreement beyond thresholds.
+
+Security assumptions:
+    - LLM provider credentials are never stored in this package; they are
+      retrieved from the Keychain via the Swift shell's XPC interface.
+    - All provider responses are treated as untrusted external input.
+
+Failure behavior:
+    - Provider failures fail closed -- no fallback to single-provider mode
+      without explicit operator approval.
+"""
+
+--- src/forge/pipeline/__init__.py ---
+# Copyright 2026 YouSource.ai -- Consensus Dev Agent
+# SPDX-License-Identifier: PROPRIETARY
+"""Forge build pipeline package (TRD-3).
+
+Orchestrates the multi-stage build pipeline: scope decomposition, PR
+sequencing, code generation, review cycles, CI execution, and gated merges.
+
+Security assumptions:
+    - Pipeline stages never execute generated code -- generation and execution
+      are strictly separated.
+    - All stage transitions are logged and auditable.
+
+Failure behavior:
+    - Stage failures halt the pipeline; no automatic stage skipping.
+    - Operator gates wait indefinitely -- no auto-approve.
+"""
+
+--- src/forge/agents/__init__.py ---
+# Copyright 2026 YouSource.ai -- Consensus Dev Agent
+# SPDX-License-Identifier: PROPRIETARY
+"""Forge agent orchestration package.
+
+Manages agent lifecycle, task assignment, and coordination between
+multiple agent instances operating on parallel PR work streams.
+
+Security assumptions:
+    - Agents operate with least-privilege; each agent instance receives
+      only the context required for its assigned task.
+    - Agent-to-agent communication is validated and logged.
+
+Failure behavior:
+    - Agent crashes are isolated; one agent failure does not cascade to others.
+    - All agent state transitions are persisted for recovery.
+"""
+
+--- src/forge/github_integration/__init__.py ---
+# Copyright 2026 YouSource.ai -- Consensus Dev Agent
+# SPDX-License-Identifier: PROPRIETARY
+"""Forge GitHub integration package (TRD-6).
+
+Handles all GitHub API operations: repository management, branch operations,
+pull request lifecycle, review submission, and webhook processing.
+
+Security assumptions:
+    - GitHub tokens are never stored in this package; they are retrieved
+      per-request from the secure credential store.
+    - All GitHub API responses are treated as untrusted external input.
+    - Rate limiting and retry logic respect GitHub's abuse detection.
+
+Failure behavior:
+    - Authentication failures fail closed -- no anonymous fallback.
+    - API errors surface with full context (status code, endpoint, safe headers).
+"""
+
+--- src/forge/review/__init__.py ---
+# Copyright 2026 YouSource.ai -- Consensus Dev Agent
+# SPDX-License-Identifier: PROPRIETARY
+"""Forge review cycle package (TRD-4).
+
+Implements the 3-pass review cycle: structural review, semantic review,
+and security review. Each pass produces actionable findings that feed
+back into the code generation loop.
+
+Security assumptions:
+    - Review findings may contain code snippets from untrusted input;
+      findings are never executed.
+    - Security review findings are always surfaced -- they cannot be
+      silently dismissed.
+
+Failure behavior:
+    - Review failures block PR progression; no merge without completed review.
+"""
+
+--- src/forge/document_store/__init__.py ---
+# Copyright 2026 YouSource.ai -- Consensus Dev Agent
+# SPDX-License-Identifier: PROPRIETARY
+"""Forge document and context store package (TRD-5).
+
+Manages TRDs, PRDs, architectural documents, and runtime context that
+inform code generation. Provides retrieval interfaces for the consensus
+engine and review cycle.
+
+Security assumptions:
+    - Document content is treated as untrusted external input.
+    - Document content is placed in USER prompts, never SYSTEM prompts.
+    - No document content is evaluated or executed.
+
+Failure behavior:
+    - Missing documents fail closed -- generation does not proceed with
+      incomplete context.
+"""
+
+--- src/forge/recovery/__init__.py ---
+# Copyright 2026 YouSource.ai -- Consensus Dev Agent
+# SPDX-License-Identifier: PROPRIETARY
+"""Forge error recovery package (TRD-7).
+
+Implements structured error recovery: state checkpointing, retry logic
+with exponential backoff, and operator escalation for unrecoverable errors.
+
+Security assumptions:
+    - Recovery state files may contain sensitive context; they are stored
+      in the state/ directory which is gitignored.
+    - Recovery never auto-approves operator gates.
+
+Failure behavior:
+    - Recovery exhaustion (max retries exceeded) halts the pipeline and
+      surfaces a detailed error report to the operator.
+"""
+
+--- src/forge/config/__init__.py ---
+# Copyright 2026 YouSource.ai -- Consensus Dev Agent
+# SPDX-License-Identifier: PROPRIETARY
+"""Forge configuration management package.
+
+Handles configuration loading, validation, and hierarchical key resolution.
+Configuration keys follow the forge.<subsystem>.<component>.<parameter> pattern.
+
+Security assumptions:
+    - Configuration files are validated against a schema before use.
+    - Sensitive configuration values (tokens, keys) are never loaded from
+      config files -- they come from the Keychain via XPC.
+    - Environment variable overrides use the FORGE_ prefix.
+
+Failure behavior:
+    - Invalid configuration fails closed at startup -- no partial config loading.
+    - Missing required keys are treated as fatal errors.
+"""
+
+--- src/forge/utils/__init__.py ---
+# Copyright 2026 YouSource.ai -- Consensus Dev Agent
+# SPDX-License-Identifier: PROPRIETARY
+"""Forge shared utilities package.
+
+Common utilities used across the Forge backend: logging helpers,
+path validation, timestamp formatting, and other cross-cutting concerns.
+
+Security assumptions:
+    - Path utilities validate against path traversal attacks.
+    - Logging utilities scrub sensitive values before output.
+
+Failure behavior:
+    - Utility functions fail explicitly with descriptive errors;
+      no silent defaults or fallback values.
+"""
+
+--- src/forge/errors/__init__.py ---
+# Copyright 2026 YouSource.ai -- Consensus Dev Agent
+# SPDX-License-Identifier: PROPRIETARY
+"""Forge error types and hierarchy package.
+
+Defines the structured error hierarchy for the Forge platform.
+All Forge-specific exceptions inherit from a common base to enable
+consistent handling, logging, and operator reporting.
+
+Security assumptions:
+    - Error messages never include secrets, tokens, or credentials.
+    - Error context is sanitized before inclusion in log output.
+    - Stack traces from untrusted code execution are never surfaced
+      (Forge does not execute generated code).
+
+Failure behavior:
+    - This package defines error types only; it does not catch or suppress
+      errors. All error handling is the responsibility of the caller.
+"""
+
+--- src/forge/contracts/__init__.py ---
+# Copyright 2026 YouSource.ai -- Consensus Dev Agent
+# SPDX-License-Identifier: PROPRIETARY
+"""Forge interface contract definitions package.
+
+Defines the contracts (protocols, abstract base classes, type definitions)
+that govern inter-module and inter-process communication boundaries.
+These contracts are the single source of truth for API shapes between
+the Swift shell and Python backend, and between Python subsystems.
+
+Security assumptions:
+    - Contract violations are treated as security-relevant events and logged.
+    - Contracts enforce input validation at module boundaries.
+
+Failure behavior:
+    - Contract violations raise immediately; no graceful degradation
+      past a broken contract.
+"""
+
+--- config/defaults/.gitkeep ---
+
+
+--- contracts/.gitkeep ---
+
+
+--- docs/trds/.gitkeep ---
+
+
+--- docs/prds/.gitkeep ---
+
+
+--- docs/runbooks/.gitkeep ---
+
+
+--- docs/architecture/.gitkeep ---
+
+
+--- forge-standards/.gitkeep ---
+
+
+--- scripts/ci/.gitkeep ---
+
+
+--- scripts/dev/.gitkeep ---
+
+
+--- scripts/setup/.gitkeep ---
+
+
+--- tests/unit/.gitkeep ---
+
+
+--- tests/integration/.gitkeep ---
+
+
+--- tests/e2e/.gitkeep ---
+
+
+--- tests/fixtures/.gitkeep ---
+
+
+--- state/.gitkeep ---
+
+
+--- artifacts/.gitkeep ---
+
+
+--- .github/workflows/.gitkeep ---
+
+
+--- src/__init__.py ---
+# Copyright 2026 YouSource.ai -- Consensus Dev Agent
+# SPDX-License-Identifier: PROPRIETARY
+"""Source namespace package.
+
+This file marks src/ as a Python package to enable imports of the form
+``from forge.<module> import ...`` when src/ is on the Python path.
+
+Security assumptions:
+    - This file contains no logic; it exists solely for package resolution.
+
+Failure behavior:
+    - N/A -- no runtime behavior.
+"""
+
+--- scripts/validate_structure.py ---
+#!/usr/bin/env python3
+# Copyright 2026 YouSource.ai -- Consensus Dev Agent
+# SPDX-License-Identifier: PROPRIETARY
+"""Forge repository structure validator.
+
+CI-enforceable script that asserts the repository directory tree matches
+the canonical layout defined in PRD-001. Designed for use in CI pipelines
+and pre-commit hooks.
+
+Exit codes:
+    0 -- All required directories and files are present.
+    1 -- One or more required directories or files are missing.
+    2 -- Repository root could not be determined.
+
+Security assumptions:
+    - This script performs read-only filesystem checks; it never executes
+      or evaluates file contents (except when --fix creates empty files).
+    - Path traversal is not a concern because all paths are hardcoded
+      relative to the repository root and joined via pathlib.
+    - The --fix flag creates only empty files and directories; it never
+      modifies existing content.
+
+Failure behavior:
+    - Every missing item is reported explicitly to stderr with its expected path.
+    - The script fails closed: any validation error results in exit code 1.
+    - If the repository root cannot be found, exits with code 2 and a
+      descriptive error message.
+
+Dependencies:
+    - Python 3.9+ standard library only (pathlib, sys, os).
+    - Zero third-party dependencies.
+"""
+
+import os
+import sys
+from pathlib import Path
+
+# =============================================================================
+# Canonical Structure Definition
+# =============================================================================
+
+# All directories that MUST exist (relative to repo root).
+# Sorted for deterministic output.
+CANONICAL_DIRS: list = sorted([
+    ".github",
+    ".github/workflows",
+    "ForgeApp",
+    "ForgeApp/ForgeAgent",
+    "ForgeApp/ForgeAgentTests",
+    "ForgeApp/Resources",
+    "ForgeApp/Sources",
+    "ForgeApp/Sources/ForgeApp",
+    "ForgeApp/Sources/ForgeApp/App",
+    "ForgeApp/Sources/ForgeApp/IPC",
+    "ForgeApp/Sources/ForgeApp/Services",
+    "ForgeApp/Sources/ForgeApp/UI",
+    "artifacts",
+    "config",
+    "config/defaults",
+    "contracts",
+    "docs",
+    "docs/architecture",
+    "docs/prds",
+    "docs/runbooks",
+    "docs/trds",
+    "forge-standards",
+    "scripts",
+    "scripts/ci",
+    "scripts/dev",
+    "scripts/setup",
+    "src",
+    "src/forge",
+    "src/forge/agents",
+    "src/forge/config",
+    "src/forge/consensus",
+    "src/forge/contracts",
+    "src/forge/document_store",
+    "src/forge/errors",
+    "src/forge/github_integration",
+    "src/forge/pipeline",
+    "src/forge/recovery",
+    "src/forge/review",
+    "src/forge/utils",
+    "state",
+    "tests",
+    "tests/e2e",
+    "tests/fixtures",
+    "tests/integration",
+    "tests/unit",
+])
+
+# All files that MUST exist (relative to repo root).
+# Includes both .gitkeep sentinels and __init__.py package markers.
+CANONICAL_FILES: list = sorted([
+    ".github/workflows/.gitkeep",
+    ".gitignore",
+    "ForgeApp/ForgeAgent/.gitkeep",
+    "ForgeApp/ForgeAgentTests/.gitkeep",
+    "ForgeApp/Resources/.gitkeep",
+    "ForgeApp/Sources/ForgeApp/App/.gitkeep",
+    "ForgeApp/Sources/ForgeApp/IPC/.gitkeep",
+    "ForgeApp/Sources/ForgeApp/Services/.gitkeep",
+    "ForgeApp/Sources/ForgeApp/UI/.gitkeep",
+    "artifacts/.gitkeep",
+    "config/defaults/.gitkeep",
+    "contracts/.gitkeep",
+    "docs/architecture/.gitkeep",
+    "docs/prds/.gitkeep",
+    "docs/runbooks/.gitkeep",
+    "docs/trds/.gitkeep",
+    "forge-standards/.gitkeep",
+    "scripts/ci/.gitkeep",
+    "scripts/dev/.gitkeep",
+    "scripts/setup/.gitkeep",
+    "src/__init__.py",
+    "src/forge/__init__.py",
+    "src/forge/agents/__init__.py",
+    "src/forge/config/__init__.py",
+    "src/forge/consensus/__init__.py",
+    "src/forge/contracts/__init__.py",
+    "src/forge/document_store/__init__.py",
+    "src/forge/errors/__init__.py",
+    "src/forge/github_integration/__init__.py",
+    "src/forge/pipeline/__init__.py",
+    "src/forge/recovery/__init__.py",
+    "src/forge/review/__init__.py",
+    "src/forge/utils/__init__.py",
+    "state/.gitkeep",
+    "tests/e2e/.gitkeep",
+    "tests/fixtures/.gitkeep",
+    "tests/integration/.gitkeep",
+    "tests/unit/.gitkeep",
+])
+
+# Directories that must contain __init__.py (Python packages).
+# Used for targeted diagnostics separate from generic file checks.
+PYTHON_PACKAGE_DIRS: set = {
+    "src",
+    "src/forge",
+    "src/forge/agents",
+    "src/forge/config",
+    "src/forge/consensus",
+    "src/forge/contracts",
+    "src/forge/document_store",
+    "src/forge/errors",
+    "src/forge/github_integration",
+    "src/forge/pipeline",
+    "src/forge/recovery",
+    "src/forge/review",
+    "src/forge/utils",
+}
+
+
+# =============================================================================
+# Terminal Colors (safe for CI -- degrades gracefully)
+# =============================================================================
+
+def _supports_color() -> bool:
+    """Check if stderr supports ANSI color codes.
+
+    Returns False in non-TTY environments (CI log files) to avoid
+    polluting logs with escape sequences. Respects NO_COLOR convention.
+    """
+    if os.environ.get("NO_COLOR", ""):
+        return False
+    if not hasattr(sys.stderr, "isatty"):
+        return False
+    return sys.stderr.isatty()
+
+
+_COLOR = _supports_color()
+_RED = "\033[91m" if _COLOR else ""
+_GREEN = "\033[92m" if _COLOR else ""
+_YELLOW = "\033[93m" if _COLOR else ""
+_BOLD = "\033[1m" if _COLOR else ""
+_RESET = "\033[0m" if _COLOR else ""
+
+
+# =============================================================================
+# Validation Functions
+# =============================================================================
+
+def find_repo_root() -> Path:
+    """Locate the repository root by walking up from the script's location.
+
+    Looks for a .git/ directory (file or folder, to support worktrees)
+    as the indicator of the repository root.
+
+    Returns:
+        Path to the repository root.
+
+    Raises:
+        SystemExit: If no .git directory is found in any ancestor.
+            Exits with code 2 to distinguish from validation failures (code 1).
+    """
+    current = Path(__file__).resolve().parent
+    # Walk up to filesystem root
+    while current != current.parent:
+        if (current / ".git").exists():
+            return current
+        current = current.parent
+    # Check filesystem root itself
+    if (current / ".git").exists():
+        return current
+
+    print(
+        f"{_RED}{_BOLD}ERROR:{_RESET} Could not find repository root. "
+        f"No .git directory found in any ancestor of {Path(__file__).resolve()}.",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+
+
+def validate_directory_exists(
+    base_path: Path, rel_dir: str
+) -> tuple:
+    """Check that a required directory exists.
+
+    Args:
+        base_path: Absolute path to the repository root.
+        rel_dir: Relative directory path from the repository root.
+
+    Returns:
+        Tuple of (success: bool, message: str).
+        On success, message is empty.
+        On failure, message describes the issue with full context.
+    """
+    target = base_path / rel_dir
+    if target.is_dir():
+        return (True, "")
+    if target.exists():
+        # Something exists at this path but it's not a directory
+        return (
+            False,
+            f"CONFLICT: '{rel_dir}' exists but is not a directory "
+            f"(type: {type(target).__name__}, is_file={target.is_file()})",
+        )
+    return (False, f"MISSING DIR: '{rel_dir}' does not exist")
+
+
+def validate_file_exists(
+    base_path: Path, rel_file: str
+) -> tuple:
+    """Check that a required file exists.
+
+    Args:
+        base_path: Absolute path to the repository root.
+        rel_file: Relative file path from the repository root.
+
+    Returns:
+        Tuple of (success: bool, message: str).
+        On success, message is empty.
+        On failure, message describes the issue with full context.
+    """
+    target = base_path / rel_file
+    if target.is_file():
+        return (True, "")
+    if target.exists():
+        # Something exists at this path but it's not a file
+        return (
+            False,
+            f"CONFLICT: '{rel_file}' exists but is not a file "
+            f"(is_dir={target.is_dir()})",
+        )
+    return (False, f"MISSING FILE: '{rel_file}' does not exist")
+
+
+def validate_python_packages(
+    base_path: Path,
+) -> list:
+    """Verify that all Python package directories contain __init__.py.
+
+    This is a semantic check beyond simple file existence -- it confirms
+    that the relationship between directory and initializer is correct.
+
+    Args:
+        base_path: Absolute path to the repository root.
+
+    Returns:
+        List of error messages. Empty list indicates all packages are valid.
+    """
+    errors = []
+    for pkg_dir in sorted(PYTHON_PACKAGE_DIRS):
+        dir_path = base_path / pkg_dir
+        init_path = dir_path / "__init__.py"
+        if dir_path.is_dir() and not init_path.is_file():
+            errors.append(
+                f"PACKAGE ERROR: '{pkg_dir}' is a directory but missing "
+                f"'__init__.py' -- not a valid Python package"
+            )
+    return errors
+
+
+def validate_structure(
+    base_path: Path,
+) -> tuple:
+    """Run the complete structural validation.
+
+    Checks all canonical directories and files, plus Python package integrity.
+
+    Args:
+        base_path: Absolute path to the repository root.
+
+    Returns:
+        Tuple of (missing_dirs: list[str], missing_files: list[str]).
+        Each list contains human-readable error messages for each violation.
+    """
+    missing_dirs: list = []
+    missing_files: list = []
+
+    # Validate directories
+    for rel_dir in CANONICAL_DIRS:
+        ok, msg = validate_directory_exists(base_path, rel_dir)
+        if not ok:
+            missing_dirs.append(msg)
+
+    # Validate files
+    for rel_file in CANONICAL_FILES:
+        ok, msg = validate_file_exists(base_path, rel_file)
+        if not ok:
+            missing_files.append(msg)
+
+    # Validate Python package integrity
+    pkg_errors = validate_python_packages(base_path)
+    missing_files.extend(pkg_errors)
+
+    return (missing_dirs, missing_files)
+
+
+# =============================================================================
+# Fix Mode
+# =============================================================================
+
+def fix_structure(base_path: Path) -> tuple:
+    """Create any missing directories and files.
+
+    Creates directories with parents and empty files (for .gitkeep) or
+    minimal __init__.py content for Python packages.
+
+    Args:
+        base_path: Absolute path to the repository root.
+
+    Returns:
+        Tuple of (created_dirs: list[str], created_files: list[str]).
+
+    Security note:
+        All paths are hardcoded in CANONICAL_DIRS and CANONICAL_FILES.
+        No user input is used to construct paths. Path traversal is not possible.
+    """
+    created_dirs: list = []
+    created_files: list = []
+
+    # Create missing directories
+    for rel_dir in CANONICAL_DIRS:
+        target = base_path / rel_dir
+        if not target.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+            created_dirs.append(rel_dir)
+
+    # Create missing files
+    for rel_file in CANONICAL_FILES:
+        target = base_path / rel_file
+        if not target.is_file():
+            # Ensure parent directory exists
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if rel_file.endswith("__init__.py"):
+                # Create a minimal Python package marker
+                pkg_name = str(Path(rel_file).parent).replace(os.sep, ".")
+                target.write_text(
+                    f'"""Forge package: {pkg_name}."""\n',
+                    encoding="utf-8",
+                )
+            else:
+                # Create empty sentinel file
+                target.touch()
+            created_files.append(rel_file)
+
+    return (created_dirs, created_files)
+
+
+# =============================================================================
+# Main Entry Point
+# =============================================================================
+
+def main() -> int:
+    """Run structure validation or fix mode.
+
+    Parses command-line arguments, locates the repository root,
+    and either validates or fixes the directory structure.
+
+    Returns:
+        0 on success (all structure valid, or --fix completed).
+        1 on validation failure.
+        2 on inability to find repository root (handled by find_repo_root).
+    """
+    fix_mode = "--fix" in sys.argv
+
+    base_path = find_repo_root()
+
+    if fix_mode:
+        print(
+            f"{_BOLD}Forge Structure Fix{_RESET} -- "
+            f"creating missing directories and files...",
+            file=sys.stderr,
+        )
+        created_dirs, created_files = fix_structure(base_path)
+
+        if created_dirs:
+            print(
+                f"\n{_YELLOW}Created directories:{_RESET}",
+                file=sys.stderr,
+            )
+            for d in created_dirs:
+                print(f"  + {d}/", file=sys.stderr)
+
+        if created_files:
+            print(
+                f"\n{_YELLOW}Created files:{_RESET}",
+                file=sys.stderr,
+            )
+            for f in created_files:
+                print(f"  + {f}", file=sys.stderr)
+
+        if not created_dirs and not created_files:
+            print(
+                f"\n{_GREEN}All directories and files already exist. "
+                f"Nothing to fix.{_RESET}",
+                file=sys.stderr,
+            )
+
+        # After fixing, re-validate to confirm
+        missing_dirs, missing_files = validate_structure(base_path)
+        if missing_dirs or missing_files:
+            print(
+                f"\n{_RED}{_BOLD}WARNING:{_RESET} Fix completed but "
+                f"validation still reports errors (possible conflicts):",
+                file=sys.stderr,
+            )
+            for msg in missing_dirs + missing_files:
+                print(f"  {_RED}✗{_RESET} {msg}", file=sys.stderr)
+            return 1
+
+        print(
+            f"\n{_GREEN}{_BOLD}✓ Fix complete. Structure is valid.{_RESET}",
+            file=sys.stderr,
+        )
+        return 0
+
+    # Validation mode (default)
+    print(
+        f"{_BOLD}Forge Structure Validator{_RESET} -- "
+        f"checking repository layout...",
+        file=sys.stderr,
+    )
+    print(f"  Repository root: {base_path}", file=sys.stderr)
+
+    missing_dirs, missing_files = validate_structure(base_path)
+
+    total_dirs = len(CANONICAL_DIRS)
+    total_files = len(CANONICAL_FILES)
+    ok_dirs = total_dirs - len([m for m in missing_dirs if "MISSING DIR" in m or "CONFLICT" in m])
+    ok_files = total_files - len([m for m in missing_files if "MISSING FILE" in m or "CONFLICT" in m])
+
+    # Report results
+    if not missing_dirs and not missing_files:
+        print(
+            f"\n{_GREEN}{_BOLD}✓ All {total_dirs} directories and "
+            f"{total_files} files present.{_RESET}",
+            file=sys.stderr,
+        )
+        print(
+            f"  {_GREEN}Directories: {ok_dirs}/{total_dirs}{_RESET}",
+            file=sys.stderr,
+        )
+        print(
+            f"  {_GREEN}Files:       {ok_files}/{total_files}{_RESET}",
+            file=sys.stderr,
+        )
+        print(
+            f"  {_GREEN}Python pkgs: {len(PYTHON_PACKAGE_DIRS)}/{len(PYTHON_PACKAGE_DIRS)}{_RESET}",
+            file=sys.stderr,
+        )
+        return 0
+
+    # Report failures
+    print(
+        f"\n{_RED}{_BOLD}✗ Structure validation failed.{_RESET}",
+        file=sys.stderr,
+    )
+
+    if missing_dirs:
+        print(
+            f"\n{_RED}Missing/invalid directories "
+            f"({len(missing_dirs)}):{_RESET}",
+            file=sys.stderr,
+        )
+        for msg in missing_dirs:
+            print(f"  {_RED}✗{_RESET} {msg}", file=sys.stderr)
+
+    if missing_files:
+        print(
+            f"\n{_RED}Missing/invalid files "
+            f"({len(missing_files)}):{_RESET}",
+            file=sys.stderr,
+        )
+        for msg in missing_files:
+            print(f"  {_RED}✗{_RESET} {msg}", file=sys.stderr)
+
+    total_errors = len(missing_dirs) + len(missing_files)
+    print(
+        f"\n{_YELLOW}Summary: {total_errors} error(s) found. "
+        f"Run with --fix to auto-create missing items.{_RESET}",
+        file=sys.stderr,
+    )
+
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
