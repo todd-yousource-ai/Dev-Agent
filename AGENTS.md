@@ -1,77 +1,36 @@
 # AGENTS.md - Forge Platform
 
-Forge is a trust enforcement platform where every agent action is cryptographically identified, policy-gated, and audit-logged — it enforces identity (CTX-ID), zone boundaries (VTZ), data classification (DTL), and tamper-evident telemetry (TrustFlow) across endpoint, network, cloud, and AI runtime environments.
+Forge is a trust-enforcement platform for AI agent operations that binds every agent action to a cryptographically verified identity (CTX-ID), confines it within a Virtual Trust Zone (VTZ), labels all data with immutable Data Trust Labels (DTL), and emits every outcome to an append-only TrustFlow audit stream.
 
 ## Critical Rules - Read Before Writing Any Code
 
-1. Validate CTX-ID first at every enforcement entry point and reject immediately on validation failure with no partial processing, no fallback, no retry.
-2. Treat missing, expired, invalid, rotated, or unverifiable CTX-ID as `UNTRUSTED` and deny by default.
-3. Check VTZ policy before executing any action, tool call, cross-boundary operation, or data movement; implicit cross-VTZ calls are denied.
-4. Bind every agent session to exactly one VTZ at CTX-ID issuance and deny implicit cross-VTZ access.
-5. Emit a synchronous TrustFlow event for every action outcome (`allow`, `restrict`, `block`) — async buffering is forbidden in the enforcement path; never silently skip emission failure.
-6. Assign DTL labels at data ingestion; labels are immutable; derived data inherits the HIGHEST classification of any source; unlabeled data is `CONFIDENTIAL` until explicitly reclassified.
-7. Fail closed on all trust, identity, policy, cryptographic, and path-validation errors — reject the action, log the event, surface to the caller; never silently continue.
-8. Never log or return secrets, keys, tokens, credentials, cleartext sensitive payloads, or HTTP response bodies in logs, error messages, audit records, or generated code.
-9. All external input (documents, PR comments, CI output, XPC messages, user prompts, generated content) is untrusted — validate strictly before use; external document context goes in USER prompt, never SYSTEM prompt.
-10. Never execute generated code or external content via `eval()`, `exec()`, dynamic interpretation, `subprocess` of generated artifacts, or `shell=True`.
-11. Validate every file write path with `path_security.validate_write_path()` before performing the write — no exceptions.
-12. Gates wait indefinitely for operator input — no auto-approve, ever.
-13. If output contains `SECURITY_REFUSAL`, stop, gate, and log — never bypass the refusal by retrying, rephrasing, or provider fallback.
+1. Every enforcement entry point MUST validate CTX-ID FIRST — validation failure means immediate rejection, no partial processing, no fallback.
+2. Check VTZ policy BEFORE execution of every agent action — VTZ boundaries are structural, not advisory, and cannot be bypassed by application code. Never allow implicit cross-VTZ tool calls; cross-VTZ calls MUST be explicitly authorized.
+3. Emit a synchronous TrustFlow event for every action outcome (allow, restrict, block) in the enforcement path — async buffering is forbidden. Failed emission is a WARN-level audit event, never a silent skip.
+4. Treat missing, expired, rotated, or invalid CTX-ID as UNTRUSTED — never infer identity from ambient context. CTX-ID tokens are immutable once issued; rotation creates a new token and immediately invalidates the old one.
+5. Assign DTL labels at data ingestion; labels are immutable once assigned. Derived data inherits the HIGHEST classification of any source. Unlabeled data is treated as CONFIDENTIAL. Never permit untracked label stripping or downgrade of inherited classifications.
+6. All trust, identity, policy, and cryptographic failures MUST fail closed — reject the action, log the event, surface to caller, never silently continue.
+7. Secrets, keys, tokens, and credentials MUST never appear in logs, error messages, generated code, audit records, prompts, or cleartext payloads — error messages include `component`, `operation`, `failure_reason`, and `ctx_id` only.
+8. All external input (documents, PR comments, CI output, XPC messages, user prompts, file paths) is untrusted — validate strictly before use. Context from external documents goes in USER prompt, never SYSTEM prompt.
+9. Generated code is never executed by the agent — no `eval()`, no `exec()`, no `subprocess` of generated content, no `shell=True`, no dynamic interpretation of external content.
+10. All file writes MUST pass `path_security.validate_write_path()` before execution — no exceptions.
+11. Audit records are append-only — no modification, no deletion. Every security-relevant action generates an audit record BEFORE execution. Replay MUST be possible from the audit stream alone.
+12. SECURITY_REFUSAL output is never bypassed by rephrasing or retrying with another provider — stop, gate, log.
+13. Gates wait indefinitely for operator input — auto-approve is forbidden.
+14. Discard and log unknown XPC message types — never raise them as uncaught exceptions.
 
 ## Architecture Overview
 
-Consensus Dev Agent is a two-process native macOS application: a Swift shell (UI, auth, Keychain, XPC) and a Python backend (consensus engine, build pipeline, GitHub integration). The 12 TRDs in `forge-docs/` are the source of truth — code MUST match them.
 
-### Subsystem Map
+Enforcement order: CTX-ID validation → VTZ policy check → Action execution → TrustFlow emission → Audit record
 
-| Directory | Component | Enforces | Must NOT Do |
+
+| Subsystem | Path | Enforces | Must NOT Do |
 |---|---|---|---|
-| `src/cal/` | Conversation Abstraction Layer | CTX-ID validation at every entry point; action routing through VTZ policy; execution gating | Never process an action without validated CTX-ID; never execute before VTZ policy evaluation |
-| `src/dtl/` | Data Trust Labels | Label assignment at ingestion; label inheritance on derivation; label verification at trust boundaries | Never strip or downgrade a label without audited policy authorization; never allow unlabeled outbound data without treating it as `CONFIDENTIAL` |
-| `src/trustflow/` | TrustFlow Audit Stream | Synchronous emission of tamper-evident audit events for every action outcome with immutable audit fields | Never buffer asynchronously in the enforcement path; never skip or silently drop emission |
-| `src/vtz/` | Virtual Trust Zones | Zone boundary enforcement; cross-zone authorization gating; session-to-VTZ binding | Never permit implicit cross-VTZ access; never allow mid-session policy mutation without re-authorization |
-| `src/trustlock/` | TrustLock | CTX-ID validation against TrustLock public key; machine identity anchoring | Never accept software-only validation in place of TrustLock verification |
-| `src/mcp/` | MCP Policy Engine | Policy decisions for tools, sessions, and boundaries | Never suggest policy when enforcement is required; never allow unevaluated policy pass-through |
-| `src/rewind/` | Forge Rewind | State reconstruction and replay from append-only audit stream | Never mutate or delete audit records; never replay without full TrustFlow chain verification |
-
-## CTX-ID Validation Contract
-
-- Every public function in `src/cal/`, `src/vtz/`, `src/dtl/`, `src/mcp/` MUST accept a `ctx_id` parameter.
-- Validation MUST verify: signature against TrustLock public key, expiry timestamp, VTZ binding, and revocation status.
-- On failure: return `UNTRUSTED`, emit a `TrustFlow` event with `action: block`, and halt processing.
-
-## VTZ Enforcement Contract
-
-- A session is bound to exactly one VTZ at CTX-ID issuance.
-- Cross-VTZ access requires explicit policy authorization checked via `src/mcp/`.
-- Unauthorized cross-VTZ calls MUST be denied and logged as `TrustFlow` events with `action: block`.
-
-## DTL Inheritance Contract
-
-- Labels: `PUBLIC`, `INTERNAL`, `CONFIDENTIAL`, `RESTRICTED`.
-- Derived data inherits `max(source_labels)`.
-- Label downgrade requires audited policy authorization through `src/mcp/` and emits a `TrustFlow` event.
-- Unlabeled data at any trust boundary MUST be treated as `CONFIDENTIAL`.
-
-## TrustFlow Event Contract
-
-- Every enforcement decision emits a TrustFlow event synchronously before returning.
-- Required fields: `ctx_id`, `timestamp`, `vtz_id`, `action` (`allow` | `restrict` | `block`), `component`, `detail`.
-- Events are append-only and immutable — no updates, no deletes.
-- Emission failure MUST fail the enforcement action closed — never silently drop.
-
-## File and Path Security
-
-- All file writes MUST pass `path_security.validate_write_path()` before execution.
-- Path traversal, symlink escape, and writes outside designated directories MUST be rejected and logged.
-
-## Operator Gate Policy
-
-- Gates wait indefinitely for operator input.
-- No auto-approve, no timeout-based approval, no fallback approval — ever.
-
-## Security Refusal Policy
-
-- `SECURITY_REFUSAL` is terminal for the current action.
-- Never retry, rephrase, use provider fallback, or attempt to bypass.
-- Log the refusal as a `TrustFlow` event with `action: block` and surface to the operator.
+| **CAL** (Conversation Abstraction Layer) | `src/cal/` | CTX-ID validation at every entry point, VTZ policy gating before action execution, TrustFlow emission after every outcome | Must NOT process any action before CTX-ID validation; must NOT emit TrustFlow asynchronously |
+| **VTZ** (Virtual Trust Zones) | `src/vtz/` | Binds each session to exactly one VTZ, authorizes cross-VTZ calls explicitly, enforces structural boundaries | Must NOT permit advisory-only boundaries, implicit cross-VTZ tool calls, or mid-session policy mutation |
+| **TrustLock** (Machine Identity) | `src/trustlock/` | Cryptographic machine identity and CTX-ID validation using TrustLock public key and TPM-anchored trust | Must NOT accept software-only validation or mutable issued tokens |
+| **TrustFlow** (Audit Stream) | `src/trustflow/` | Append-only audit/event emission for every action outcome, synchronous in enforcement path | Must NOT buffer asynchronously, skip failed emissions silently, or allow modification/deletion of records |
+| **DTL** (Data Trust Labels) | `src/dtl/` | Immutable label assignment at ingestion, label inheritance (highest classification), label verification before trust-boundary crossings | Must NOT permit untracked label stripping, label mutation, or classification downgrade |
+| **MCP** (Policy Engine) | `src/mcp/` | Explicit, reproducible policy decisions for agent actions | Must NOT hide decision rationale or bypass VTZ enforcement |
+| **Path Security** | `src/path_security/` | Write-path validation via `validate_write_path()` for all file operations | Must NOT allow any file write without prior validation |
