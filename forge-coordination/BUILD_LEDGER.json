@@ -4,7 +4,7 @@
   "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture",
   "scope_statement": "Build the complete Consensus Dev Agent \u2014 a native macOS AI coding agent that uses dual-LLM consensus (Claude + GPT-4o with Claude arbitrating) to develop high-quality software autonomously from technical specifications. The system comprises a two-process architecture: a Swift/SwiftUI shell (UI, Touch ID auth, Keychain secrets, XPC channel, process management per TRD-1) and a Python 3.12 backend (ConsensusEngine per TRD-2, 8-stage BuildPipeline with 3-pass review per TRD-3, GitHubTool per TRD-5, BuildLedger per TRD-4, DocumentStore with FAISS vector retrieval per TRD-10, HolisticReview per TRD-6, TRDWorkflow with FOUNDER/ENGINEER/CONSULTANT modes per TRD-7), connected via authenticated Unix socket with line-delimited JSON (TRD-1 \u00a76, TRD-12), with Mac CI runner infrastructure for Swift validation (TRD-9), comprehensive security controls (TRD-11), recovery and state management (TRD-13), iterative code quality pipeline (TRD-14), and full testing/validation strategy (TRD-16). The agent decomposes plain-language intent into ordered PRDs, generates PR specs, implements code via parallel consensus generation, runs iterative fix loops (up to 20 passes with escalating strategies), executes CI, and gates on operator approval at every merge point.\n\nClarifications:\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - this will need to be entered later.\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - agreed\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - yes, but it also must be able to fail back if it does not detect the GPU\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - Lock in Forge as the canonical customer user name. With Dev Agent as a subtitle",
   "created_at": 1774120718.4815922,
-  "updated_at": 1774121279.958698,
+  "updated_at": 1774124605.809304,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -196,16 +196,16 @@
       "pr_num": 1,
       "title": "Add canonical product identity schema and naming policy documentation",
       "branch": "",
-      "status": "available",
+      "status": "done",
       "engineer_id": "",
-      "pr_url": null,
+      "pr_url": "https://github.com/todd-yousource-ai/Dev-Agent/pull/67",
       "claimed_at": null,
       "started_at": null,
-      "completed_at": null,
+      "completed_at": 1774124605.8090932,
       "depends_on_prs": [],
       "retry_count": 0,
       "failure_summary": "",
-      "journal_path": "",
+      "journal_path": "forge-coordination/impl-journal/PR-001.md",
       "summary": "Create the foundational naming policy document and machine-readable canonical name specification. Defines 'Forge' as the primary product name, 'Dev Agent' as the subtitle, and all derived forms (PascalCase, kebab-case, SCREAMING_SNAKE, reverse-DNS bundle ID, etc.) with explicit rules for when each form is used. The JSON spec serves as the single source of truth that both Python and Swift constants modules are derived from. Includes a README explaining the naming hierarchy, migration rationale, and prohibited legacy variants.",
       "impl_files": [
         "docs/product_identity/naming_policy.md",
@@ -227,7 +227,7 @@
       "pr_num": 2,
       "title": "Add Python branding constants module (`forge/branding.py`)",
       "branch": "",
-      "status": "blocked",
+      "status": "available",
       "engineer_id": "",
       "pr_url": null,
       "claimed_at": null,
@@ -258,7 +258,7 @@
       "pr_num": 3,
       "title": "Add Swift branding constants (`BrandingConstants.swift`)",
       "branch": "",
-      "status": "blocked",
+      "status": "available",
       "engineer_id": "",
       "pr_url": null,
       "claimed_at": null,
@@ -658,7 +658,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 2,
+  "version": 3,
   "schema_version": 3,
   "agent_version": "38.118.0"
 }
