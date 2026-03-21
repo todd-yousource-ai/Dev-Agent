@@ -2,191 +2,175 @@
 
 # Code Conventions — Forge Platform
 
-> Authoritative coding conventions for all Forge subsystems.
-> Every rule is mandatory unless explicitly marked **(advisory)**.
+> Authoritative coding conventions for the Forge platform and the **ConsensusDevAgent** subsystem.
+> Every rule is mandatory unless explicitly marked **(advisory)**. PR reviewers must enforce these rules; CI may automate enforcement where noted.
 
 ---
 
 ## 1. File and Directory Naming
 
-1. **Source layout mirrors subsystem acronyms exactly:**
+1. **Source layout mirrors subsystem boundaries exactly.**
 
    ```
-   src/cal/           - Conversation Abstraction Layer
-   src/dtl/           - Data Trust Label
-   src/trustflow/     - TrustFlow audit stream
-   src/vtz/           - Virtual Trust Zone enforcement
-   src/trustlock/     - Cryptographic machine identity (TPM-anchored)
-   src/mcp/           - MCP Policy Engine
-   src/rewind/        - Forge Rewind replay engine
-   sdk/connector/     - Forge Connector SDK
+   src/cal/           # Conversation Abstraction Layer
+   src/dtl/           # Data Trust Labels
+   src/trustflow/     # TrustFlow audit stream
+   src/vtz/           # Virtual Trust Zone enforcement
+   src/trustlock/     # Cryptographic machine identity (TPM-anchored)
+   src/mcp/           # MCP Policy Engine
+   src/rewind/        # Forge Rewind replay engine
+   sdk/connector/     # Forge Connector SDK
+   tests/<subsystem>/ # Tests mirror src/ structure exactly
    ```
 
-2. **Test directories mirror `src/` exactly:**
+2. **Python files** use `snake_case.py`. No hyphens, no uppercase.
+3. **Swift files** use `PascalCase.swift`, one primary type per file, filename matches the type name.
+4. **Test files** are prefixed `test_` (Python) or suffixed `Tests` (Swift) and live under `tests/<subsystem>/`, mirroring the `src/` path segment-for-segment.
 
    ```
-   tests/cal/
-   tests/dtl/
-   tests/trustflow/
-   tests/vtz/
-   tests/trustlock/
-   tests/mcp/
-   tests/rewind/
-   tests/connector/
+   src/cal/session.py       → tests/cal/test_session.py
+   src/trustflow/emitter.py → tests/trustflow/test_emitter.py
    ```
 
-3. **File names** use `snake_case.py` — no hyphens, no uppercase, no abbreviations that are not already the canonical subsystem slug (e.g., `cal`, `dtl`, `vtz`).
-
-4. **One public class per file.** The file name must match the class name in snake_case form (e.g., `class TrustFlowAuditor` → `trust_flow_auditor.py`).
-
-5. **No runtime template files.** Every generated or source file must be complete and self-contained. Do not create files whose only purpose is to call or dispatch to another generated file.
+5. **No generated file may exist solely to call or dispatch to another generated file.** Every file must be a complete, self-contained unit (see §6, rule 6).
 
 ---
 
 ## 2. Class and Function Naming
 
-6. **Classes:** `PascalCase`. Subsystem prefix is encouraged for top-level public classes (`CalSession`, `DtlLabel`, `VtzEnforcer`).
-
-7. **Functions and methods:** `snake_case`. Verbs first (`validate_path`, `fetch_build_map`, `strip_code_fences`).
-
-8. **Constants:** `UPPER_SNAKE_CASE`, defined at module level.
-
-9. **Private members:** Single leading underscore (`_internal_cache`). Double underscores only when name-mangling is intentionally required.
-
-10. **axIdentifier naming (macOS / SwiftUI):**
-    Every interactive element must have `.accessibilityIdentifier()` set, using the pattern:
+6. **Python classes** — `PascalCase`. No underscores.
+7. **Python functions and methods** — `snake_case`. Verbs first (`validate_write_path`, `fetch_build_map`).
+8. **Python constants** — `UPPER_SNAKE_CASE`, defined at module level.
+9. **Swift types** — `PascalCase`. Protocols do **not** use an `I` prefix; use a `-able`/`-ing`/`-Protocol` suffix only when the noun form is ambiguous.
+10. **Swift methods and properties** — `camelCase`.
+11. **Accessibility identifiers (macOS / SwiftUI)** follow the pattern:
 
     ```
     {module}-{component}-{role}-{context?}
     ```
 
-    Examples:
+    Set via `.accessibilityIdentifier()` on **every** interactive element. Examples:
 
     ```
     "auth-touchid-button"
-    "auth-passcode-button"
     "settings-anthropic-key-field"
-    "settings-anthropic-key-test-button"
-    "settings-anthropic-key-reveal-button"
     "navigator-project-row-{projectId}"
-    "stream-gate-card-{gateId}"
     "stream-gate-yes-button-{gateId}"
-    "stream-gate-skip-button-{gateId}"
-    "stream-gate-stop-button-{gateId}"
     ```
 
-    All four segments are lowercase-hyphenated. The `{context}` segment is required when multiple instances of the same component can exist simultaneously.
-
----
-
-## 3. Error and Exception Patterns
-
-11. **Custom exceptions** inherit from a single `ForgeError` base class defined in `src/forge_error.py`.
-
-12. **Subsystem exceptions** follow `{Subsystem}{Noun}Error` naming: `CalSessionExpiredError`, `VtzPathTraversalError`, `DtlSchemaValidationError`.
-
-13. **Never catch bare `Exception` or `BaseException`** outside of top-level entry points or explicit fault barriers.
-
-14. **Error messages** must include: (a) what failed, (b) the offending value or context identifier, (c) the expected state. Example:
-
-    ```python
-    raise VtzPathTraversalError(
-        f"Write blocked: path '{user_path}' escapes sandbox root '{sandbox_root}'"
-    )
-    ```
-
-15. **Graceful None returns are allowed only where the TRD explicitly requires them.** Example: `fetch_build_map()` must return `None` (not raise) when no map exists yet. Document this at the call site with a comment citing the TRD.
-
----
-
-## 4. Import and Module Organisation
-
-16. **Import order** (enforced by `isort` with `profile=black`):
-    1. Standard library
-    2. Third-party packages
-    3. Forge platform packages (`src/`)
-    4. Local / relative imports
-
-    Separate each group with a blank line.
-
-17. **Absolute imports from `src/`** are mandatory for cross-subsystem references:
-
-    ```python
-    from src.vtz.path_security import validate_write_path
-    ```
-
-18. **No dynamic code loading.** Do not use `eval()`, `exec()`, or `importlib.import_module()` to load generated files at runtime.
-
-19. **Circular imports** are a blocking CI error. If two subsystems depend on each other, extract the shared type or protocol into `src/shared/`.
-
----
-
-## 5. Comment and Documentation Rules
-
-20. **Every public function and class** must have a docstring (Google style):
-
-    ```python
-    def validate_write_path(user_supplied_path: str) -> Path:
-        """Validate and return a safe write path inside the sandbox.
-
-        Args:
-            user_supplied_path: Raw path string from the caller.
-
-        Returns:
-            Resolved Path guaranteed to be within the sandbox root.
-
-        Raises:
-            VtzPathTraversalError: If the path escapes the sandbox.
-        """
-    ```
-
-21. **Inline comments** explain *why*, not *what*. If the code needs a *what* comment, the code should be refactored first.
-
-22. **TRD citations** are required when a design decision is non-obvious. Format: `# Per TRD-16 §5.3: fetch_build_map returns None when no map exists.`
-
-23. **TODO format:** `# TODO(engineer_id): description — FORGE-XXXX` (must reference a tracker ticket).
-
----
-
-## 6. ConsensusDevAgent-Specific Patterns
-
-### 6.1 Path Security — Mandatory Pre-Write Validation
-
-24. **Every write operation** — file create, file overwrite, directory create — must validate the target path before any I/O:
-
-    ```python
-    from src.vtz.path_security import validate_write_path
-
-    safe_path = validate_write_path(user_supplied_path)  # raises on traversal
-    safe_path.write_text(content)
-    ```
-
-    No exceptions. No shortcuts. Agent-generated paths are treated as untrusted input.
-
-### 6.2 Branch Naming
-
-25. **All agent branches** must follow this exact pattern:
+12. **Branch names** are mandatory and follow this exact template:
 
     ```
     forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}
     ```
 
-    - `engineer_id`: The assigned engineer identifier (lowercase alphanumeric + hyphens).
-    - `subsystem_slug`: One of `cal`, `dtl`, `trustflow`, `vtz`, `trustlock`, `mcp`, `rewind`, `connector`.
-    - `N`: Zero-padded 3-digit PR sequence number.
-    - `title_slug`: Lowercase-hyphenated summary, max 48 characters.
+    - `engineer_id` — GitHub username, lowercase.
+    - `subsystem_slug` — matches the `src/` directory name (e.g., `cal`, `vtz`, `trustflow`).
+    - `N` — zero-padded to 3 digits.
+    - `title_slug` — lowercase, hyphen-separated, ≤ 48 characters.
 
-    Example: `forge-agent/build/eng-042/trustflow/pr-007-add-audit-event-schema`
+---
 
-### 6.3 Canonical `_strip_code_fences()` Function
+## 3. Error and Exception Patterns
 
-26. The `_strip_code_fences()` utility appears in **exactly five modules**. All five copies must be **byte-identical**. Any change to the sanitisation logic must be applied atomically to all five in a single commit. The function contract:
+13. **Define one base exception per subsystem** in `<subsystem>/exceptions.py`:
 
-    | Input | Output |
-    |---|---|
-    | `None` | `None` (returned unchanged) |
-    | `""` (empty string) | `""` (returned unchanged) |
-    | Code with no fences or unicode | Input returned unmodified |
-    | Code with fences | Fences stripped; trailing newline preserved |
+    ```python
+    class CalError(Exception):
+        """Base for all CAL exceptions."""
+    ```
 
-    The function must be **synchron
+14. **All subsystem exceptions inherit from the subsystem base**, never from bare `Exception`.
+15. **Never catch bare `Exception` or `BaseException`** except at a top-level entry point (CLI main, HTTP handler root). Always log the original traceback before re-raising or converting.
+16. **Path traversal validation is required before every filesystem write.** No exceptions.
+
+    ```python
+    from path_security import validate_write_path
+
+    safe_path = validate_write_path(user_supplied_path)  # raises on traversal
+    ```
+
+17. **`fetch_build_map()` must return `None` (not raise) when no map exists.** This is the expected state for the first 5 PRs of any build. Tests must assert this (see `TestBuildMapLive`).
+
+---
+
+## 4. Import and Module Organisation
+
+18. **Import order** (enforced by `isort` with profile `black`):
+    1. Standard library
+    2. Third-party packages
+    3. Forge platform packages (`src.*`, `sdk.*`)
+    4. Local relative imports
+
+    Separate each group with a single blank line.
+
+19. **No dynamic code loading in generated files.** Generated code must never call `eval()`, `exec()`, or `importlib.import_module()` to load other generated files.
+20. **No circular imports.** If two modules need each other, extract the shared type into a third module or use `TYPE_CHECKING`-guarded imports.
+21. **Relative imports** are permitted only within the same subsystem package. Cross-subsystem imports must be absolute:
+
+    ```python
+    # Good — cross-subsystem
+    from src.vtz.enforcer import enforce_zone
+
+    # Good — intra-subsystem
+    from .session import Session
+    ```
+
+---
+
+## 5. Comment and Documentation Rules
+
+22. **Every public module, class, and function must have a docstring.** Use Google-style docstrings for Python:
+
+    ```python
+    def validate_write_path(path: str) -> Path:
+        """Validate and resolve a user-supplied path for safe writing.
+
+        Args:
+            path: Raw path string from untrusted input.
+
+        Returns:
+            Resolved Path guaranteed to be within the allowed write root.
+
+        Raises:
+            PathTraversalError: If the resolved path escapes the sandbox.
+        """
+    ```
+
+23. **Inline comments explain *why*, not *what*.** If a comment restates the code, delete it.
+24. **TODO format** — `# TODO(username): description — TICKET-123`. TODOs without a ticket reference are rejected in review.
+25. **No commented-out code in `main` or any release branch.** Use version control; don't comment-disable.
+
+---
+
+## 6. ConsensusDevAgent-Specific Patterns
+
+26. **`_strip_code_fences()` is a canonical shared function.** The identical implementation must exist in all five modules that use it. Any change must be applied to all five simultaneously, in the same PR. The function contract:
+    - Accepts an empty string or `None` → returns the value unchanged.
+    - Preserves trailing newline on non-empty output.
+    - Does not modify code that contains no fences or unicode characters.
+    - Is synchronous — never `async`.
+
+27. **Generated files must be self-contained.** A generated file must never:
+    - Use `eval()`, `exec()`, or `importlib.import_module()` to load other generated files.
+    - Consist of a template with runtime placeholders.
+    - Exist solely to call or dispatch to another generated file.
+
+28. **Gate interactions in the consensus stream** must use typed enums, not raw strings:
+
+    ```python
+    class GateAction(str, Enum):
+        YES = "yes"
+        SKIP = "skip"
+        STOP = "stop"
+    ```
+
+29. **Every agent write operation** must call `validate_write_path()` (rule 16) **before** opening a file handle. There is no "trusted path" shortcut.
+
+30. **Build-map access is defensive.** `fetch_build_map()` must:
+    - Return `None` when no map exists (never raise).
+    - Be covered by a `TestBuildMapLive` test that asserts graceful `None` return.
+
+31. **PR sequencing.** Agent-authored PRs are numbered per-build. The branch name encodes the sequence (`pr-001`, `pr-002`, …). CI must reject a PR whose branch number is not exactly one greater than the last merged PR for that `engineer_id`/`subsystem_slug` pair, unless it is `pr-001`.
+
+32. **
