@@ -2,308 +2,292 @@
 
 ## What This Subsystem Does
 
-ConsensusDevAgent is the long-running build-thread subsystem responsible for planning, tracking, and resuming generation of the `ConsensusDevAgent` workstream across PRDs and PRs.
+ConsensusDevAgent is the long-running build-thread subsystem responsible for planning and executing the repository build for the `ConsensusDevAgent` target. It owns:
 
-Its primary responsibilities are:
+- persistent thread state for the build,
+- startup/restart recovery,
+- PRD-to-PR planning progression,
+- reconstruction of local execution state from GitHub-backed artifacts,
+- operator-facing resume selection for incomplete builds.
 
-- maintain per-thread build state for the `ConsensusDevAgent` thread
-- detect incomplete work automatically on agent startup
-- offer restart-time recovery without requiring a resume command
-- persist generated PR-plan artifacts to both local thread state and GitHub-backed recovery files
-- reconstruct execution state from GitHub PR-plan JSON artifacts if local state is missing or stale
-- support operator-directed continuation of an incomplete build thread via startup selection
+This subsystem is designed so that a normal application restart does **not** require a manual resume command. On startup, Forge scans for incomplete build threads and presents them for operator selection. If the operator selects the incomplete `ConsensusDevAgent` thread, control passes to `director.resume()` and execution continues from saved state.
 
-Normal recovery is automatic at startup. The operator does **not** issue `/resume`, `/continue`, or `/ledger resume` for standard restarts. Instead, on boot, ForgeAgent scans thread state, detects incomplete builds, and presents resumable threads. Selecting the `ConsensusDevAgent` entry invokes `director.resume()` for that thread.
+Normal restart sequence:
 
-This subsystem is therefore a **restart-safe execution state manager** for the `ConsensusDevAgent` build pipeline, with GitHub-backed disaster recovery for PR-plan state.
+1. Launch `ForgeAgent.app`
+2. Bootstrap completes (~45s; transient installer pauses are expected)
+3. Incomplete build threads are discovered automatically
+4. Operator selects the `ConsensusDevAgent` thread by number
+5. Resume is initiated via `director.resume()`
+
+The subsystem also supports disaster recovery when local thread state is missing or stale. In that case, it reconstructs PR planning state from machine-readable PR plan JSON artifacts stored on the GitHub PRDs branch.
 
 ## Component Boundaries
 
 ### In Scope
 
-This subsystem owns:
+ConsensusDevAgent includes responsibility for:
 
-- thread-local persisted state for the `ConsensusDevAgent` build
-- startup-time detection of incomplete `ConsensusDevAgent` build threads
-- resume selection UX integration at startup
-- mapping persisted thread state into the runtime pipeline state
-- storage of PR plan progress indicators such as:
-  - thread `state`
-  - `prd_count`
-  - `pr_plans`
-  - `pr_plans_by_prd`
-- reconstruction of PR plans from GitHub PRD-plan JSON backups
-- operational cleanup expectations for stale `forge-agent/build/consensusdevagent-*` branches
-- preservation of the PRDs branch when it contains recovery JSON files
+- managing the local thread state file for the `ConsensusDevAgent` build thread,
+- tracking build lifecycle state such as PRD generation vs PR pipeline execution,
+- persisting and resuming PR plan progress,
+- detecting incomplete threads at startup,
+- resuming from previously saved local state,
+- reconstructing state from GitHub-backed PR plan JSON when local state is absent or incomplete,
+- presenting build status summary during resume selection.
+
+Representative local state path:
+
+- `workspace/.../state/threads/consensusdevagent.json`
+
+Representative GitHub recovery artifacts:
+
+- `prds/consensusdevagent/prd-001-pr-plan.md`
+- `prds/consensusdevagent/prd-001-pr-plan.json`
 
 ### Out of Scope
 
 This subsystem does **not** own:
 
-- the general ForgeAgent bootstrap process
-- the implementation of `director.resume()` itself
-- PR generation semantics beyond the state required to resume them
-- CI execution or branch monitoring logic
-- manual operator gate persistence across backend restarts
-- direct GitHub API access outside approved tool boundaries
+- application bootstrap itself,
+- generic branch lifecycle management outside its branch namespace,
+- direct GitHub API access,
+- gate auto-resolution,
+- operator approval persistence across backend restarts,
+- arbitrary code execution,
+- repository-global CI policy.
 
-### External Boundary Rules
+GitHub operations must go through `GitHubTool`; the subsystem must not call the GitHub API directly.
 
-The subsystem operates within repository-wide agent constraints:
+### Branch Boundary
 
-- all GitHub operations must go through `GitHubTool`
-- never use the GitHub API directly
-- validate paths before any write
-- never perform blind GitHub writes without SHA protection
-- never retry indefinitely; max 3 attempts total
-- gates never auto-resolve
-- if backend restarts mid-gate, gate state is lost and requires operator re-approval
-- no undo exists for gate decisions
+This subsystem operates within the `forge-agent/build/consensusdevagent-*` branch namespace for generated build branches. Operational guidance explicitly treats old branches in this namespace as disposable, except:
 
-These are not optional behaviors; they constrain how recovery state may be persisted, restored, and advanced.
+- `main`
+- `forge-agent/build/consensusdevagent/prds` if it contains JSON recovery files
+
+Old build branches should be deletable because the agent recreates branches automatically. The PRDs branch is special because it may contain the authoritative recovery artifacts.
 
 ## Data Flow
 
-### 1. Normal Startup Detection
+### 1. Startup and Incomplete Thread Detection
 
-On application launch:
+At normal startup:
 
-1. operator starts `ForgeAgent.app`
-2. bootstrap completes in approximately 45 seconds
-3. startup scans for incomplete build threads
-4. if `ConsensusDevAgent` thread state is incomplete, the operator is shown a resumable entry such as:
-   - thread name
-   - PRD progress, e.g. `2/26 PRDs`
-   - completed PR count, e.g. `14 PRs done`
-   - recency, e.g. `(0h ago)`
-5. operator selects the thread by numeric index
-6. runtime calls `director.resume()`
+1. Forge bootstraps.
+2. Thread state storage is scanned for incomplete build threads.
+3. If a `ConsensusDevAgent` thread is incomplete, it is presented in the resume menu with summary metadata:
+   - agent name,
+   - PRD progress,
+   - PR completion count,
+   - recency,
+   - human-readable task description.
+4. Operator selects the thread.
+5. Resume transfers to `director.resume()`.
 
-No explicit resume command is part of the normal path.
+There is no `/resume`, `/continue`, or `/ledger resume` requirement for standard restart behavior.
 
 ### 2. Local State Persistence
 
-The canonical local thread state is stored as a thread JSON file, operationally exemplified by:
+The subsystem persists execution state in a local JSON thread file. Important observable fields include:
 
-`/Users/tgould/Agents/forge-dev-agent/workspace/todd-gould/state/threads/consensusdevagent.json`
+- `state`
+- `prd_count`
+- `pr_plans` / `pr_plans_by_prd`
 
-This file carries enough information to identify:
+Operationally relevant interpretation:
 
-- current pipeline phase via `"state"`
-- PRD progress via `"prd_count"`
-- generated PR plans via `pr_plans` and/or `pr_plans_by_prd`
+- `state: "pr_pipeline"` indicates PR plans should already exist and execution is in PR pipeline processing.
+- `state: "prd_gen"` with empty `pr_plans_by_prd` indicates PR planning was not durably captured in local state before restart.
 
-Operationally, a healthy resumed PR-planning thread should show:
+### 3. PR Plan Artifact Persistence to GitHub
 
-- `"state": "pr_pipeline"` when PR plans already exist
-- PR plan counts matching expected PR count per PRD
+After each PR plan is generated, the subsystem writes two artifacts to the PRDs branch:
 
-### 3. GitHub Recovery Persistence
+- markdown summary for human inspection,
+- JSON specification for machine recovery.
 
-After each PR plan is generated, the subsystem writes two artifacts to the GitHub PRDs branch:
+The JSON file is the disaster-recovery source of truth for plan reconstruction if local state is wiped or stale.
 
-- `prds/consensusdevagent/prd-001-pr-plan.md`
-- `prds/consensusdevagent/prd-001-pr-plan.json`
+### 4. Recovery from GitHub Artifacts
 
-The markdown file is human-readable.
-The JSON file is the machine-readable disaster recovery source of truth for PR-plan reconstruction.
+If local state is missing, corrupted, or reflects a pre-plan-save snapshot, the subsystem must recover by reading PR plan JSON files from the PRDs branch and reconstructing the full plan set.
 
-This means recovery durability is split across:
+This path is required to resolve the observed failure mode where the system restarts at `0 PRs done` and begins regenerating PRs from the beginning despite prior progress.
 
-- **local thread state** for fast resume
-- **GitHub PR-plan JSON files** for disaster recovery
+### 5. Manual Reset / Operational Repair
 
-### 4. Resume Reconstruction
+Operators may intentionally wipe local thread state by deleting the thread JSON file. After that, recovery depends on GitHub-backed PR plan JSON existing on the PRDs branch.
 
-If local state is present and internally consistent, the subsystem resumes directly from the thread JSON.
-
-If local state is missing, wiped, or stale, the subsystem reconstructs from GitHub PR-plan JSON artifacts in the PRDs branch. This is specifically intended to recover from cases where local thread state was lost or saved before PR plans were recorded.
-
-### 5. Operator Maintenance Paths
-
-Operational runbook actions affecting this subsystem include:
-
-- deleting stale build branches matching `forge-agent/build/consensusdevagent-*`
-- preserving:
-  - `main`
-  - `forge-agent/build/consensusdevagent/prds` if it contains JSON recovery files
-- manually inspecting thread state JSON
-- wiping local thread state when required
-
-The subsystem depends on the PRDs branch backup artifacts surviving cleanup when they contain recovery JSON.
+This means local state is a cache/checkpoint; GitHub PR plan JSON is the durable recovery substrate for planning state.
 
 ## Key Invariants
 
-1. **Normal restart requires no explicit resume command.**  
-   Recovery is startup-driven and selection-driven, not command-driven.
+1. **Normal restart is automatic at startup**
+   - No explicit resume command is required for ordinary restart.
+   - Incomplete build discovery must happen during startup flow.
 
-2. **Incomplete `ConsensusDevAgent` work must be discoverable at startup.**  
-   If a thread is incomplete, it must appear in the startup resume list.
+2. **Resume is thread-based**
+   - Recovery targets an incomplete build thread, not a free-form command invocation.
 
-3. **Local thread state must encode phase accurately.**  
-   In particular:
-   - if PR plans exist, thread `"state"` must not remain at an earlier phase such as `"prd_gen"`
-   - resume behavior depends on this phase marker being correct
+3. **Local thread state is not the only source of truth**
+   - PR plan JSON stored in GitHub must be sufficient to reconstruct planning state after local loss.
 
-4. **Each generated PR plan must produce GitHub recovery artifacts.**  
-   For every generated PR plan, both markdown and JSON artifacts must be written to the PRDs branch.
+4. **PR plan JSON is durable recovery data**
+   - For every generated PR plan, the machine-readable JSON artifact must be written to the PRDs branch.
 
-5. **GitHub PR-plan JSON is the disaster recovery backup.**  
-   Loss of local thread state must not imply loss of PR-plan reconstruction capability, provided the JSON artifacts exist.
+5. **State must reflect execution phase accurately**
+   - If PR plans exist, local state should indicate the PR pipeline phase rather than PRD generation.
 
-6. **The PRDs recovery branch must not be deleted if it contains JSON files.**  
-   Branch cleanup may remove stale build branches, but the recovery-bearing PRDs branch is retained.
+6. **Old build branches are disposable**
+   - Build branches under `forge-agent/build/consensusdevagent-*` should not be relied on for durable recovery.
+   - The PRDs branch is the exception if it contains JSON files.
 
-7. **GitHub writes must respect repository safety rules.**  
-   This includes:
-   - use `GitHubTool` only
-   - path validation before writes
-   - SHA-aware writes
-   - no direct GitHub API usage
+7. **GitHub writes must be safe and mediated**
+   - All GitHub operations go through `GitHubTool`.
+   - Paths must be validated before any write.
+   - No blind write without SHA.
+   - No direct GitHub API usage.
 
-8. **Retries are bounded.**  
-   Recovery persistence and polling behavior may retry, but never indefinitely; maximum 3 attempts total.
+8. **Gates never auto-resolve**
+   - If this subsystem encounters a gated condition, it must wait.
+   - If backend restarts during a gate, gate state is lost and must be re-approved by the operator.
 
-9. **Gate state is not durable across backend restart.**  
-   This subsystem may resume build-thread state, but it must not assume gate approvals survive restart.
+9. **Retries are bounded**
+   - Never retry indefinitely.
+   - Maximum 3 attempts total.
+   - Provider/tool-specific backoff rules apply.
 
-10. **Branch-monitor noise from stale build branches is an operational hazard.**  
-    Cleanup of old `forge-agent/build/consensusdevagent-*` branches is part of maintaining correct subsystem behavior.
+10. **Security restrictions are mandatory**
+    - No shell injection
+    - No credential leakage to logs or prompts
+    - No direct execution of generated code
+    - No path traversal
+    - No blind GitHub write
+    - No ignoring `SECURITY_REFUSAL`
 
 ## Failure Modes
 
-### Stale or Incomplete Local State
+### 1. Restart Causes PR Regeneration from Zero
 
-Symptom:
-- after restart, the system reports `0 PRs done`
-- PR generation restarts from PR #1
+**Symptom**
+- Resume shows `0 PRs done`
+- System begins generating `PR #1` again
 
-Likely cause:
-- local thread state was saved before PR plans were generated
-- `"state"` remains `"prd_gen"`
-- `pr_plans_by_prd` is empty `{}`
+**Typical diagnosis**
+- Local thread JSON shows:
+  - `state: "prd_gen"`
+  - empty `pr_plans_by_prd`
 
-Effect:
-- resume logic believes PR planning has not yet occurred
+**Cause**
+- Local state was saved before PR plans were durably captured there.
 
-Expected recovery path:
-- inspect GitHub PRDs branch for `*-pr-plan.json` files
-- reconstruct PR-plan state from those JSON artifacts
+**Required behavior**
+- Recover PR plans from GitHub PRD JSON artifacts instead of regenerating from scratch.
 
-### Local Thread State Deleted
+### 2. Local Thread State Deleted
 
-Symptom:
-- no usable local `consensusdevagent.json`
+**Symptom**
+- No local thread checkpoint for `ConsensusDevAgent`
 
-Effect:
-- local fast-resume state is unavailable
+**Cause**
+- Manual wipe or corruption of `consensusdevagent.json`
 
-Expected recovery path:
-- rebuild state from GitHub PR-plan JSON files in the PRDs branch
+**Required behavior**
+- Reconstruct from GitHub PR plan JSON if present.
+- If PRD JSON is absent, planning state is unrecoverable from this subsystem alone.
 
-### Recovery Branch Accidentally Deleted
+### 3. PRDs Branch Missing or Cleaned Incorrectly
 
-Symptom:
-- local state is missing and GitHub PR-plan JSON artifacts are absent
+**Symptom**
+- Local state lost and no recovery artifacts available
 
-Effect:
-- disaster recovery source is lost
-- full PR-plan reconstruction may be impossible
+**Cause**
+- `forge-agent/build/consensusdevagent/prds` branch deleted or retained without required JSON files
 
-Operational prevention:
-- keep `forge-agent/build/consensusdevagent/prds` if it contains JSON files
+**Impact**
+- Disaster recovery for PR planning is broken.
 
-### Stale Build Branch Accumulation
+**Operational implication**
+- The PRDs branch must be preserved when it contains JSON files.
 
-Symptom:
-- CI failures accumulate on old branches
-- branch monitor becomes noisy or confused
+### 4. GitHub Write/Read Failures
 
-Effect:
-- operational signal degradation
-- increased likelihood of incorrect branch interpretation during active builds
+**Cause examples**
+- rate limits,
+- permission failures,
+- SHA mismatch,
+- path validation failure,
+- transient provider/tool errors.
 
-Operational mitigation:
-- delete all branches matching `forge-agent/build/consensusdevagent-*`
-- except preserve the PRDs branch if it contains recovery JSON
+**Required behavior**
+- Apply bounded retries only.
+- Respect:
+  - 403 primary rate-limit backoff starting at 60s with exponential backoff,
+  - 429 secondary limit `Retry-After` exactly,
+  - ETag caching on polling endpoints.
+- Emit an error card and gate when failure is non-retriable or policy-blocked.
 
-### Backend Restart During Gate
+### 5. Backend Restart During Gate
 
-Symptom:
-- backend restarts while awaiting operator approval
+**Symptom**
+- previously pending approval is no longer active after restart
 
-Effect:
-- gate state is lost
-- approval does not auto-resume
+**Cause**
+- gate state is not durable across backend restarts
 
-Constraint:
-- operator must explicitly re-approve
-- subsystem must not auto-resolve or infer prior approval state
+**Required behavior**
+- Do not auto-resolve or infer prior approval.
+- Require explicit operator re-approval.
 
-### GitHub Rate Limit or Access Errors
+### 6. Unsafe or Forbidden Operation Attempted
 
-Relevant repository-wide handling constraints:
+**Examples**
+- direct GitHub API usage,
+- path traversal,
+- shell injection,
+- generated code execution,
+- credential exposure,
+- write without SHA.
 
-- `403` primary rate limiting: exponential backoff starting at 60s
-- `429` secondary rate limiting: respect `Retry-After` exactly
-- ETag caching on polling endpoints
-- retry after failover patterns are bounded to 3 attempts total
-
-Effect on this subsystem:
-- delayed or failed persistence of recovery artifacts
-- delayed recovery-state polling or branch inspection
-
-### Safety Rule Violations
-
-Forbidden behaviors that would compromise this subsystem include:
-
-- direct GitHub API usage
-- blind GitHub writes without SHA
-- path traversal
-- shell injection
-- logging or prompting credentials
-- direct execution of generated code
-- ignoring `SECURITY_REFUSAL`
-
-These are architecture-level violations, not just implementation bugs.
+**Required behavior**
+- Stop immediately.
+- Do not retry or rephrase around the policy.
+- Emit error card, gate, and log full prompt context as required by system policy.
 
 ## Dependencies
 
-### Runtime Dependencies
+### Runtime/Platform Dependencies
 
-- ForgeAgent application bootstrap and startup prompt flow
-- thread-state storage under the workspace state directory
-- `director.resume()` for runtime continuation after thread selection
+- Forge application startup flow
+- thread-state persistence under workspace state storage
+- `director.resume()` for continuation of incomplete work
 
-### Persistence Dependencies
+### Storage Dependencies
 
-- local JSON thread state file for `ConsensusDevAgent`
-- GitHub PRDs branch as off-host recovery storage
-- PR-plan markdown and JSON artifact generation
+- local thread JSON file for checkpointed execution state
+- GitHub PRDs branch for durable PR plan recovery artifacts
 
-### Platform/Tooling Dependencies
+### Tooling Dependencies
 
-- `GitHubTool` for all GitHub operations
-- path validation before any file write
-- SHA-aware write semantics for GitHub content updates
-- branch management tooling for cleanup of stale build branches
+- `GitHubTool` for all GitHub reads/writes
+- consensus/provider infrastructure subject to bounded retry rules
+- document/context loading facilities for repository instructions and generation inputs
 
-### Cross-Cutting Repository Policies
+### Repository Contract Dependencies
 
-This subsystem is constrained by repository-wide operational and safety policies, including:
+This subsystem must conform to repository-wide operating rules reflected in the documented headings, including:
 
-- bounded retries only
-- provider failover behavior in consensus/error paths
-- no automatic gate resolution
-- explicit operator override on hard-stop error cards
-- security checklist compliance before every PR
+- read critical files before modifying behavior,
+- validate paths before writes,
+- use consensus engine and document store according to repo contract,
+- route GitHub operations only through approved tooling,
+- honor CI routing and version management conventions,
+- apply the security checklist before every PR.
 
-### Critical Operational Files and Artifacts
+### Operational Dependencies
 
-- local thread state:
-  - `state/threads/consensusdevagent.json`
-- GitHub recovery artifacts:
-  - `prds/consensusdevagent/prd-###-pr-plan.md`
-  - `prds/consensusdevagent/prd-###-pr-plan.json`
-
-Together, these files define the resumability contract for the `ConsensusDevAgent` subsystem.
+- operators must select the incomplete build thread on startup to resume work,
+- operators may inspect local state fields to diagnose restart problems,
+- operators may preserve or remove branches according to runbook rules,
+- operators must re-approve gated actions after backend restarts.
