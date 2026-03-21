@@ -1,101 +1,91 @@
 # DECISIONS.md
 
-## [Use `forge-docs/` as the source of truth for ConsensusDevAgent requirements]
+## [ConsensusDevAgent repository boundaries and source-of-truth]
 **Status:** Accepted  
-**Context:** The repository structure TRD defines a strict separation between specification artifacts and implementation. ConsensusDevAgent behavior must be grounded in approved TRDs and PRDs, and those documents are stored under `forge-docs/`. The README repository layout also identifies `forge-docs/` as the location for all TRDs and PRDs.  
-**Decision:** Treat `forge-docs/` as the authoritative source for ConsensusDevAgent requirements, sequencing, and constraints. Read relevant TRDs and PRDs from `forge-docs/` before implementation, planning, or modification of subsystem behavior. Do not treat code comments, ad hoc prompts, or unstored drafts as authoritative over documents in `forge-docs/`.  
-**Consequences:** ConsensusDevAgent implementations must be traceable back to repository documents. Requirement changes must be reflected in `forge-docs/` before behavior is changed in code. Planning, review, and audits can rely on a single authoritative document location.  
+**Context:** The subsystem must operate within a fixed repository structure so that documents, implementation, standards, tests, and CI assets are discoverable by both agents and operators. The TRDs and README define explicit locations for source documents and code.  
+**Decision:** Treat `forge-docs/` as the source of truth for all TRDs and PRDs, `forge-standards/` as the source of truth for implementation constraints, `src/` as the Python backend location, `ForgeAgent/` as the macOS app shell location, `ForgeAgentTests/` as XCTest location, `tests/` as pytest location, and `.github/workflows/` as CI workflow location. Do not introduce alternative canonical locations for these artifact classes.  
+**Consequences:** ConsensusDevAgent must read requirements from `forge-docs/` before planning or implementation, must write design constraints into `forge-standards/`, and must place code and tests only in their designated directories. Tooling, prompts, and path validation must assume this layout.  
 **Rejected alternatives:**  
-- Using implementation code as the primary source of truth — rejected because it allows drift from approved product and technical requirements.  
-- Storing subsystem requirements across multiple ad hoc directories — rejected because it weakens discoverability, traceability, and auditability.  
-- Allowing prompts or operator chat to override TRDs without document updates — rejected because it breaks reproducibility and governance.
+- Allowing TRDs/PRDs to be duplicated under feature directories was rejected because it creates ambiguity about the source of truth.  
+- Allowing subsystem-specific standards files outside `forge-standards/` was rejected because it fragments implementation constraints.  
+- Co-locating backend code with document artifacts was rejected because it weakens auditability and repository discipline.
 
-## [Constrain ConsensusDevAgent artifacts to the standard repository layout]
+## [Gate decisions are irreversible]
 **Status:** Accepted  
-**Context:** The repository layout is explicitly defined across the repository structure and README materials. ConsensusDevAgent must fit within the same layout so that planning, implementation, testing, and review remain predictable.  
-**Decision:** Place ConsensusDevAgent implementation in the established repository structure: Python backend code under `src/`, tests under `tests/`, and governing documentation under `forge-standards/` and `forge-docs/` as appropriate. Do not introduce a parallel top-level subsystem layout for ConsensusDevAgent.  
-**Consequences:** The subsystem must integrate with existing tooling, CI, test discovery, and review conventions. New files must be placed in existing standard directories rather than custom top-level folders. Team members and automation can locate subsystem code and documents without special-case handling.  
+**Context:** The build pipeline specification explicitly states there is no undo on gate decisions. Security and auditability depend on preventing silent reversal of stopped or escalated states.  
+**Decision:** Treat all gate decisions in ConsensusDevAgent as append-only and irreversible. Once a gate is entered, failed, escalated, or stopped, the subsystem must not auto-clear, auto-retry past, or mutate history to represent the gate as undone. Any continuation must occur through a new explicit operator-mediated decision path, preserving the prior gate outcome in the audit trail.  
+**Consequences:** State machines, persistence models, and operator UX must model gate outcomes as immutable historical facts. Retry logic must create new attempts rather than overwriting prior outcomes. The audit log must preserve the full chronology of gate events.  
 **Rejected alternatives:**  
-- Creating a dedicated top-level `ConsensusDevAgent/` backend folder — rejected because it fragments the documented repository contract.  
-- Mixing standards, specs, and executable code in one directory — rejected because it obscures ownership and increases review friction.  
-- Storing tests beside all source files by default — rejected because the documented repository uses `tests/` for Python test organization.
+- Supporting “undo gate” operations was rejected because it conflicts with the stated pipeline rule and weakens audit integrity.  
+- Allowing agents to automatically reopen failed gates after code changes was rejected because it would bypass operator control and blur decision provenance.  
+- Deleting failed gate records on success was rejected because it destroys audit history.
 
-## [Implement ConsensusDevAgent as a stage-bound participant in the build pipeline]
+## [Pipeline execution must align to staged contracts]
 **Status:** Accepted  
-**Context:** The README defines the core loop as a staged build pipeline triggered by `/prd start <intent>`, with ordered stages from scope through merge. TRD-3 is identified as the source for full stage contracts, escalation, and audit schema. ConsensusDevAgent must operate within this staged model rather than inventing an independent workflow.  
-**Decision:** Implement ConsensusDevAgent to participate only through the documented pipeline stages and contracts. Bind subsystem actions, state transitions, and outputs to the existing stages: Scope, PRD Plan, PRD Gen, PR Plan, Code Gen, 3-Pass Review, and Merge. Do not bypass or reorder stages in subsystem logic.  
-**Consequences:** ConsensusDevAgent behavior must expose stage-aware state and respect handoff boundaries. Subsystem logic must be compatible with audit trails, gate handling, and escalation defined by the build pipeline. Features that require cross-stage shortcuts are disallowed unless the pipeline contract is updated first.  
+**Context:** The subsystem participates in a larger build pipeline with named stages and stage-specific responsibilities. Correct coordination requires a shared understanding of progression and handoff boundaries.  
+**Decision:** Implement ConsensusDevAgent behavior as stage-aware processing aligned to the defined pipeline: Scope, PRD Plan, PRD Generation, PR Plan, Code Generation, 3-Pass Review, and subsequent gated progression. Do not collapse, reorder, or skip stage contracts in subsystem orchestration without an explicit standards update.  
+**Consequences:** Consensus decisions, arbitration, and outputs must be attributable to a pipeline stage. Inputs and outputs should be validated against stage expectations, and failures must escalate according to stage contract rather than ad hoc behavior.  
 **Rejected alternatives:**  
-- Allowing the subsystem to free-run outside the pipeline — rejected because it breaks auditability and operator expectations.  
-- Collapsing multiple stages into one ConsensusDevAgent internal step — rejected because it hides required review and governance checkpoints.  
-- Permitting dynamic stage reordering based on model preference — rejected because the pipeline is specified as ordered and contract-driven.
+- Using a free-form agent loop without stage identity was rejected because it undermines traceability and coordinated escalation.  
+- Merging planning and generation stages into a single implementation step was rejected because it breaks the documented decomposition model.  
+- Allowing security review to occur opportunistically outside the defined review stage was rejected because it weakens consistency and auditability.
 
-## [Do not support undo or automatic reversal of gate decisions]
+## [Security refusal is a hard stop]
 **Status:** Accepted  
-**Context:** The requirements explicitly state “No undo on gate decisions — document this explicitly” and repeat “No undo on gate decisions” in build pipeline material. Gate decisions are therefore final events in the control flow and audit history. ConsensusDevAgent must not create any mechanism that weakens this guarantee.  
-**Decision:** Treat every gate decision as immutable once recorded. Do not implement undo, rollback, silent reopening, automatic bypass, or state mutation that functionally reverses a gate outcome. Any further progress after a gate must occur only through explicit subsequent operator action defined outside an undo mechanism.  
-**Consequences:** State models, APIs, UI affordances, and audit logging must represent gate decisions as append-only. Error recovery must use new decisions or new workflow runs rather than reversal of prior gates. The subsystem must be designed for irreversible gating semantics from the outset.  
+**Context:** Mandatory security controls require `SECURITY_REFUSAL` behavior in generation prompts and outputs. The documented rule is explicit: when `SECURITY_REFUSAL` appears in output, the PR must stop, gate, and log, with no automatic bypass.  
+**Decision:** Treat any `SECURITY_REFUSAL` emitted by a model, reviewer, or enforcement layer as a terminal hard-stop event for the active PR flow. Immediately stop progression, create a gate card for operator review where applicable, and log the event in the audit trail. Never auto-bypass, suppress, reinterpret, or continue past a `SECURITY_REFUSAL`.  
+**Consequences:** ConsensusDevAgent must inspect outputs for `SECURITY_REFUSAL`, surface the event prominently, and prevent downstream actions such as file writes, PR advancement, or merge preparation. Security handling must take precedence over throughput.  
 **Rejected alternatives:**  
-- Adding an “undo last gate” operator command — rejected because it directly violates stated requirements.  
-- Allowing administrators to silently clear a gate flag in storage — rejected because it undermines audit integrity.  
-- Implementing automatic retry that removes prior gate outcomes — rejected because it is a functional undo even if not labeled as such.
+- Treating `SECURITY_REFUSAL` as a warning was rejected because mandatory controls require a stop.  
+- Allowing a second model to override a refusal automatically was rejected because it creates an unauthorized bypass path.  
+- Continuing with non-sensitive portions of a PR after refusal was rejected because the control requires stopping the PR flow.
 
-## [Make gate outcomes append-only and audit-visible]
+## [Untrusted review content must remain explicitly labeled]
 **Status:** Accepted  
-**Context:** The build pipeline references full stage contracts, error escalation, and an audit trail schema. Since gate decisions cannot be undone, their representation must preserve history rather than overwrite it. ConsensusDevAgent needs a storage and event model consistent with irreversible governance decisions.  
-**Decision:** Record gate outcomes as append-only audit events with explicit timestamps, actors, stage context, and reasons. Preserve prior gate records permanently and represent subsequent actions as new events rather than updates that erase history.  
-**Consequences:** Persistence models must favor event records over mutable single-row status fields as the canonical history. Debugging, compliance review, and incident reconstruction will rely on immutable gate event history. Any convenience status projection must be derived from audit events, not used as a substitute for them.  
+**Context:** Security controls require PR review comments to be labeled `[UNTRUSTED REVIEWER COMMENT]` in prompts, and flagged content used in generation must be surfaced to the operator before proceeding. This prevents prompt injection and provenance confusion.  
+**Decision:** Preserve explicit trust labeling for all untrusted reviewer-sourced content in ConsensusDevAgent prompts, context assembly, and audit records. When flagged chunks are incorporated into generation context, create an operator gate before proceeding. Do not normalize, silently merge, or relabel untrusted review text as trusted instruction.  
+**Consequences:** Prompt builders, review ingestion, and consensus logic must track provenance metadata per content chunk. Operator-facing interfaces must expose when untrusted input affected generation.  
 **Rejected alternatives:**  
-- Updating a single mutable “current gate status” field in place — rejected because it loses decision history.  
-- Keeping gate history only in logs — rejected because logs alone are insufficient as a structured control record.  
-- Storing gate reasons only in free-form chat transcripts — rejected because they are difficult to validate, query, and audit.
+- Stripping labels after ingestion was rejected because it obscures provenance.  
+- Treating GitHub review comments as trusted by default was rejected because the security controls explicitly classify them as untrusted.  
+- Allowing flagged untrusted chunks into generation without operator gating was rejected because it violates mandatory controls.
 
-## [Enforce SECURITY_REFUSAL as a hard stop with no auto-bypass]
+## [All file writes must pass path security validation]
 **Status:** Accepted  
-**Context:** Mandatory security controls require SECURITY_REFUSAL rules in every generation system prompt and specify that SECURITY_REFUSAL in output must stop the PR, gate, log, and never auto-bypass. ConsensusDevAgent, as part of multi-model generation and arbitration, must treat this as a non-negotiable safety control.  
-**Decision:** On any SECURITY_REFUSAL emitted by a participating model or generation step, immediately stop the active PR flow, create a gate, and log the event. Never auto-bypass, suppress, rewrite away, or continue execution past the refusal.  
-**Consequences:** ConsensusDevAgent must surface refusal handling as a first-class state transition. Arbitration logic may not overrule or mask a refusal from one model with output from another. Recovery requires explicit operator involvement through the gated workflow, not automated continuation.  
+**Context:** Mandatory security controls require `path_security.validate_write_path()` on every file path before write. ConsensusDevAgent may produce or arbitrate code and document changes across multiple repository areas, making path enforcement essential.  
+**Decision:** Require path validation on every write, overwrite, move, or generated artifact emission initiated by ConsensusDevAgent. No file system mutation may occur until the target path has been approved by `path_security.validate_write_path()` or an equivalent centrally approved wrapper that preserves the same guarantee.  
+**Consequences:** All writer utilities and code generation sinks must route through validated path helpers. Direct writes, ad hoc path concatenation, and bypass channels are prohibited. Security review can assume path validation is universal rather than best-effort.  
 **Rejected alternatives:**  
-- Ignoring SECURITY_REFUSAL if another model produces usable output — rejected because security refusal is a hard stop, not a soft vote.  
-- Automatically re-prompting until refusal disappears — rejected because it is an implicit bypass.  
-- Downgrading refusal to a warning for low-risk tasks — rejected because the control is defined as mandatory.
+- Validating only generated code writes and not document writes was rejected because the control applies to every file path before write.  
+- Performing validation only at a higher orchestration layer was rejected because lower-level writers could still bypass it.  
+- Relying on repository-relative path checks alone was rejected because the mandated control is explicit and stronger.
 
-## [Treat security review as mandatory and include bandit in Pass 3]
+## [Security review is mandatory for generated code]
 **Status:** Accepted  
-**Context:** The mandatory security controls state that all generated code passes Pass 3 security review including bandit. The README build pipeline defines a 3-pass review stage of correctness, performance, and security. ConsensusDevAgent must not consider generation complete before security review passes.  
-**Decision:** Require Pass 3 security review for all code generated through ConsensusDevAgent, and include bandit as part of that pass. Do not allow merge progression or completion status if Pass 3 has not succeeded.  
-**Consequences:** The subsystem must integrate with the review pipeline and expose Pass 3 results as gating inputs. Performance or correctness success cannot compensate for failed or skipped security review. Generated code workflows must budget time and state for security analysis before merge.  
+**Context:** The security controls require that all generated code pass Pass 3 security review, including bandit. ConsensusDevAgent must not treat consensus or model agreement as a substitute for security validation.  
+**Decision:** Require every generated-code change set produced or selected by ConsensusDevAgent to pass the defined security review stage, including bandit and any other Pass 3 checks, before the PR can advance. Consensus outcome does not waive or reduce required security review depth.  
+**Consequences:** Code generation and arbitration outputs must be reviewable artifacts suitable for Pass 3. The subsystem must preserve enough metadata to connect generated changes to security findings and gate decisions.  
 **Rejected alternatives:**  
-- Running security review only for high-risk changes — rejected because the requirement applies to all generated code.  
-- Making bandit advisory rather than required — rejected because bandit is explicitly included in Pass 3.  
-- Performing security review after merge — rejected because review is a pre-merge stage gate.
+- Skipping Pass 3 for trivial changes was rejected because the control applies to all generated code.  
+- Allowing unanimous multi-model agreement to substitute for security review was rejected because consensus is not a security control.  
+- Deferring security review until after merge was rejected because the pipeline requires review before advancement.
 
-## [Validate every write path before file output]
+## [Consensus outputs must be auditable and stage-linked]
 **Status:** Accepted  
-**Context:** Mandatory security controls require `path_security.validate_write_path()` on every file path before write. ConsensusDevAgent generates and applies code and document outputs, making path handling a direct attack surface.  
-**Decision:** Call `path_security.validate_write_path()` for every filesystem write initiated by ConsensusDevAgent, without exception. Reject or gate any attempted write whose path has not been validated or fails validation.  
-**Consequences:** All write code paths must route through a shared validated file-writing abstraction or equivalently enforced guard. Direct writes that bypass validation are prohibited. Refactoring and new features must preserve this invariant for both code and document outputs.  
+**Context:** The pipeline references audit trail requirements, and irreversible gate behavior requires durable history. ConsensusDevAgent introduces arbitration and coordination decisions that must be explainable after the fact.  
+**Decision:** Record consensus inputs, model provenance, arbitration outcomes, gate triggers, and stage association in an append-only audit trail sufficient to reconstruct why a decision was made and why progression did or did not occur. Do not emit opaque final decisions without preserving the decision basis.  
+**Consequences:** The subsystem must persist metadata beyond final artifacts, including stage identity, refusal events, and operator gates. Observability and storage design must support forensic reconstruction.  
 **Rejected alternatives:**  
-- Validating only user-supplied paths — rejected because generated and derived paths can also be unsafe.  
-- Validating directory roots once per session — rejected because per-write validation is explicitly required.  
-- Relying on repository-relative path normalization alone — rejected because normalization is not a substitute for the mandated validator.
+- Keeping only the final selected output was rejected because it prevents reconstruction of arbitration rationale.  
+- Storing audit data only in transient logs was rejected because gate history must persist.  
+- Capturing only success-path events was rejected because failures and stops are central to auditability.
 
-## [Surface untrusted review content with explicit labeling and gating]
+## [Operator mediation is required at defined trust and security boundaries]
 **Status:** Accepted  
-**Context:** The security controls require PR review comments to be labeled `[UNTRUSTED REVIEWER COMMENT]` in prompts and require a gate card to the operator when flagged content is used in generation. ConsensusDevAgent consumes review signals and may incorporate them into planning or generation, so provenance and trust boundaries must be explicit.  
-**Decision:** Label untrusted review content exactly as required when included in model prompts, and if flagged content is used in generation, present a gate to the operator before proceeding. Do not silently blend untrusted reviewer content into trusted instructions.  
-**Consequences:** Prompt assembly, provenance tracking, and operator UX must preserve trust labels end to end. The subsystem must track whether flagged content influenced generation and trigger an operator gate in that case. Review ingestion pipelines must distinguish trusted system guidance from untrusted external commentary.  
+**Context:** The pipeline includes explicit operator confirmation at scope selection, and security controls require operator gating when flagged chunks are used in generation. ConsensusDevAgent therefore cannot be fully autonomous across trust boundaries.  
+**Decision:** Require explicit operator mediation whenever the subsystem crosses a documented trust or security boundary, including scope confirmation and use of flagged untrusted content in generation. Do not replace these checkpoints with automatic consensus or heuristic confidence thresholds.  
+**Consequences:** UX and orchestration must support pause-and-resume behavior with clear gate cards and context for operator decisions. Throughput is subordinate to controlled advancement at these boundaries.  
 **Rejected alternatives:**  
-- Treating PR comments as trusted by default — rejected because review comments are explicitly untrusted unless handled with labels.  
-- Omitting labels once comments are summarized — rejected because summarization does not remove trust concerns.  
-- Proceeding automatically after using flagged content — rejected because operator gating is explicitly required.
-
-## [Use consensus/arbitration only within safety and pipeline constraints]
-**Status:** Accepted  
-**Context:** The build pipeline indicates parallel generation and arbitration during Code Gen, while security controls impose hard stops and mandatory reviews. ConsensusDevAgent exists to coordinate consensus behavior, but consensus cannot supersede documented gates, refusals, or stage contracts.  
-**Decision:** Restrict consensus and arbitration logic to selecting among compliant candidate outputs within the current pipeline stage. Do not allow consensus mechanisms to override SECURITY_REFUSAL, skip reviews, reverse gates, or bypass required operator approvals.  
-**Consequences:** Arbitration modules must evaluate candidates after applying safety and process constraints, not before. “Best” output selection is subordinate to compliance. Metrics or voting schemes that favor throughput over required controls are out of bounds.  
-**Rejected alternatives:**  
-- Letting majority model agreement override a single refusal — rejected because refusal is a hard stop, not a vote.  
-- Allowing arbitration to advance code directly to merge when confidence is high — rejected because mandatory stages still apply.  
-- Optimizing consensus solely for speed or token efficiency — rejected because safety and governance constraints are higher priority.
+- Fully autonomous continuation through all stages was rejected because documented gates require operator involvement.  
+- Using model confidence as a substitute for operator approval was rejected because confidence does not satisfy the control requirement.  
+- Sampling operator approval asynchronously after continuation was rejected because gating must occur before proceeding.
