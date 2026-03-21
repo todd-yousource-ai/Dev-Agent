@@ -2,194 +2,183 @@
 
 # Code Conventions — Forge Platform
 
-> **Scope:** All code in the Forge monorepo, with dedicated section for the ConsensusDevAgent subsystem.
-> **Authority:** These conventions are enforced by CI. PRs that violate numbered rules will be rejected automatically.
+> **Scope:** All code in the Forge mono-repo, with §6 dedicated to the ConsensusDevAgent subsystem.
+> Version: 1.0 · Effective immediately · Every PR must comply.
 
 ---
 
 ## 1. File and Directory Naming
 
-1.1. **Source layout mirrors subsystem boundaries exactly:**
+1. **Source layout mirrors subsystem boundaries exactly.**
 
-```
-src/cal/           # Conversation Abstraction Layer
-src/dtl/           # Data Trust Label
-src/trustflow/     # TrustFlow audit stream
-src/vtz/           # Virtual Trust Zone enforcement
-src/trustlock/     # Cryptographic machine identity (TPM-anchored)
-src/mcp/           # MCP Policy Engine
-src/rewind/        # Forge Rewind replay engine
-sdk/connector/     # Forge Connector SDK
-tests/<subsystem>/ # Tests mirror src/ structure exactly
-```
+   ```
+   src/cal/           # Conversation Abstraction Layer
+   src/dtl/           # Data Trust Label
+   src/trustflow/     # TrustFlow audit stream
+   src/vtz/           # Virtual Trust Zone enforcement
+   src/trustlock/     # Cryptographic machine identity (TPM-anchored)
+   src/mcp/           # MCP Policy Engine
+   src/rewind/        # Forge Rewind replay engine
+   sdk/connector/     # Forge Connector SDK
+   tests/<subsystem>/ # Tests mirror src/ structure exactly
+   ```
 
-1.2. Every directory under `src/` and `tests/` **must** contain an `__init__.py` (even if empty) so that the package is importable without implicit namespace hacks.
+2. **Test files mirror source files 1-to-1.** `src/cal/session.py` → `tests/cal/test_session.py`. No exceptions.
 
-1.3. File names use **lowercase_snake_case** with no hyphens: `consensus_engine.py`, `trust_label_store.py`.
+3. **All file and directory names use `snake_case`.** No hyphens, no camelCase, no uppercase in file names.
 
-1.4. Test files mirror the source file they cover and carry a `test_` prefix: `src/cal/session.py` → `tests/cal/test_session.py`.
+4. **Generated files live under `gen/` at the repo root**, never inside `src/`. Generated files must never be imported by other generated files (see §6.6).
 
-1.5. Schema, migration, and fixture files include a zero-padded sequence number: `001_create_trust_labels.sql`, `002_add_expiry_column.sql`.
+5. **Branch naming is mandatory and machine-enforced:**
 
-1.6. **Branch naming (mandatory):**
+   ```
+   forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}
+   ```
 
-```
-forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}
-```
+   - `engineer_id`: GitHub handle, lowercase.
+   - `subsystem_slug`: one of `cal`, `dtl`, `trustflow`, `vtz`, `trustlock`, `mcp`, `rewind`, `connector`.
+   - `N`: zero-padded three-digit PR sequence number.
+   - `title_slug`: kebab-case summary, max 48 chars.
 
-Example: `forge-agent/build/e-7a2f/consensus-engine/pr-004-add-vote-timeout`
+   Example: `forge-agent/build/alee/trustflow/pr-007-add-audit-retention-policy`
 
 ---
 
 ## 2. Class and Function Naming
 
-2.1. Classes use **PascalCase**: `ConsensusDevAgent`, `TrustLabelStore`, `GateCardView`.
+6. **Classes:** `PascalCase`. Suffix with the pattern role when applicable: `…Error`, `…Handler`, `…Policy`, `…Gate`, `…Session`.
 
-2.2. Functions and methods use **lowercase_snake_case**: `fetch_build_map()`, `validate_write_path()`.
+7. **Functions and methods:** `snake_case`. Verb-first: `validate_write_path`, `fetch_build_map`, `strip_code_fences`.
 
-2.3. Private helpers that must not be called outside their own module use a **single leading underscore**: `_strip_code_fences()`, `_compute_quorum()`.
+8. **Private helpers:** Single leading underscore (`_strip_code_fences`). Never use double underscores for name-mangling unless genuinely required.
 
-2.4. Constants use **UPPER_SNAKE_CASE** and are declared at module level: `MAX_RETRY_COUNT = 3`, `DEFAULT_QUORUM_THRESHOLD = 0.67`.
+9. **Constants:** `UPPER_SNAKE_CASE`. Define at module level, never inside a function.
 
-2.5. Boolean variables and functions that return `bool` start with `is_`, `has_`, `can_`, or `should_`: `is_quorum_met`, `has_valid_signature`.
+10. **Type aliases:** `PascalCase`, suffixed with `T` only when disambiguating from a concrete class (e.g., `GateResultT`).
 
-2.6. **axIdentifier naming (macOS / SwiftUI):** All interactive elements must have an `.accessibilityIdentifier()` that follows the pattern:
+11. **axIdentifier strings (macOS UI):** Follow the pattern `{module}-{component}-{role}-{context?}`. Set via `.accessibilityIdentifier()` on every interactive element.
 
-```
-{module}-{component}-{role}-{context?}
-```
+    ```
+    "auth-touchid-button"
+    "settings-anthropic-key-field"
+    "navigator-project-row-{projectId}"
+    "stream-gate-card-{gateId}"
+    "stream-gate-yes-button-{gateId}"
+    ```
 
-Examples:
-
-```
-"auth-touchid-button"
-"auth-passcode-button"
-"settings-anthropic-key-field"
-"settings-anthropic-key-test-button"
-"settings-anthropic-key-reveal-button"
-"navigator-project-row-{projectId}"
-"stream-gate-card-{gateId}"
-"stream-gate-yes-button-{gateId}"
-"stream-gate-skip-button-{gateId}"
-"stream-gate-stop-button-{gateId}"
-```
-
-Every interactive element **must** carry an identifier. Omitting it is a CI failure.
+    - All segments are lowercase kebab-case.
+    - `{context}` is optional; include it when multiple instances of the same component exist (e.g., per `gateId`).
 
 ---
 
 ## 3. Error and Exception Patterns
 
-3.1. Define one **base exception per subsystem** in `<subsystem>/exceptions.py`:
+12. **Define one base exception per subsystem** in `<subsystem>/errors.py`:
 
-```python
-class CalError(Exception):
-    """Base for all CAL errors."""
+    ```python
+    class TrustFlowError(Exception):
+        """Base for all TrustFlow exceptions."""
+    ```
 
-class SessionExpiredError(CalError): ...
-class MessageValidationError(CalError): ...
-```
+13. **All subsystem exceptions inherit from that base.** Never raise bare `Exception`, `ValueError`, or `RuntimeError` in library code.
 
-3.2. Never raise bare `Exception`, `RuntimeError`, or `ValueError` for domain errors. Always use a subsystem-specific subclass.
+14. **Exception class names end in `Error`**, not `Exception`.
 
-3.3. Exception class names end with **`Error`**, not `Exception`: `PathTraversalError`, not `PathTraversalException`.
+15. **Include structured context** in every raised exception:
 
-3.4. Every `except` block must catch the **narrowest possible type**. Bare `except:` and `except Exception:` are banned outside top-level process supervisors.
+    ```python
+    raise PathTraversalError(
+        f"Blocked write to disallowed path: {user_path}",
+        attempted_path=user_path,
+        resolved_path=resolved,
+    )
+    ```
 
-3.5. Error messages must include the **offending value** (redacted if sensitive) and the **constraint that was violated**:
+16. **Never silently swallow exceptions.** `except SomeError: pass` is forbidden. At minimum, log at `warning` level.
 
-```python
-raise PathTraversalError(
-    f"Blocked write to '{masked_path}': resolved path escapes sandbox root"
-)
-```
-
-3.6. All functions that interact with external services (LLM APIs, file I/O, network) must handle errors explicitly and **never silently swallow them**. At minimum, log at `WARNING` level before suppressing.
+17. **Graceful `None` returns are required where documented.** Example: `fetch_build_map()` must return `None` (never raise) when no map exists yet — this is the expected state for the first 5 PRs of any build.
 
 ---
 
 ## 4. Import and Module Organisation
 
-4.1. Imports appear in **three groups**, separated by a blank line, each group sorted alphabetically:
+18. **Import order** (enforced by `isort` with `profile = black`):
 
-```python
-# 1. stdlib
-import hashlib
-import os
-from pathlib import Path
+    1. Standard library
+    2. Third-party packages
+    3. Forge `src/` packages
+    4. Forge `sdk/` packages
+    5. Local relative imports
 
-# 2. third-party
-import httpx
-from pydantic import BaseModel
+    Separate each group with a blank line.
 
-# 3. first-party / local
-from src.cal.session import Session
-from src.vtz.sandbox import validate_write_path
-```
+19. **No wildcard imports** (`from x import *`) anywhere.
 
-4.2. **No wildcard imports** (`from x import *`) anywhere in the codebase.
+20. **No circular imports.** If two subsystems need each other, extract the shared type into `src/common/types.py`.
 
-4.3. **No dynamic imports** for generated code. Generated files must not use `eval()`, `exec()`, or `importlib.import_module()` to load other generated files. Every generated file must be complete and self-contained (see §6.4).
+21. **Lazy imports** are allowed only inside functions that are called at runtime for optional heavy dependencies (e.g., ML model loaders). Document the reason with a comment.
 
-4.4. Circular imports are a build failure. If two modules need each other, extract the shared type into a third `_types.py` module.
-
-4.5. Re-exports from `__init__.py` must be listed explicitly in `__all__`.
+22. **Never use `eval()`, `exec()`, or `importlib.import_module()` to load generated files** or to dispatch between modules. Every module must be a complete, self-contained unit.
 
 ---
 
 ## 5. Comment and Documentation Rules
 
-5.1. Every public class and public function has a **docstring** (Google style):
+23. **Every public module, class, and function has a docstring.** Use Google-style:
 
-```python
-def fetch_build_map(project_id: str) -> BuildMap | None:
-    """Retrieve the current build map for a project.
+    ```python
+    def validate_write_path(user_path: str) -> Path:
+        """Resolve and validate a user-supplied path for safe writing.
 
-    Args:
-        project_id: The Forge project identifier.
+        Args:
+            user_path: Raw path string from external input.
 
-    Returns:
-        The BuildMap if one has been generated, or None if no map
-        exists yet (expected for the first 5 PRs of any build).
+        Returns:
+            Resolved pathlib.Path guaranteed to be inside the allowed tree.
 
-    Raises:
-        CalError: If the project metadata is corrupt.
-    """
-```
+        Raises:
+            PathTraversalError: If the resolved path escapes the sandbox.
+        """
+    ```
 
-5.2. Inline comments explain **why**, not what. If a comment restates the code, delete it.
+24. **Inline comments explain *why*, not *what*.** Delete comments that restate the code.
 
-5.3. `# TODO` comments must include an owner and tracking reference: `# TODO(amir): fix race condition — FORGE-1042`.
+25. **TODO format:** `# TODO(username): YYYY-MM-DD — description`. TODOs without a date and owner are rejected in review.
 
-5.4. No commented-out code in main branches. Use version control history instead.
-
-5.5. Module-level docstrings are required for any file longer than 50 lines.
+26. **No commented-out code in `main` or release branches.** Use version control history.
 
 ---
 
 ## 6. ConsensusDevAgent-Specific Patterns
 
-### 6.1 Path Validation Before Every Write
+### 6.1 Path Security — Validate Before Every Write
 
-**Every** file-write operation must validate the destination path before opening a handle. No exceptions, no shortcuts.
+27. **Every agent write operation must validate the target path first.** No exceptions, no shortcuts.
 
-```python
-from path_security import validate_write_path
+    ```python
+    from path_security import validate_write_path
 
-safe_path = validate_write_path(user_supplied_path)  # raises PathTraversalError
-with open(safe_path, "w") as f:
-    f.write(content)
-```
+    safe_path = validate_write_path(user_supplied_path)  # raises on traversal
+    with open(safe_path, "w") as f:
+        f.write(content)
+    ```
 
-This applies to agent-generated code, logs, artifacts, scratch files, and temporary files. If a new write call is introduced without `validate_write_path`, CI rejects the PR.
+28. **Never construct a writable path from string concatenation alone.** Always pass through `validate_write_path` even if the path looks safe.
 
-### 6.2 `_strip_code_fences()` — Canonical Implementation
+### 6.2 The `_strip_code_fences()` Contract
 
-The `_strip_code_fences()` function exists in **five modules**. All five copies must be **byte-identical**. The function must:
+29. **All five modules that define `_strip_code_fences()` must contain byte-identical implementations.** Any change to one must be applied to all five simultaneously in the same commit.
 
-1. Accept an empty string or `None` and return it unchanged.
-2. Preserve a trailing newline on non-empty output.
-3. Not modify code that has no fences or Unicode characters.
-4. Be synchronous (no `async`).
+30. The function must satisfy these invariants:
+    - Accept `""` or `None` → return the input unchanged.
+    - Preserve a trailing newline on non-empty output.
+    - Leave content unmodified when no fences or Unicode replacement characters are present.
+    - Be synchronous (never `async`).
 
-A CI check (`scripts/verify_strip_fences_sync.py`) diffs all five copies and fails the build if
+31. **CI runs a dedicated check** (`scripts/check_strip_fences_sync.py`) that diffs the AST of all five copies and fails the build on divergence.
+
+### 6.3 Build Map Resilience
+
+32. `fetch_build_map()` must return `None` gracefully when no build map exists. It must never raise an exception. This is the normal state during the first 5 PRs of any build.
+
+33. **All callers of `fetch_build_map()` must handle the `None` case explicitly** — never assume a map
