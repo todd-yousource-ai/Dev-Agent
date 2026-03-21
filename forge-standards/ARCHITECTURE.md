@@ -1,630 +1,295 @@
-# Architecture — Forge Platform
+# Architecture - ConsensusDevAgent
 
-## System Overview
+## What This Subsystem Does
 
-Forge is a native macOS autonomous software delivery platform built as a **two-process local system** with strict separation of duties:
+ConsensusDevAgent is the long-running build thread subsystem responsible for planning and executing the end-to-end build of the `ConsensusDevAgent` workstream across multiple PRDs and PRs, while preserving resumability across application restarts.
 
-- **Swift macOS Shell**
-  - Owns UI, installation, updates, authentication, biometric gating, Keychain access, operator interactions, project/workspace state, and local process orchestration.
-  - Hosts the native app experience and all user-trust boundaries.
-- **Python Backend**
-  - Owns planning, consensus generation, document ingestion/retrieval, review/fix loops, GitHub API operations, CI orchestration, PR lifecycle handling, and repository automation.
-  - Performs intelligence and repository mutation planning, but does **not** execute generated code.
+Its primary responsibilities are:
 
-Inter-process communication is over an **authenticated Unix domain socket** using **line-delimited JSON**. The Swift shell launches and supervises the Python backend, provisions a per-session authenticated channel, and supplies secrets only through controlled delivery paths.
+- maintain per-thread execution state for the `ConsensusDevAgent` build
+- detect incomplete build threads at startup without requiring an explicit resume command
+- present resumable build threads to the operator during normal startup
+- resume execution through `director.resume()` after operator selection
+- persist local thread state for in-progress execution
+- persist PR plan artifacts to the GitHub `prds` branch as disaster-recovery backups
+- reconstruct execution state from GitHub-backed PR plan JSON if local state is lost or stale
+- prevent uncontrolled branch accumulation by relying on disposable build branches and operator cleanup guidance
 
-The platform’s behavior is governed by the loaded TRDs/PRDs, with subsystem ownership distributed across the 12 TRDs referenced in repository guidance. From the provided source material, the principal implemented/spec’d platform subsystems are:
+Normal restart behavior is automatic. No `/resume`, `/continue`, or `/ledger resume` command is required. On startup, the agent bootstraps, scans for incomplete thread state, and prompts the operator to resume a known build thread or start fresh.
 
-1. macOS Application Shell
-2. SwiftUI Interface Layer
-3. Auth, Identity, and Secret Storage
-4. XPC / Socket Bridge and Process Supervision
-5. Consensus Engine
-6. Provider Adapter Layer
-7. Planning / PRD-to-PR decomposition pipeline
-8. Review and remediation pipeline
-9. GitHub integration and PR operations
-10. Document Store and Retrieval Engine
-11. CI orchestration and workflow integration
-12. Ledger / operator command plane
-13. Security controls spanning all subsystems
-
-Forge architecture follows the stated platform rules:
-
-- Trust is asserted and verified explicitly.
-- Identity, policy, telemetry, and enforcement stay separable but linked.
-- Control decisions are explainable and observable.
-- Components default to enforcement, not suggestion.
-- User friction is minimized without weakening guarantees.
-- Admin workflows are explicit and understandable.
-- Protocols are designed for future scaling across endpoint/network/cloud/AI runtime contexts.
-
----
-
-## Subsystem Map
-
-### 1. macOS Application Shell
-**Primary source:** TRD-1
-
-**What it does**
-- Packages and distributes the app as a native `.app`.
-- Supports drag-to-Applications install flow.
-- Owns Sparkle-based auto-update integration.
-- Creates and owns the top-level application lifecycle.
-- Launches, monitors, and stops the Python backend.
-- Manages session lifecycle and app-local state.
-- Owns project/workspace selection and local filesystem anchoring.
-- Publishes progress/state updates to UI.
-
-**What it enforces**
-- Native trust boundary: secrets never originate in Python.
-- Process isolation between UI/auth concerns and AI/backend concerns.
-- Session gating before backend operations requiring operator authority.
-- Correct startup and teardown ordering.
-- Stable module boundaries and concurrency ownership within Swift.
-
----
-
-### 2. SwiftUI Interface Layer
-**Primary source:** TRD-8, referenced by TRD-1
-
-**What it does**
-- Renders project views, cards, panels, review surfaces, and operator controls.
-- Displays planning state, generation progress, PR status, CI outcomes, and review findings.
-- Hosts operator affordances such as:
-  - selecting lenses
-  - adjusting scope
-  - excluding files/directories
-  - approving/pausing work
-  - triggering review ingestion
-  - entering REPL-style commands such as `/ledger note` and `/review`
-
-**What it enforces**
-- Human-in-the-loop gating at explicit approval points.
-- Clear presentation of exclusions and scope reductions before remediation/generation.
-- No hidden autonomous escalation beyond specified approval transitions.
-
----
-
-### 3. Auth, Identity, and Secret Storage
-**Primary source:** TRD-1, security constraints from TRD-11 per repo instructions
-
-**What it does**
-- Performs biometric authentication.
-- Stores and retrieves secrets from Keychain.
-- Maintains session identity and local operator profile values.
-- Manages app identity records, including:
-  - `display_name` in `UserDefaults`
-  - `engineer_id` in Keychain (`SecretKey.engineerId`)
-  - `github_username` fetched from GitHub `/user` endpoint on first auth
-- Stores GitHub App/private key material and other tokens needed by backend operations.
-
-**What it enforces**
-- Swift-only access to credentials at rest.
-- Session authentication before privileged actions.
-- Controlled, ephemeral credential delivery to backend.
-- Protection against deadlock/crash in credential handoff path.
-- Strong separation between user profile metadata and secret material.
-
----
-
-### 4. XPC / Socket Bridge and Process Supervision
-**Primary source:** TRD-1; explicit file references include `ForgeAgent/XPCBridge.swift` and `src/xpc_server.py`
-
-**What it does**
-- Starts Python backend process with session-specific socket path and nonce.
-- Establishes authenticated Unix socket connection.
-- Exchanges line-delimited JSON messages.
-- Forwards status, progress, requests, and errors across process boundary.
-- Supports integration testing with test socket paths/nonces.
-
-**What it enforces**
-- Mutual channel authentication using launch-time shared secret/nonce.
-- Rejection of unauthenticated or malformed messages.
-- Structured message contracts between Swift and Python.
-- Safe error propagation when one side crashes or disconnects.
-- Process supervision and failure visibility for:
-  - shell crash before credential send
-  - connection establishment failure
-  - backend startup issues
-
----
-
-### 5. Consensus Engine
-**Primary source:** TRD-2
-
-**What it does**
-- Runs two-model generation using parallel providers.
-- Uses Claude and GPT-4o in a consensus/arbitration pattern.
-- Produces implementation proposals, tests, and revisions for each PR unit.
-- Invokes context loading, including document retrieval (`auto_context()` from TRD-10).
-- Arbitrates outputs and determines final candidate result.
-
-**What it enforces**
-- Consensus is a first-class control, not a best-effort enhancement.
-- Claude arbitrates every result.
-- Provider disagreement is surfaced and resolved through deterministic pipeline logic.
-- Failed provider calls follow explicit retry/error policy.
-
----
-
-### 6. Provider Adapter Layer
-**Primary source:** TRD-2
-
-**What it does**
-- Encapsulates model-provider-specific APIs, prompt formatting, request/response normalization, and error handling.
-- Supports multiple LLM providers in parallel.
-- Maps provider-specific failure modes into shared engine error contracts.
-
-**What it enforces**
-- Provider isolation behind stable interfaces.
-- No provider-specific logic leaking upward into planning/review orchestration.
-- Explicit handling of provider failure cases; for certain classes of failure:
-  - **Do not retry with the other provider** unless the owning TRD explicitly permits it.
-
----
-
-### 7. Planning Pipeline
-**Primary source:** README product flow; likely covered by planning TRDs not fully included
-
-**What it does**
-- Converts operator intent plus loaded TRDs into an ordered PRD plan.
-- Decomposes PRDs into a sequence of logically isolated pull requests.
-- Establishes branch/commit intent and work unit ordering.
-- Applies repository-aware decomposition.
-
-**What it enforces**
-- Work is broken into reviewable PR-sized units.
-- Planning stays grounded in repository specs rather than freeform generation.
-- Generated work tracks explicit intent and decomposition lineage.
-
----
-
-### 8. Review and Remediation Pipeline
-**Primary source:** README, TRD-6 references in TRD-10, operator commands from loaded docs
-
-**What it does**
-- Executes a three-pass review cycle on generated changes.
-- Ingests open PRs via `/review` command and `PRReviewIngester.scan_open_prs()`.
-- Supports remediation scope control:
-  - directory exclusions
-  - file exclusions
-  - lens selection
-- Runs issue-specific fix passes while respecting operator exclusions.
-
-**What it enforces**
-- Review is mandatory before draft PR publication.
-- Remediation scope is explicit and operator-visible.
-- Security or domain-specific “lenses” can be selected or excluded.
-- Exclusion rules such as:
-  - `exclude src/legacy/`
-  - `exclude src/old_api.py`
-  - `exclude security in src/vendor/`
-  are applied before fix generation.
-
----
-
-### 9. GitHub Integration and PR Operations
-**Primary source:** README flow; source snippets mention GitHub `/user`, App auth JWT, REST/GraphQL fallback, commit/branch naming
-
-**What it does**
-- Authenticates to GitHub using GitHub App credentials.
-- Generates JWT using App private key from Keychain.
-- Interacts with GitHub APIs for:
-  - repository reads
-  - branch operations
-  - file content fetches
-  - pull request creation/update
-  - user identity retrieval
-  - review ingestion
-- Uses deterministic commit and PR naming schemes, e.g.:
-  - `forge-agent[{engineer_id}]: {message}`
-  - `forge-agent[todd-gould]: PR007 implement idempotency key expiry`
-  - `forge-agent[todd-gould]: PRD-003 — Transaction Idempotency Layer`
-  - `forge-ledger[sara-chen]: claim PR #8`
-- Reads file content + SHA before mutation.
-- Computes content hashes and reconciles GitHub SHA-based updates.
-- Falls back from GraphQL to REST when GraphQL returns HTTP 200 with `"errors"`.
-
-**What it enforces**
-- Repository mutation is API-mediated and state-aware.
-- Writes use current GitHub file SHA to prevent blind overwrites.
-- Naming conventions preserve operator/engineer attribution.
-- Transport fallback preserves operation continuity without silent corruption.
-- No local generated code execution as part of mutation flow.
-
----
-
-### 10. Document Store and Retrieval Engine
-**Primary source:** TRD-10
-
-**What it does**
-- Ingests project documents, TRDs, PRDs, repository files, and supporting context.
-- Builds an embedding-backed retrieval index under:
-  - `~/Library/Application Support/ForgeAgent/cache/{project_id}/`
-- Creates an empty index when a project is created.
-- Supplies contextual retrieval to generation and review stages.
-- Supports `doc_filter` integration in pipeline stages.
-- Keeps FAISS index loaded in memory; explicit unload is not required.
-
-**What it enforces**
-- Per-project document isolation in cache layout.
-- Context injection is controlled and query-driven, not arbitrary.
-- Retrieval is upstream of generation/review, not an afterthought.
-- Embedding model changes trigger full re-embedding requirements.
-
----
-
-### 11. CI Orchestration and Workflow Integration
-**Primary source:** README and loaded workflow names
-
-**What it does**
-- Runs CI for generated PRs.
-- Integrates with repository workflows including:
-  - `Forge CI — Python / test`
-  - `Forge CI — macOS / unit-test`
-  - `Forge CI — macOS / xpc-integration-test`
-- Distinguishes targeted changes from accidental broad rebuilds.
-- Supports optional live smoke test prompts.
-
-**What it enforces**
-- PRs are not just generated; they are validated through CI.
-- Platform-specific and backend-specific tests are both part of release quality.
-- Detection of accidental rebuild/regression breadth is part of validation.
-
----
-
-### 12. Ledger / Operator Command Plane
-**Primary source:** loaded operator commands and examples
-
-**What it does**
-- Tracks operator-visible actions and annotations.
-- Supports notes and claims through command/repl flows.
-- Accepts commands like:
-  - `/ledger note <text>`
-  - `/review ...`
-- Maintains operational history associated with work items/PRs.
-
-**What it enforces**
-- Human actions are attributable and recorded.
-- Review/remediation actions are invocable explicitly, not hidden behind opaque automation.
-- Auditability of operator interventions.
-
----
-
-### 13. Security Control Plane
-**Primary source:** TRD-11 referenced as governing all components; additional explicit constraints in repo docs
-
-**What it does**
-- Defines repository-wide security posture.
-- Governs credential handling, external content handling, generated code policies, CI exposure, and trust boundaries.
-- Applies to Swift shell, Python backend, GitHub integration, and document ingestion.
-
-**What it enforces**
-- Neither process executes generated code.
-- Secrets stay in Swift/Keychain boundary except controlled delivery.
-- External content is treated as untrusted input.
-- CI and generated artifacts are bounded by policy.
-- Security-relevant changes must obey explicit contracts, not inferred behavior.
-
----
-
-## Enforcement Order
-
-This is the normative high-level control sequence for a typical Forge work cycle.
-
-1. **Application launch**
-   - Swift shell starts.
-   - Native state stores initialize.
-   - Update, installation, and environment prerequisites are checked.
-
-2. **Identity and session establishment**
-   - Operator authenticates via biometrics or approved session flow.
-   - Swift resolves local profile data.
-   - Required secrets remain in Keychain until needed.
-
-3. **Project selection / creation**
-   - Operator selects repository/project.
-   - Shell establishes project state.
-   - Document Store creates empty index if project is new.
-
-4. **Backend startup**
-   - Swift starts Python backend process with:
-     - test or production socket path
-     - per-session nonce/auth material
-   - Backend binds/authenticates socket listener.
-   - Swift and Python complete authenticated handshake.
-
-5. **Credential delivery**
-   - Swift delivers only required credentials after channel authentication.
-   - Backend confirms receipt/readiness.
-   - Error is surfaced if:
-     - Swift crashes before send
-     - connection fails
-     - credential path deadlocks
-
-6. **Intent capture and planning**
-   - Operator provides intent.
-   - Planning pipeline translates intent + loaded TRDs into ordered PRDs/PR units.
-   - Scope/exclusions are captured if present.
-
-7. **Context ingestion / retrieval**
-   - Document Store ingests or refreshes project context.
-   - Retrieval executes `auto_context()` per generation.
-   - Stage-specific `doc_filter` constraints are applied.
-
-8. **Consensus generation**
-   - Consensus Engine invokes provider adapters in parallel.
-   - Claude arbitrates final result.
-   - Provider failures are mapped to pipeline control outcomes.
-
-9. **Review cycle**
-   - Generated changes go through multi-pass review.
-   - Review lenses, exclusions, and fix scopes are applied.
-   - Additional retrieval context may be injected.
-
-10. **Repository mutation preparation**
-    - Backend fetches current file content and SHA from GitHub.
-    - Computes content hashes.
-    - Determines branch/commit/PR metadata.
-
-11. **CI validation**
-    - Generated PR branch runs CI workflows.
-    - Test and integration outcomes are collected.
-    - Broad unintended changes are detected.
-
-12. **Draft PR publication**
-    - Backend opens or updates draft PR.
-    - Operator reviews.
-    - Ledger events and status are recorded.
-
-13. **Approval and continuation**
-    - On operator approval/merge, next PR unit begins.
-    - Documentation regeneration may run if configured.
-
-This order reflects Forge’s core principle: **authenticate first, retrieve context second, generate third, validate fourth, publish last**.
+This subsystem therefore enforces continuity of a build thread across restarts, partial failures, and local state loss, with GitHub-hosted PR plan JSON serving as the authoritative recovery source when local state is insufficient.
 
 ---
 
 ## Component Boundaries
 
-### Swift Shell must never
-- Execute generated code.
-- Delegate secret-at-rest ownership to Python.
-- Allow unauthenticated backend access to privileged operations.
-- Collapse UI/auth/session logic into backend orchestration code.
-- Trust backend claims about user identity without shell-owned verification.
+### In Scope
 
-### Python Backend must never
-- Access Keychain directly.
-- Bypass shell-mediated authentication/session policy.
-- Execute generated code or repository code.
-- Mutate repositories without GitHub state reconciliation.
-- Invent authority outside TRD-defined workflows.
+The subsystem includes:
 
-### XPC / Socket Bridge must never
-- Accept unauthenticated peers.
-- Carry unstructured ad hoc messages outside schema.
-- Implicitly trust socket path locality as authentication.
-- Hide transport failures from supervising components.
+- detection of incomplete `ConsensusDevAgent` build threads during startup
+- local thread-state persistence under the workspace state directory
+- resume-selection UX for incomplete builds
+- transition into resumed execution via `director.resume()`
+- persistence of PR planning artifacts for each PRD
+- reconstruction of PR plan state from GitHub-hosted JSON artifacts
+- operational assumptions around branch hygiene for `forge-agent/build/consensusdevagent-*`
+- state inspection and recovery behavior for this specific thread type
 
-### Consensus Engine must never
-- Operate without document/context grounding where required.
-- Treat provider output as authoritative without arbitration.
-- Smuggle provider-specific behavior into domain logic.
-- Turn retry/failover into silent speculative behavior.
+### Out of Scope
 
-### Provider Adapters must never
-- Own planning policy.
-- Make repository mutation decisions.
-- Store long-term credentials outside approved mechanism.
-- Normalize away materially important provider failures.
+The subsystem does **not** own:
 
-### Planning Pipeline must never
-- Skip PR/PRD decomposition for convenience.
-- Generate work disconnected from loaded specs.
-- Merge unrelated changes into a single PR unit without explicit plan rationale.
+- the general application bootstrap process beyond consuming its completion
+- GUI shell behavior such as launching `ForgeAgent.app`
+- implementation details of PRD generation or PR code generation themselves
+- GitHub API access outside the platform-standard `GitHubTool`
+- gate decision persistence across backend restarts
+- automatic recovery of operator approvals after a backend restart
+- indefinite retry loops or self-healing beyond bounded retry/error-handling patterns
+- arbitrary branch retention policies outside documented operator runbook expectations
 
-### Review Pipeline must never
-- Ignore operator exclusions.
-- Auto-fix excluded directories/files.
-- Publish unreviewed generated output as final.
-- Collapse security findings into generic lint output.
+### External Interfaces
 
-### GitHub Integration must never
-- Blind-write file contents without SHA checks.
-- Assume GraphQL success solely from HTTP 200.
-- Lose actor attribution in branch/commit/PR metadata.
-- Depend on shell environment files like `.zshrc` or `.bash_profile` in LaunchAgent contexts.
+This subsystem interacts with:
 
-### Document Store must never
-- Mix documents across project IDs.
-- Inject arbitrary context without retrieval/query constraints.
-- Assume embedding model compatibility after model changes.
-- Depend on unload semantics for correctness.
-
-### CI Integration must never
-- Treat generation as complete before validation.
-- Ignore platform-specific workflows.
-- Hide failed smoke/unit/integration test outcomes.
-
-### Ledger / Operator Command Plane must never
-- Mutate protected state without explicit command semantics.
-- Record ambiguous actorless events.
-- Override review/approval gates implicitly.
+- startup thread discovery logic
+- `director.resume()` for continuation of a selected build thread
+- local filesystem state under the thread-state directory
+- GitHub `prds` branch artifacts for recovery
+- GitHubTool for all GitHub operations
+- branch monitor behavior indirectly, via branch naming and branch cleanup expectations
 
 ---
 
-## Key Data Flows
+## Data Flow
 
-### 1. Session and Secret Flow
-1. App launches in Swift.
-2. Operator authenticates.
-3. Swift resolves identity metadata.
-4. Secrets remain in Keychain.
-5. Swift launches backend and authenticates socket.
-6. Swift transmits only required credentials/session material.
-7. Backend stores only runtime-necessary values in memory.
+### 1. Startup Discovery
 
-**Security property:** secret origin and trust root remain in Swift.
+On normal startup:
 
----
+1. operator launches `ForgeAgent.app`
+2. agent bootstraps
+3. subsystem scans local thread-state storage for incomplete build threads
+4. if an incomplete `ConsensusDevAgent` thread exists, the operator is shown a resumable entry such as:
+   - thread name
+   - PRD progress
+   - PR progress
+   - recency
+   - task summary
+5. operator selects the thread number to resume, or presses Enter to start a fresh build
 
-### 2. Project Context and Retrieval Flow
-1. Operator opens/creates a project.
-2. Document Store creates/loads `cache/{project_id}/`.
-3. Source docs/repository docs are ingested.
-4. Embeddings/index are built or refreshed.
-5. Generation/review calls `auto_context()`.
-6. Retrieval returns filtered relevant chunks to consensus/review stages.
+This is automatic discovery. No explicit resume command is part of the normal flow.
 
-**Security property:** contextual grounding is explicit, scoped, and project-isolated.
+### 2. Local State Read
 
----
+The canonical local state file for this thread is:
 
-### 3. Intent-to-PR Flow
-1. Operator submits intent.
-2. Planning decomposes into PRD plan.
-3. PRD decomposes into ordered PR units.
-4. Unit metadata is assigned.
-5. Consensus Engine generates implementation/test candidates.
-6. Review pipeline validates and remediates.
-7. GitHub branch/commit/PR artifacts are created.
-8. Draft PR is opened for operator review.
+- `.../state/threads/consensusdevagent.json`
 
-**Control property:** autonomous execution is bounded by reviewable units.
+The subsystem reads key fields such as:
 
----
+- `state`
+- `prd_count`
+- `pr_plans`
+- `pr_plans_by_prd`
 
-### 4. GitHub Mutation Flow
-1. Backend requests GitHub auth material.
-2. JWT is generated using App private key from Keychain-derived material.
-3. Backend reads current file content from GitHub.
-4. Backend obtains file SHA.
-5. Backend computes content hash/new payload.
-6. Backend performs update/create operation against GitHub API.
-7. If GraphQL returns HTTP 200 with `"errors"`, backend logs and falls back to REST.
-8. Branch/commit/PR are updated with attribution naming.
+These fields determine whether the thread is still in PRD generation, has entered the PR pipeline, or has recoverable PR plan data.
 
-**Integrity property:** writes are state-aware and attributable.
+### 3. Resume Handoff
 
----
+After operator selection, control passes into:
 
-### 5. Review / Fix Flow
-1. `/review` command or automated review stage begins.
-2. Open PRs are scanned by review ingester.
-3. Operator may:
-   - select lenses
-   - adjust scope
-   - exclude files/directories
-4. Review findings are classified.
-5. Remediation generation runs only on allowed scope.
-6. Updated PR artifacts are pushed and revalidated.
+- `director.resume()`
 
-**Safety property:** operator exclusions are binding.
+The resume path must restore the thread to the appropriate stage based on persisted state. If valid PR plan state already exists, execution should continue from the PR pipeline rather than regenerating plans.
 
----
+### 4. PR Plan Persistence to GitHub
 
-### 6. CI Validation Flow
-1. PR branch is pushed.
-2. GitHub workflows run:
-   - Python tests
-   - macOS unit tests
-   - XPC integration tests
-3. Results are ingested.
-4. Optional live smoke tests may be requested.
-5. PR status is updated for operator review.
+After each PR plan is generated, the subsystem writes two artifacts into the GitHub `prds` branch:
 
-**Quality property:** generated changes must pass explicit validation gates.
+- `prds/consensusdevagent/prd-001-pr-plan.md`
+- `prds/consensusdevagent/prd-001-pr-plan.json`
+
+The markdown file is human-readable.  
+The JSON file is machine-readable and is the recovery-critical backup.
+
+### 5. Disaster Recovery Reconstruction
+
+If local thread state is deleted, corrupted, or reflects an earlier phase than actual progress, the subsystem recovers by reading the GitHub-hosted PR plan JSON files and reconstructing the full PR plan state.
+
+This is the defined recovery path when:
+
+- local state is wiped
+- local state shows `state: "prd_gen"` despite completed PR planning
+- `pr_plans_by_prd` is empty locally but GitHub JSON backups exist
+
+### 6. Branch Lifecycle Expectations
+
+Build execution may create ephemeral branches under:
+
+- `forge-agent/build/consensusdevagent-*`
+
+These branches are not intended to accumulate indefinitely. Old branches should be removed per runbook guidance to avoid CI noise and branch-monitor confusion. The subsystem relies on fresh branch creation rather than long-term reuse of stale build branches.
 
 ---
 
-### 7. Error Propagation Flow
-1. Transport, auth, provider, GitHub, review, or CI errors occur.
-2. Backend emits structured error over socket if channel is open.
-3. Shell updates UI state and operator-visible diagnostics.
-4. Supervising layer decides whether to retry, pause, or fail terminally.
+## Key Invariants
 
-**Observability property:** failures are surfaced, not hidden.
+### Resume Is Startup-Driven
 
----
+Normal restart recovery is automatic at startup. The subsystem must not require a dedicated operator command to discover resumable `ConsensusDevAgent` threads.
 
-## Critical Invariants
+### Operator Selection Precedes Resume
 
-1. **Generated code is never executed by Forge.**
-   - Applies to Swift shell, Python backend, and validation flows.
-   - CI may test repository code in controlled workflow contexts, but the agent itself does not execute generated output locally as a decision mechanism.
+Even though discovery is automatic, resumption is operator-selected. The subsystem must not silently resume the wrong incomplete thread without explicit user choice from the startup prompt.
 
-2. **Secrets originate and persist in Swift/Keychain trust boundary.**
-   - Python receives only scoped runtime credentials.
-   - Python never owns secret-at-rest storage.
+### Local Thread State Is Per-Thread and Durable
 
-3. **All privileged backend activity is session-gated.**
-   - No authenticated session, no sensitive operations.
+`consensusdevagent.json` is the local persistence unit for this build thread. It must reflect the thread’s current phase sufficiently for resume and diagnostics.
 
-4. **Inter-process communication is authenticated, structured, and explicit.**
-   - Socket locality is insufficient.
-   - Messages are schema-bound JSON lines.
+### GitHub PR Plan JSON Is the Recovery Backup
 
-5. **Consensus requires arbitration.**
-   - Two-provider generation is not complete until arbitration occurs.
-   - Claude is the required arbiter per product definition.
+For each generated PR plan, the corresponding `.json` artifact in the `prds` branch is the disaster-recovery source of truth when local thread state is missing or stale.
 
-6. **Planning precedes mutation.**
-   - Repository changes must derive from explicit PRD/PR decomposition, not ad hoc file edits.
+### PR Pipeline State Must Dominate PRD Generation State Once Plans Exist
 
-7. **Context injection is retrieval-based and project-scoped.**
-   - Document Store isolates by `project_id`.
-   - Retrieval inputs are constrained and stage-aware.
+If PR plans exist, effective execution state must be consistent with `pr_pipeline`. A state file indicating `prd_gen` while PR plans already exist is stale/incomplete and must not cause blind regeneration.
 
-8. **Repository writes are state-aware.**
-   - GitHub file SHA/content state must be read before write.
-   - Blind overwrite is forbidden.
+### Regeneration Must Not Happen When Recoverable Plans Exist
 
-9. **Review is mandatory before publication.**
-   - Multi-pass review is part of the generation pipeline, not optional post-processing.
+If local state lacks `pr_plans_by_prd` but GitHub `prds` JSON files exist, the subsystem must reconstruct the plan rather than regenerate from PR #1.
 
-10. **Operator exclusions are binding.**
-    - Excluded files/directories/lenses are never remediated in that run.
+### All GitHub Operations Use GitHubTool
 
-11. **Transport and provider failures are explicit.**
-    - HTTP 200 with GraphQL errors is still a failure condition.
-    - Failover and retries follow contract, not intuition.
+No direct GitHub API calls are permitted. This includes recovery reads and artifact writes.
 
-12. **CI is part of completion semantics.**
-    - A generated PR is not considered complete merely because code was produced.
+### GitHub Writes Must Be Validated
 
-13. **Attribution is preserved end-to-end.**
-    - Engineer/operator identity is reflected in commit, branch, PR, and ledger records.
+Before any write:
 
-14. **Launch context must not assume interactive shell configuration.**
-    - LaunchAgent execution does not source `.zshrc`/`.bash_profile`.
-    - All runtime environment dependencies must be explicit.
+- validate destination path
+- avoid blind writes without SHA where applicable
+- respect repository safety rules
 
-15. **Embedding model changes invalidate prior embedding compatibility.**
-    - Re-embedding is required on model change.
+### Retries Are Bounded
 
-16. **Security policy is globally applicable.**
-    - Any subsystem touching credentials, external content, generated code, or CI must conform to TRD-11 controls.
+Recovery, polling, and provider interactions must follow platform retry policy:
 
-17. **Trust must be explicit and explainable.**
-    - No subsystem may infer authority or safety from convenience heuristics where direct verification is possible.
+- no indefinite retries
+- maximum 3 attempts total
+- `403` primary rate-limit: exponential backoff starting at 60s
+- `429` secondary rate-limit: respect `Retry-After`
+- use ETag caching on polling endpoints
 
-18. **Enforcement defaults to deny/restrict.**
-    - Components should block or surface for approval when policy certainty is absent.
+### Gates Do Not Auto-Resolve
+
+If a backend restart occurs mid-gate:
+
+- gate state is lost
+- operator must re-approve
+- no automatic restoration of prior approval is allowed
+- no undo exists for gate decisions
+
+### Security Constraints Always Apply
+
+The subsystem must preserve platform-wide prohibitions, including:
+
+- no shell injection
+- no credential in logs
+- no credential in prompts
+- no direct execution of generated code
+- no path traversal
+- no blind GitHub write
+- no placing context in the system prompt
+- no ignoring `SECURITY_REFUSAL`
 
 ---
 
-## Summary
+## Failure Modes
 
-Forge is architected as a **local, native, two-process autonomous coding platform** with strict trust partitioning:
+### Local State Missing
 
-- **Swift owns trust, identity, secrets, UI, and orchestration.**
-- **Python owns planning, consensus, retrieval, review, GitHub operations, and CI coordination.**
-- **The socket bridge is authenticated and explicit.**
-- **Document retrieval grounds generation.**
-- **Consensus and review constrain model output.**
-- **GitHub state reconciliation and CI constrain repository mutation.**
-- **Operator approval remains the final control point.**
+**Symptom:** `consensusdevagent.json` does not exist.  
+**Impact:** startup discovery may not show the incomplete local thread.  
+**Recovery:** reconstruct from GitHub `prds/consensusdevagent/*-pr-plan.json` if artifacts exist; otherwise start fresh.
 
-The result is a system optimized for autonomous software delivery while preserving explicit trust boundaries, auditability, and non-execution safety.
+### Local State Stale Before PR Planning
+
+**Symptom:** state shows:
+- `"state": "prd_gen"`
+- empty `pr_plans_by_prd`
+
+but GitHub contains PR plan JSON files.
+
+**Impact:** on restart, the system appears to have `0 PRs done` and starts regenerating specs from PR #1.  
+**Required handling:** detect GitHub recovery artifacts and reconstruct the PR plan state instead of regenerating.
+
+### Local Thread State Manually Wiped
+
+**Symptom:** operator deletes the local thread-state file.  
+**Impact:** local resume metadata is lost.  
+**Recovery:** rely on GitHub JSON disaster-recovery artifacts; if absent, thread continuity cannot be restored.
+
+### PRDS Branch Missing or Incomplete
+
+**Symptom:** expected JSON files are absent from the `forge-agent/build/consensusdevagent/prds` branch or equivalent retained PRDS branch.  
+**Impact:** disaster recovery cannot reconstruct full PR planning state.  
+**Recovery:** only local state remains; if both local and GitHub recovery state are absent, restart from scratch.
+
+### Excess Stale Build Branches
+
+**Symptom:** many old `forge-agent/build/consensusdevagent-*` branches remain.  
+**Impact:** CI failures accumulate and branch monitor behavior becomes noisy or misleading.  
+**Recovery:** delete old branches; keep `main` and `forge-agent/build/consensusdevagent/prds` if it still contains JSON recovery files.
+
+### Backend Restart During Gate
+
+**Symptom:** process restarts while waiting for operator approval.  
+**Impact:** gate state is lost.  
+**Recovery:** operator must explicitly re-approve. The subsystem must not auto-resolve or infer approval from prior context.
+
+### Rate Limiting / Provider Failure
+
+**Symptom:** GitHub or model-provider operations fail with retryable errors.  
+**Impact:** temporary inability to load, persist, poll, or continue.  
+**Handling:** bounded retries only; on terminal failure, emit error state/card, gate as required, and require explicit operator action.
+
+### Unsafe Write or Path Violation
+
+**Symptom:** attempted write path is invalid, traverses outside expected repository scope, or lacks required safety checks.  
+**Impact:** write must not proceed.  
+**Handling:** fail closed; log and gate according to platform error-handling patterns.
+
+---
+
+## Dependencies
+
+### Runtime Dependencies
+
+- application bootstrap completion before startup thread discovery
+- local filesystem access to thread-state storage
+- `director.resume()` for resumed execution
+- GitHubTool for all repository reads/writes related to recovery artifacts
+- branch-monitor ecosystem, indirectly affected by branch accumulation
+
+### Persistent Data Dependencies
+
+- local thread state:
+  - `state/threads/consensusdevagent.json`
+- GitHub PRDS artifacts:
+  - `prds/consensusdevagent/prd-XXX-pr-plan.md`
+  - `prds/consensusdevagent/prd-XXX-pr-plan.json`
+
+### Operational Dependencies
+
+- operator startup flow must allow resume selection
+- operator branch cleanup may be required to remove old `forge-agent/build/consensusdevagent-*` branches
+- retained PRDS branch must not be deleted if it still contains recovery JSON files
+
+### Policy Dependencies
+
+- GitHub operations policy: GitHubTool only
+- retry/backoff policy for provider and GitHub failures
+- gate semantics: gates wait, do not auto-resolve, and lose state on restart
+- security rules and forbidden-pattern enforcement across all file and GitHub operations
