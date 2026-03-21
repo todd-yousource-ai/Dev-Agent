@@ -1,0 +1,191 @@
+{
+  "build_id": "consensusdevagent-06c54cc2",
+  "subsystem": "ConsensusDevAgent",
+  "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture.",
+  "scope_statement": "Build the complete Consensus Dev Agent \u2014 a native macOS AI coding agent with a two-process architecture (Swift shell + Python backend) that uses dual-LLM consensus generation (Claude + GPT-4o with Claude arbitrating) to autonomously decompose build intents into ordered PRDs and PRs, generate implementation code and tests through an 8-stage build pipeline with 3-pass review, execute CI validation, and gate on operator approval before merging. The system encompasses 16 TRDs covering the macOS application shell (TRD-1), consensus engine (TRD-2), build pipeline (TRD-3), multi-agent coordination (TRD-4), GitHub integration (TRD-5), holistic code review (TRD-6), TRD development workflow with adaptive FOUNDER/ENGINEER/CONSULTANT modes (TRD-7), UI/UX design system with Figma pipeline (TRD-8), Mac CI runner infrastructure (TRD-9), document store with FAISS vector retrieval (TRD-10), security threat model (TRD-11), backend runtime startup (TRD-12), recovery and state management (TRD-13), code quality CI pipeline (TRD-14), operational runbook (TRD-15), and agent testing/validation (TRD-16).\n\nClarifications:\n  - Forge should be the user facing name with Dev Agent as a subheader\n  - Review all the TRDs and if there is any ambiguity then resolve them in the PRD creation.\n  - Review all the TRDs and if there is any ambiguity then resolve them in the PRD creation.\n  - Review all the TRDs and if there is any ambiguity then resolve them in the PRD creation. Use best practices\n  - Review all the TRDs and if there is any ambiguity then resolve them in the PRD creation. Use best practices\n  - Review all the TRDs and if there is any ambiguity then resolve them in the PRD creation. Use best practices\n  - Review all the TRDs and if there is any ambiguity then resolve them in the PRD creation. Use best practices. No code exists\n  - Review all the TRDs and if there is any ambiguity then resolve them in the PRD creation. Use best practices",
+  "created_at": 1774129707.246349,
+  "updated_at": 1774129707.24648,
+  "updated_by": "todd-gould",
+  "prd_plan": [
+    {
+      "prd_id": "PRD-001",
+      "title": "Product Foundation, Repository Bootstrap, and Cross-TRD Contract Baseline",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-002",
+      "title": "Swift macOS Application Shell, Lifecycle, and Root Navigation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-003",
+      "title": "Authentication, Session Security, Keychain, and Secret Delivery",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-004",
+      "title": "Authenticated Swift\u2013Python IPC Channel and Two-Process Runtime Handshake",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-005",
+      "title": "Python Backend Runtime Startup, Health Model, and Degraded Operation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-006",
+      "title": "Build Stream UI, Card System, Gates, and Operator Interaction Model",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-007",
+      "title": "Document Import, Parsing UX, and Project Document Management",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-008",
+      "title": "Document Store, Parsing Engine, Embeddings, FAISS Retrieval, and Injection Defenses",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-009",
+      "title": "Consensus Engine, Provider Adapters, Arbitration, and Native Output Enforcement",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-010",
+      "title": "GitHub Integration Layer, Repository Bootstrap, and Branch/PR Lifecycle",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-011",
+      "title": "Multi-Agent Build Ledger, Coordination Protocol, and Shared Build Visibility",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-012",
+      "title": "Directed Build Pipeline Orchestration and Stage Contract Implementation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-013",
+      "title": "PRD Planning, PRD Generation, and Ordered PR Planning Engine",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-014",
+      "title": "Code Generation, Sanitization, Native Output Gate, and Autonomous Fix Loop",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-015",
+      "title": "Three-Pass Review, Security Review, and Holistic Review Workflow",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-016",
+      "title": "CI Validation Gates, Workflow Generation, and Ubuntu/macOS Routing",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-017",
+      "title": "Recovery, Thread State Store, Resume Logic, and Mid-PR Checkpointing",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-018",
+      "title": "TRD Development Workflow with Adaptive FOUNDER/ENGINEER/CONSULTANT Modes",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-019",
+      "title": "Design Ingestion UX, Sketch Interpretation, and Figma Pipeline",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-020",
+      "title": "Security Threat Model Enforcement, Audit Logging, and Safe Failure Defaults",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-021",
+      "title": "Mac Self-Hosted CI Runner, Signing, Notarization, and Swift Validation Infrastructure",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-022",
+      "title": "Code Quality CI Pipeline and Development Workflow Tooling",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-023",
+      "title": "Operational Runbook, Diagnostics, and Production Operator Workflows",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-024",
+      "title": "Comprehensive Testing, Validation, Coverage, and Release Readiness",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-025",
+      "title": "Release Packaging, Sparkle Updates, Distribution, and Final Product Hardening",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    }
+  ],
+  "pr_entries": {},
+  "knowledge_notes": [],
+  "version": 1,
+  "schema_version": 3,
+  "agent_version": "38.124.0"
+}
