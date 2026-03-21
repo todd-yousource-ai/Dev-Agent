@@ -1,16 +1,213 @@
 # Interface Contracts - ConsensusDevAgent
 
+This document defines the wire-format and API contract requirements for the `ConsensusDevAgent` subsystem based strictly on the provided TRD excerpts and Forge interface contracts.
+
 ## Data Structures
 
-This document defines the required interface and wire-level contracts for the **ConsensusDevAgent** subsystem based on the provided TRD excerpts and Forge component standards.
+### TrustFlowEvent
 
-Where the source defines exact field names, values, ordering, or constraints, they are reproduced exactly.
+Required for every action outcome emitted in the enforcement path.
 
-### 1. Backend Startup Sequence Contract
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `event_id` | `string` | yes | MUST be globally unique. MUST be generated with CSPRNG. MUST NOT be sequential. |
+| `session_id` | `string` | yes | Session identifier for the agent session. |
+| `ctx_id` | `string` | yes | CTX-ID token associated with the action. Missing `ctx_id` MUST be treated as `UNTRUSTED`; identity MUST NOT be inferred from context. |
+| `ts` | `number` | yes | UTC Unix timestamp with millisecond precision. |
+| `event_type` | `string` | yes | TrustFlow event type. Exact allowed values are not specified in the provided TRDs. |
+| `payload_hash` | `string` | yes | MUST be SHA-256 of the serialized action payload. |
 
-The backend startup flow is an ordered protocol. The order is mandatory and must not be changed.
+#### Behavioral constraints
+- Emission MUST be synchronous in the enforcement path.
+- Async buffering is not permitted.
+- Failed emission MUST be surfaced and logged as a WARN-level audit event.
+- Emission failure MUST NOT silently continue.
 
-#### Startup Steps
+---
+
+### VTZEnforcementDecision
+
+Produced when VTZ policy denies an action.
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `verdict` | `string` | yes | MUST be exactly `block` when VTZ policy denial occurs. |
+
+#### Behavioral constraints
+- Every action MUST be checked against VTZ policy BEFORE execution.
+- VTZ policy denial MUST produce a `VTZEnforcementDecision` record with `verdict=block`.
+
+---
+
+### XPC Listening Announcement
+
+Printed to stdout during backend startup.
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `stdout_line` | `string` | yes | MUST be exactly formatted as `FORGE_AGENT_LISTENING:{socket_path}` |
+| `socket_path` | `string` | yes | Socket path bound by the XPC server. |
+
+#### Behavioral constraints
+- Must occur after starting the XPC server and listening on the socket.
+- Must occur before waiting for credentials via XPC.
+
+---
+
+### CredentialsViaXPC
+
+Credentials delivered from Swift to backend via XPC.
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `github_token` | `string` | no | Used to initialize `GitHubTool`. Python reads nothing from Keychain. Only Swift reads Keychain, only to deliver via XPC. |
+| `api_keys` | `object` | no | Used to initialize `ConsensusEngine` with API keys. Exact subfields are not specified in the provided TRDs. |
+
+#### Behavioral constraints
+- Backend MUST wait for credentials via XPC with timeout `30s`.
+- Credential errors at steps 5-6 are non-fatal.
+- On credential errors, backend MUST emit `auth_error` XPC card and continue in degraded state.
+
+---
+
+### ReadyMessageViaXPC
+
+Ready message sent after startup initialization.
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `agent_version` | `string` | yes | Included in ready message via XPC. |
+| `capabilities` | `array` | yes | Included in ready message via XPC. Element types/values are not specified in the provided TRDs. |
+
+#### Behavioral constraints
+- Sent after `DocumentStore` loading starts in background.
+- Must be sent before entering `CommandRouter` event loop.
+
+---
+
+### AuthErrorXPCCard
+
+XPC message/card emitted when credential initialization fails.
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `type` | `string` | implied | MUST be exactly `auth_error` if represented as a typed message/card. |
+
+#### Behavioral constraints
+- Emitted for credential errors in:
+  - `Initialize GitHubTool with token`
+  - `Initialize ConsensusEngine with API keys`
+- Backend continues in degraded state after emission.
+
+---
+
+### AgentAction
+
+Represents an action processed by an entry point.
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `ctx_id` | `string` | yes | MUST be validated FIRST at every entry point that processes an agent action. |
+| `session_id` | `string` | yes | Used in TrustFlow event emission. |
+| `payload` | `object` | yes | Serialized form is hashed using SHA-256 to produce `payload_hash`. |
+| `vtz` | `string` | implied | Every agent session is bound to EXACTLY ONE VTZ at CTX-ID issuance. |
+
+#### Behavioral constraints
+- CTX-ID validation MUST occur FIRST.
+- CTX-ID validation failure MUST result in immediate rejection with no partial processing.
+- Action MUST be checked against VTZ policy BEFORE execution.
+- Every action outcome (`allow`, `restrict`, `block`) MUST emit a TrustFlow event.
+
+---
+
+### CTXIDToken
+
+Immutable token used for identity and trust enforcement.
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `ctx_id` | `string` | yes | Immutable once issued. |
+| `vtz` | `string` | yes | Bound to exactly one VTZ at issuance. |
+| `expires_at` | `number` or `string` | implied | Exact wire type not specified; expired CTX-ID MUST be rejected. |
+| `public_key_validation` | `string` or `object` | implied | MUST validate against TrustLock public key; software-only validation is rejected. |
+
+#### Behavioral constraints
+- CTX-ID tokens are IMMUTABLE once issued.
+- Rotation creates a new token; old token is invalidated immediately.
+- Expired CTX-ID MUST be rejected.
+- Clock skew tolerance is defined per deployment.
+- Missing CTX-ID MUST be treated as `UNTRUSTED`.
+
+---
+
+### PathWriteRequest
+
+Represents any file write path sent to persistence or file-writing logic.
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `path` | `string` | yes | MUST pass `path_security.validate_write_path()` before any write. |
+
+---
+
+### DocumentChunkForPrompting
+
+Represents loaded document content before inclusion in an LLM prompt.
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `content` | `string` | yes | MUST pass injection scanning before inclusion in any LLM prompt. |
+| `prompt_role` | `string` | yes | External document context MUST go in the `USER` prompt, never the `SYSTEM` prompt. |
+
+---
+
+### SubprocessInvocation
+
+Represents subprocess execution parameters.
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `shell` | `boolean` | yes | MUST NOT be `true`. `shell=True` is forbidden. |
+
+---
+
+### LoggingRecord
+
+Represents logging output constraints relevant to HTTP and security refusal handling.
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `status_code` | `number` | no | May be logged for HTTP responses. |
+| `error_type` | `string` | no | May be logged for HTTP errors. |
+| `response_body` | `string` | no | MUST NOT be logged. |
+| `message` | `string` | yes | If `SECURITY_REFUSAL` is observed, processing must stop, gate, and log. |
+| `level` | `string` | no | Failed TrustFlow emission is a WARN-level audit event. |
+
+---
+
+## Enums and Constants
+
+### String constants
+
+| Name | Value |
+|---|---|
+| XPC listening prefix | `FORGE_AGENT_LISTENING:` |
+| auth error type | `auth_error` |
+| CTX-ID missing trust state | `UNTRUSTED` |
+| VTZ denial verdict | `block` |
+| external document prompt role | `USER` |
+| forbidden external document prompt role | `SYSTEM` |
+| forbidden refusal token | `SECURITY_REFUSAL` |
+
+### Startup sequence constants
+
+| Name | Value |
+|---|---|
+| credentials wait timeout | `30s` |
+
+### Required startup order
+
+The following sequence is mandatory and must not be changed:
 
 1. `Initialize logger`
 2. `Start XPC server, listen on socket`
@@ -22,496 +219,110 @@ The backend startup flow is an ordered protocol. The order is mandatory and must
 8. `Send ready message via XPC (includes agent_version, capabilities)`
 9. `Enter CommandRouter event loop`
 
-#### Startup Event: Listening Announcement
+### Enforcement outcome values
 
-Printed to stdout exactly as:
+The provided contracts specify these outcome values:
 
-```text
-FORGE_AGENT_LISTENING:{socket_path}
-```
-
-##### Fields
-
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `socket_path` | string | yes | Concrete filesystem/socket path substituted into the literal prefix `FORGE_AGENT_LISTENING:` |
-
-##### Notes
-
-- The literal prefix must be exactly `FORGE_AGENT_LISTENING:`.
-- Swift reads this value from stdout.
-- This is a wire-visible startup signal.
-
----
-
-### 2. Ready Message via XPC
-
-At startup step 8, a ready message is sent via XPC.
-
-#### Fields
-
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `agent_version` | string | yes | Must be included in ready message |
-| `capabilities` | array | yes | Must be included in ready message |
-
-#### Notes
-
-- Additional fields are not defined in the provided source and therefore are unspecified here.
-- The ready message must only be sent after step 7 begins.
-
----
-
-### 3. Auth Error XPC Card
-
-Credential initialization failures for steps 5 and 6 are non-fatal.
-
-#### Fields
-
-The source defines the message/card name only:
-
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `auth_error` | object/message | yes | Must be emitted via XPC on credential error |
-
-#### Notes
-
-- Steps 5 and 6 continue in degraded state after emitting `auth_error`.
-- Exact payload shape beyond the `auth_error` message/card identity is not defined in the provided source.
-
----
-
-### 4. TrustFlow Event
-
-Every action outcome must emit a TrustFlow event.
-
-#### Fields
-
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `event_id` | string | yes | Must be globally unique; generated via CSPRNG, not sequential |
-| `session_id` | string | yes | Required on every TrustFlow event |
-| `ctx_id` | string | yes | Required on every TrustFlow event |
-| `ts` | number | yes | UTC Unix timestamp with millisecond precision |
-| `event_type` | string | yes | Required on every TrustFlow event |
-| `payload_hash` | string | yes | Must be SHA-256 of the serialized action payload |
-
-#### Notes
-
-- Emission must be synchronous in the enforcement path.
-- Async buffering is not permitted.
-- Failed emission is a WARN-level audit event and must not be silently skipped.
-
----
-
-### 5. VTZEnforcementDecision Record
-
-VTZ policy denial must produce a `VTZEnforcementDecision` record.
-
-#### Fields
-
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `verdict` | string | yes | Must equal `block` for VTZ policy denial |
-
-#### Notes
-
-- The source only defines `verdict=block` explicitly.
-- Other fields for `VTZEnforcementDecision` are not defined in the provided material.
-
----
-
-### 6. CTX-ID Token
-
-The CTX-ID token is an identity/security token used in every action processing entry point.
-
-#### Represented Data
-
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `ctx_id` | string | yes | Required for validation and TrustFlow events |
-
-#### Lifecycle Constraints
-
-- CTX-ID tokens are **IMMUTABLE** once issued.
-- CTX-ID rotation creates a new token.
-- The old token is invalidated immediately.
-- Expired CTX-ID must be rejected.
-- Missing CTX-ID must be treated as `UNTRUSTED`.
-- Identity must never be inferred from context when CTX-ID is missing.
-- CTX-ID must be validated against TrustLock public key.
-- Software-only validation is rejected.
-
-#### Session Binding Constraints
-
-- Every agent session is bound to **EXACTLY ONE VTZ** at CTX-ID issuance.
-- VTZ policy changes take effect at **NEXT CTX-ID issuance**, not mid-session.
-
----
-
-### 7. Action Payload
-
-The source defines a serialized action payload indirectly through hashing requirements.
-
-#### Fields
-
-The explicit field set for the action payload is not provided. However, the following constraint is mandatory:
-
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| serialized action payload | bytes/string serialization | yes | `payload_hash` must be SHA-256 of this serialized form |
-
-#### Notes
-
-- Any implementation must produce a deterministic serialized payload for hashing consistency.
-- Exact serialization format is not defined in the provided source.
-
----
-
-### 8. Credentials via XPC
-
-Backend startup waits for credentials via XPC.
-
-#### Fields
-
-The source defines only the credential categories consumed later:
-
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `token` | string | conditionally | Used to initialize `GitHubTool` |
-| `api keys` | collection of strings or key-value mapping | conditionally | Used to initialize `ConsensusEngine` |
-
-#### Notes
-
-- Wait timeout is exactly `30s`.
-- Python reads nothing from Keychain directly.
-- Only Swift reads Keychain, only to deliver via XPC.
-
----
-
-### 9. GitHubTool Initialization Input
-
-All GitHub operations go through `GitHubTool`.
-
-#### Fields
-
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `token` | string | yes | Passed to `GitHubTool` during startup step 5 |
-
-#### Notes
-
-- Pipeline code must never call the GitHub API directly.
-- `GitHubTool` is the sole integration path for GitHub operations.
-
----
-
-### 10. ConsensusEngine Initialization Input
-
-`ConsensusEngine` is initialized with API keys.
-
-#### Fields
-
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `api keys` | collection of strings or key-value mapping | yes | Passed to `ConsensusEngine` during startup step 6 |
-
-#### Notes
-
-- Initialization errors are non-fatal and must produce `auth_error`.
-
----
-
-### 11. DocumentStore Loading Trigger
-
-DocumentStore loading starts asynchronously in the background.
-
-#### Fields
-
-No payload fields are explicitly defined.
-
-#### Constraints
-
-- Loading must begin at startup step 7.
-- It must be async.
-- The app must remain responsive while embeddings load.
-
----
-
-## Enums and Constants
-
-### Literal Strings
-
-| Name | Value |
+| Value | Meaning |
 |---|---|
-| Listening stdout prefix | `FORGE_AGENT_LISTENING:` |
-| Security refusal marker | `SECURITY_REFUSAL` |
-| Missing CTX-ID trust state | `UNTRUSTED` |
-| VTZ denial verdict | `block` |
-| Audit log level for TrustFlow emission failure | `WARN` |
-
-### Timing Constants
-
-| Name | Value |
-|---|---|
-| Credential wait timeout | `30s` |
-
-### Structural Constants
-
-| Name | Value |
-|---|---|
-| Python version | `Python 3.12` |
-| New module coverage minimum | `85%` |
-
-### Required TrustFlow Fields
-
-Exactly these field names are required on every TrustFlow event:
-
-- `event_id`
-- `session_id`
-- `ctx_id`
-- `ts`
-- `event_type`
-- `payload_hash`
-
-### Startup Ordering Constant
-
-The startup order is mandatory and must not be changed.
+| `allow` | Action permitted; must emit TrustFlow event |
+| `restrict` | Action restricted; must emit TrustFlow event |
+| `block` | Action denied; must emit TrustFlow event; VTZ denial must also produce `VTZEnforcementDecision` with `verdict=block` |
 
 ---
 
 ## Validation Rules
 
-## 1. Entry Point Enforcement
+### CAL enforcement
 
-Every entry point that processes an agent action MUST:
+1. Every entry point that processes an agent action MUST call CTX-ID validation FIRST.
+2. CTX-ID validation failure MUST result in immediate rejection.
+3. No partial processing is permitted after CTX-ID validation failure.
+4. Every action MUST be checked against VTZ policy BEFORE execution.
+5. VTZ policy denial MUST produce a `VTZEnforcementDecision` record with `verdict=block`.
+6. Every action outcome (`allow`, `restrict`, `block`) MUST emit a TrustFlow event.
+7. TrustFlow emission failure MUST NOT silently continue.
+8. TrustFlow emission failure MUST be logged and surfaced.
 
-1. call CTX-ID validation first
-2. reject immediately on CTX-ID validation failure
-3. check the action against VTZ policy before execution
-4. emit a TrustFlow event for every outcome: allow, restrict, block
+### TrustFlow emission
 
-### Rejection Rules
+1. `event_id` MUST be globally unique.
+2. `event_id` MUST use CSPRNG generation.
+3. `event_id` MUST NOT be sequential.
+4. `ts` MUST be UTC Unix timestamp with millisecond precision.
+5. `payload_hash` MUST be SHA-256 of the serialized action payload.
+6. Emission MUST be synchronous in the enforcement path.
+7. Async buffering is not permitted.
+8. Failed emission is a WARN-level audit event.
 
-| Condition | Required Behavior |
-|---|---|
-| CTX-ID validation failure | immediate rejection; no partial processing |
-| Missing CTX-ID | treat as `UNTRUSTED`; never infer identity from context |
-| Expired CTX-ID | reject |
-| VTZ policy denial | produce `VTZEnforcementDecision` with `verdict=block` |
-| TrustFlow emission failure | do not silently continue; log and surface the failure |
+### CTX-ID
 
----
+1. CTX-ID tokens are immutable once issued.
+2. Rotation creates a new token.
+3. The old token is invalidated immediately upon rotation.
+4. Expired CTX-ID MUST be rejected.
+5. Clock skew tolerance is deployment-defined.
+6. CTX-ID MUST be validated against TrustLock public key.
+7. Software-only validation is rejected.
+8. Missing CTX-ID MUST be treated as `UNTRUSTED`.
+9. Identity MUST never be inferred from context when CTX-ID is missing.
 
-## 2. TrustFlow Validation
+### VTZ enforcement
 
-A TrustFlow event is valid only if all required fields are present and constraints are met.
+1. Every agent session is bound to EXACTLY ONE VTZ at CTX-ID issuance.
+2. Cross-VTZ tool calls require explicit policy authorization.
+3. Implicit cross-VTZ access is denied.
+4. VTZ boundaries are structural, not advisory.
+5. Enforcement cannot be bypassed by application code.
+6. VTZ policy changes take effect at NEXT CTX-ID issuance, not mid-session.
 
-### Field-Level Rules
+### Security rules
 
-| Field | Validation |
-|---|---|
-| `event_id` | must be globally unique; must not be sequential; must be generated using CSPRNG |
-| `session_id` | required |
-| `ctx_id` | required |
-| `ts` | must be UTC Unix timestamp with millisecond precision |
-| `event_type` | required |
-| `payload_hash` | must equal SHA-256 of serialized action payload |
+1. Never hardcode credentials, API keys, tokens, or secrets as string literals.
+2. Never use `shell=True` in subprocess calls.
+3. Never call `eval()` or `exec()` on generated or external content.
+4. Never log HTTP response bodies.
+5. Log HTTP status codes and error types only.
+6. All file paths written to disk MUST pass `path_security.validate_write_path()` before any write.
+7. All loaded document chunks MUST pass injection scanning before inclusion in any LLM prompt.
+8. Context from external documents MUST go in the `USER` prompt, never the `SYSTEM` prompt.
+9. When `SECURITY_REFUSAL` appears in output: stop, gate, log.
+10. Never retry to bypass `SECURITY_REFUSAL`.
+11. All GitHub operations go through `GitHubTool`.
+12. Never call the GitHub API directly from pipeline code.
 
-### Emission Rules
+### Python/backend implementation requirements affecting interface behavior
 
-- Emission must be synchronous in the enforcement path.
-- Async buffering is not permitted.
-- Failure is a WARN-level audit event.
-
----
-
-## 3. CTX-ID Validation
-
-A CTX-ID is valid only if all of the following hold:
-
-- present
-- not expired
-- not invalidated by rotation
-- validated against TrustLock public key
-- not modified after issuance
-
-### Invalid Cases
-
-| Condition | Valid? | Required Behavior |
-|---|---:|---|
-| Missing `ctx_id` | no | treat as `UNTRUSTED` |
-| Expired CTX-ID | no | reject |
-| Modified token after issuance | no | reject |
-| Software-only validation | no | reject |
-| Old token after rotation | no | reject immediately |
-
----
-
-## 4. VTZ Validation
-
-### Rules
-
-- Every agent session is bound to exactly one VTZ at CTX-ID issuance.
-- Cross-VTZ tool calls require explicit policy authorization.
-- Implicit cross-VTZ access is denied.
-- VTZ boundaries are structural and cannot be bypassed by application code.
-- VTZ policy changes apply only at next CTX-ID issuance.
-
-### Denial Output
-
-On VTZ denial, a valid implementation must produce:
-
-```text
-VTZEnforcementDecision(verdict=block)
-```
-
-At minimum, the `verdict` field must equal `block`.
-
----
-
-## 5. Security Validation Rules
-
-### Forbidden Behaviors
-
-The following are explicitly forbidden:
-
-- ignoring `SECURITY_REFUSAL`
-- retrying an LLM call to bypass `SECURITY_REFUSAL`
-- force unwrap in Swift: `optional!`
-- LLM API call from Swift
-- Keychain read for backend in Python
-- hardcoded credentials, API keys, tokens, or secrets as string literals
-- `shell=True` in subprocess calls
-- `eval()` on generated or external content
-- `exec()` on generated or external content
-- logging HTTP response bodies
-
-### Required Security Behaviors
-
-| Requirement | Constraint |
-|---|---|
-| File path validation | All file paths written to disk must pass `path_security.validate_write_path()` before any write |
-| Injection scanning | All loaded document chunks must pass injection scanning before inclusion in any LLM prompt |
-| Prompt placement | Context from external documents goes in the USER prompt, never the SYSTEM prompt |
-| SECURITY_REFUSAL handling | stop, gate, log; never retry to bypass |
-
----
-
-## 6. Language and Testing Conformance
-
-### Python Backend Rules
-
-- `Python 3.12`
-- Type annotations on every function
-- `async/await` throughout the backend
-- No blocking calls on the event loop
-- Dataclasses for all structured data
-
-### Test and Static Analysis Rules
-
-- `pytest` for all tests
-- Tests live in `tests/`
-- Tests mirror `src/` structure
-- `ruff` must pass clean
-- `mypy` must pass clean
-- Test coverage must be `≥ 85%` on all new modules
-
-### Pre-change Test Command
-
-```bash
-cd src && pytest ../tests/ -v --tb=short
-```
+1. Python version is `3.12`.
+2. Type annotations are required on every function.
+3. Backend uses `async/await` throughout.
+4. No blocking calls on the event loop.
+5. Dataclasses are required for all structured data.
+6. Tests use `pytest`.
+7. Tests live in `tests/` mirroring `src/`.
+8. `ruff` and `mypy` must pass clean.
+9. Test coverage must be `≥ 85%` on all new modules.
 
 ---
 
 ## Wire Format Examples
 
-## 1. Valid Listening Announcement
+## Valid payloads
 
-```text
-FORGE_AGENT_LISTENING:/tmp/forge-agent.sock
-```
-
-### Why valid
-
-- Uses exact prefix `FORGE_AGENT_LISTENING:`
-- Includes a socket path value
-
----
-
-## 2. Invalid Listening Announcement
-
-```text
-FORGE_AGENT_READY:/tmp/forge-agent.sock
-```
-
-### Why invalid
-
-- Prefix must be exactly `FORGE_AGENT_LISTENING:`
-
----
-
-## 3. Valid TrustFlow Event
+### TrustFlow event
 
 ```json
 {
-  "event_id": "c2b9b6e6-5f13-4a7f-a9d2-9f4bb8ed0b5e",
-  "session_id": "sess_01HZX8K4R3K2A9",
-  "ctx_id": "ctx_01HZX8K4R3K2A9",
-  "ts": 1712345678123,
+  "event_id": "3f8d2d4d-1b0f-4e7d-93d4-8d2c1d8b0f3a",
+  "session_id": "sess_001",
+  "ctx_id": "ctx_abc123",
+  "ts": 1731605123456,
   "event_type": "allow",
-  "payload_hash": "3f0a377ba0a4a460ecb616f6507ce0d8cfa3a00f2f1cf5a2461f2a10f6b3c0d4"
+  "payload_hash": "8f434346648f6b96df89dda901c5176b10a6d83961f7e2dd836118cc32cc8b4a"
 }
 ```
 
-### Why valid
-
-- Contains all required fields
-- `ts` is a Unix timestamp in milliseconds
-- `payload_hash` is shaped as a SHA-256 hex digest
-- `event_id` is non-sequential in form
-
----
-
-## 4. Invalid TrustFlow Event: Missing Field
-
-```json
-{
-  "event_id": "123",
-  "session_id": "sess_01HZX8K4R3K2A9",
-  "ts": 1712345678123,
-  "event_type": "allow",
-  "payload_hash": "3f0a377ba0a4a460ecb616f6507ce0d8cfa3a00f2f1cf5a2461f2a10f6b3c0d4"
-}
-```
-
-### Why invalid
-
-- Missing required field `ctx_id`
-
----
-
-## 5. Invalid TrustFlow Event: Bad Timestamp Precision
-
-```json
-{
-  "event_id": "c2b9b6e6-5f13-4a7f-a9d2-9f4bb8ed0b5e",
-  "session_id": "sess_01HZX8K4R3K2A9",
-  "ctx_id": "ctx_01HZX8K4R3K2A9",
-  "ts": 1712345678,
-  "event_type": "allow",
-  "payload_hash": "3f0a377ba0a4a460ecb616f6507ce0d8cfa3a00f2f1cf5a2461f2a10f6b3c0d4"
-}
-```
-
-### Why invalid
-
-- `ts` must have millisecond precision
-
----
-
-## 6. Valid VTZ Denial Record
+### VTZ enforcement decision on denial
 
 ```json
 {
@@ -519,13 +330,103 @@ FORGE_AGENT_READY:/tmp/forge-agent.sock
 }
 ```
 
-### Why valid
+### Ready message via XPC
 
-- VTZ policy denial requires `verdict=block`
+```json
+{
+  "agent_version": "1.0.0",
+  "capabilities": [
+    "github",
+    "consensus",
+    "documents"
+  ]
+}
+```
+
+### Credentials via XPC
+
+```json
+{
+  "github_token": "ghp_redacted",
+  "api_keys": {
+    "provider": "redacted"
+  }
+}
+```
+
+### Agent action
+
+```json
+{
+  "ctx_id": "ctx_abc123",
+  "session_id": "sess_001",
+  "payload": {
+    "command": "run_consensus"
+  },
+  "vtz": "vtz_alpha"
+}
+```
+
+### XPC listening announcement
+
+```text
+FORGE_AGENT_LISTENING:/tmp/forge-agent.sock
+```
+
+### Document chunk routed to USER prompt
+
+```json
+{
+  "content": "External document excerpt",
+  "prompt_role": "USER"
+}
+```
+
+### File write request with validated path
+
+```json
+{
+  "path": "/safe/output/file.txt"
+}
+```
 
 ---
 
-## 7. Invalid VTZ Denial Record
+## Invalid payloads
+
+### Invalid TrustFlow event: sequential/non-unique `event_id`
+
+```json
+{
+  "event_id": "123",
+  "session_id": "sess_001",
+  "ctx_id": "ctx_abc123",
+  "ts": 1731605123456,
+  "event_type": "allow",
+  "payload_hash": "8f434346648f6b96df89dda901c5176b10a6d83961f7e2dd836118cc32cc8b4a"
+}
+```
+
+Reason:
+- `event_id` must be globally unique and CSPRNG-generated, not sequential.
+
+### Invalid TrustFlow event: missing `ctx_id`
+
+```json
+{
+  "event_id": "3f8d2d4d-1b0f-4e7d-93d4-8d2c1d8b0f3a",
+  "session_id": "sess_001",
+  "ts": 1731605123456,
+  "event_type": "allow",
+  "payload_hash": "8f434346648f6b96df89dda901c5176b10a6d83961f7e2dd836118cc32cc8b4a"
+}
+```
+
+Reason:
+- `ctx_id` is required on TrustFlow events.
+- Missing CTX-ID must be treated as `UNTRUSTED` for action processing; identity must not be inferred.
+
+### Invalid VTZ denial record
 
 ```json
 {
@@ -533,204 +434,137 @@ FORGE_AGENT_READY:/tmp/forge-agent.sock
 }
 ```
 
-### Why invalid
+Reason:
+- VTZ policy denial must produce `VTZEnforcementDecision` with `verdict=block`.
 
-- Required value is exactly `block`
-
----
-
-## 8. Valid Ready Message via XPC
+### Invalid document prompt placement
 
 ```json
 {
-  "agent_version": "1.0.0",
-  "capabilities": [
-    "github",
-    "consensus"
-  ]
+  "content": "External document excerpt",
+  "prompt_role": "SYSTEM"
 }
 ```
 
-### Why valid
+Reason:
+- Context from external documents goes in the `USER` prompt, never the `SYSTEM` prompt.
 
-- Includes required fields `agent_version` and `capabilities`
-
----
-
-## 9. Invalid Ready Message via XPC
+### Invalid subprocess invocation
 
 ```json
 {
-  "agent_version": "1.0.0"
+  "shell": true
 }
 ```
 
-### Why invalid
+Reason:
+- `shell=True` is forbidden.
 
-- Missing required field `capabilities`
+### Invalid logging record containing HTTP response body
 
----
-
-## 10. Invalid SECURITY_REFUSAL Handling
-
-```python
-if "SECURITY_REFUSAL" in output:
-    output = await self._generate_openai(prompt)
+```json
+{
+  "status_code": 403,
+  "error_type": "Forbidden",
+  "response_body": "{\"message\":\"secret details\"}"
+}
 ```
 
-### Why invalid
+Reason:
+- Never log HTTP response bodies.
 
-- Explicitly forbidden: must not retry to bypass `SECURITY_REFUSAL`
+### Invalid security refusal handling
 
----
-
-## 11. Invalid Swift Backend Credential Access
-
-```swift
-let token = KeychainKit.read("github_token")
+```json
+{
+  "message": "SECURITY_REFUSAL",
+  "retry": true
+}
 ```
 
-### Why invalid
+Reason:
+- When `SECURITY_REFUSAL` is seen: stop, gate, log.
+- Never retry to bypass.
 
-- Python backend reads nothing from Keychain
-- Only Swift reads Keychain, only to deliver via XPC
+### Invalid startup ordering example
+
+```text
+1. Initialize logger
+2. Initialize GitHubTool with token
+3. Start XPC server, listen on socket
+```
+
+Reason:
+- Startup order is mandatory and must not be changed.
+
+### Invalid GitHub integration behavior
+
+```json
+{
+  "github_api_call_origin": "pipeline_code"
+}
+```
+
+Reason:
+- All GitHub operations must go through `GitHubTool`.
+- Direct GitHub API calls from pipeline code are forbidden.
 
 ---
 
 ## Integration Points
 
-## 1. Swift ↔ Backend
+### XPC
 
-### Mechanisms
+#### Backend startup integration
+- Backend MUST start XPC server and listen on a socket.
+- Backend MUST print `FORGE_AGENT_LISTENING:{socket_path}` to stdout.
+- Swift reads this stdout line.
+- Backend MUST wait for credentials via XPC for `30s`.
+- Swift is the only component that reads Keychain.
+- Python backend reads nothing from Keychain.
+- Swift delivers credentials via XPC.
 
-- Swift reads stdout for:
-  - `FORGE_AGENT_LISTENING:{socket_path}`
-- Swift sends credentials via XPC
-- Backend sends:
-  - ready message via XPC
-  - `auth_error` XPC card on credential failures
+#### Credential handling
+- `github_token` is used to initialize `GitHubTool`.
+- `api_keys` are used to initialize `ConsensusEngine`.
+- Failures in these steps are non-fatal.
+- On failure, backend emits `auth_error` XPC card and continues in degraded state.
 
-### Constraints
+#### Ready signaling
+- After starting async `DocumentStore` loading, backend sends a ready message via XPC.
+- Ready message includes:
+  - `agent_version`
+  - `capabilities`
 
-- Only Swift reads Keychain
-- Swift may deliver credentials via XPC
-- Backend must not read Keychain directly
+### Command routing
+- After ready signaling, backend enters `CommandRouter` event loop.
 
----
+### GitHub integration
+- All GitHub operations go through `GitHubTool`.
+- Pipeline code MUST NOT call the GitHub API directly.
 
-## 2. Backend ↔ GitHub
+### Consensus engine integration
+- `ConsensusEngine` is initialized with API keys received via XPC.
+- Initialization occurs after `GitHubTool` initialization in the mandatory startup order.
 
-### Integration Component
+### Document store integration
+- `DocumentStore` loading starts in background asynchronously.
+- App remains responsive while embeddings load.
+- Any loaded document chunk must pass injection scanning before inclusion in an LLM prompt.
 
-- `GitHubTool`
+### Security and trust enforcement integration
+- Every action-processing entry point integrates:
+  1. CTX-ID validation
+  2. VTZ policy enforcement
+  3. Synchronous TrustFlow emission
+- Missing or invalid CTX-ID results in rejection or `UNTRUSTED` handling per contract.
+- Cross-VTZ calls require explicit policy authorization.
 
-### Contract
+### File system integration
+- Any path written to disk must be validated with `path_security.validate_write_path()` before writing.
 
-- All GitHub operations go through `GitHubTool`
-- Pipeline code must never call the GitHub API directly
-
-### Initialization Input
-
-- `token`
-
----
-
-## 3. Backend ↔ Consensus Engine
-
-### Integration Component
-
-- `ConsensusEngine`
-
-### Initialization Input
-
-- `API keys`
-
-### Error Contract
-
-- Credential/API key errors are non-fatal
-- Must emit `auth_error`
-- System continues in degraded state
-
----
-
-## 4. Backend ↔ DocumentStore
-
-### Integration Component
-
-- `DocumentStore`
-
-### Contract
-
-- Loading starts in background at startup step 7
-- Must be async
-- App remains responsive while embeddings load
-- Loaded document chunks must pass injection scanning before inclusion in any LLM prompt
-
----
-
-## 5. Enforcement Path ↔ CAL / VTZ / TrustFlow
-
-### Required Execution Order
-
-1. CTX-ID validation
-2. immediate reject on validation failure
-3. VTZ policy check
-4. execution decision
-5. synchronous TrustFlow emission
-
-### Output Records
-
-- `VTZEnforcementDecision` with `verdict=block` on VTZ denial
-- TrustFlow event on every outcome: allow, restrict, block
-
----
-
-## 6. File System Writes
-
-### Security Integration
-
-Before any write to disk:
-
-- path must pass `path_security.validate_write_path()`
-
-This validation is mandatory for all file paths written to disk.
-
----
-
-## 7. LLM Prompt Construction
-
-### Security Integration
-
-- All loaded document chunks must pass injection scanning before inclusion
-- External document context must be placed in the `USER` prompt
-- External document context must never be placed in the `SYSTEM` prompt
-- On `SECURITY_REFUSAL`: stop, gate, log; never retry
-
----
-
-## 8. Development Workflow Integration
-
-Before code changes:
-
-1. Find the TRD that owns the component in `README.md`
-2. Read the relevant TRD sections
-3. Check TRD-11 if touching credentials, external content, generated code, or CI
-4. Run existing tests:
-
-```bash
-cd src && pytest ../tests/ -v --tb=short
-```
-
----
-
-## Unspecified Fields and Open Areas
-
-The provided source does **not** define the full payload schemas for the following items:
-
-- XPC credential message exact field names beyond `token` / `API keys`
-- `auth_error` payload structure
-- full `VTZEnforcementDecision` schema beyond `verdict`
-- full action payload schema and serialization format
-- full ready-message schema beyond `agent_version` and `capabilities`
-
-Implementations must not invent incompatible field names where additional TRD-owned schemas exist elsewhere. Only the fields and constraints explicitly defined above are normative from the provided source.
+### Logging/audit integration
+- HTTP logs may include status code and error type only.
+- HTTP response bodies must never be logged.
+- TrustFlow emission failure must be logged as WARN-level audit event.
+- `SECURITY_REFUSAL` must stop processing, gate, and log.
