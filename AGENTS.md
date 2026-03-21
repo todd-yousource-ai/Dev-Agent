@@ -1,64 +1,86 @@
 # AGENTS.md - Forge Platform
 
-Forge is a secure-by-default trust-enforcement platform for AI agent operations that binds every agent action to a cryptographic machine identity (CTX-ID), confines it within a Virtual Trust Zone (VTZ), labels all data via DTL, and records every action outcome through TrustFlow and append-only audit streams — enforcement is structural, not advisory.
+Forge is a trust-enforcement platform for AI agent operations that binds every agent action to a cryptographic machine identity (CTX-ID), confines it within a Virtual Trust Zone (VTZ), labels all data via DTL, and emits an immutable TrustFlow audit stream — rejecting any action that cannot be authenticated, authorized, and audited.
 
 ## Critical Rules - Read Before Writing Any Code
 
-1. Validate CTX-ID FIRST at every enforcement entry point — reject immediately on failure with zero partial processing.
-2. Treat missing, expired, invalid, or unverified CTX-ID as `UNTRUSTED` — NEVER infer identity from session context, transport context, or caller state.
-3. CTX-ID tokens are IMMUTABLE once issued — rotation creates a new token and immediately invalidates the old one; expired CTX-ID MUST be rejected.
-4. Bind every agent session to exactly one VTZ at CTX-ID issuance — deny implicit cross-VTZ access; cross-VTZ tool calls require explicit policy authorization.
-5. Check VTZ policy BEFORE any action execution, tool call, or cross-boundary operation — default to deny.
-6. Emit a synchronous TrustFlow event in the enforcement path for every action outcome (allow, restrict, block) — every event MUST include `event_id`, `session_id`, `ctx_id`, `ts`, `event_type`, and `payload_hash`; async buffering is forbidden; failed emission is a WARN-level audit event that MUST be surfaced.
-7. Assign DTL labels at data ingestion — labels are immutable; derived data inherits the HIGHEST classification of any source; unlabeled data MUST be treated as `CONFIDENTIAL` until explicitly reclassified.
-8. Fail closed on ALL trust, identity, policy, cryptographic, and authorization errors — reject the action, log the event, surface to caller — NEVER silently continue.
-9. NEVER write any file until `path_security.validate_write_path()` has approved the destination path — no exceptions, no workarounds.
-10. NEVER execute generated or external content with `eval()`, `exec()`, subprocess execution of generated content, or `shell=True` in any subprocess call.
-11. NEVER bypass `SECURITY_REFUSAL` by rephrasing, retrying with another model, or downgrading the request — stop, gate, and log.
-12. NEVER expose secrets, keys, tokens, credentials, or cleartext sensitive payloads in logs, error messages, audit records, or generated code — no exceptions.
-13. All external input (documents, PR comments, CI output, MCP payloads) is untrusted — validate strictly before use; context from external documents goes in the USER prompt, NEVER the SYSTEM prompt.
-14. Gate cards (`gate_card`) block indefinitely for operator input — no auto-approve, ever.
-15. Audit records are generated BEFORE execution, are APPEND-ONLY (no modification or deletion), MUST NOT contain secrets, and replay MUST be possible from the audit stream alone.
-16. Discard and log unknown XPC message types — enforce the 16 MB XPC message size limit — NEVER raise unknown-message exceptions into control flow.
+1. Every enforcement entry point MUST call CTX-ID validation FIRST — validation failure causes immediate rejection with zero partial processing.
+2. TrustFlow events MUST be emitted synchronously in the enforcement path for every action outcome (`allow`, `restrict`, `block`) — async buffering is forbidden; failed emission is a WARN-level audit event that MUST be surfaced, never silently skipped.
+3. VTZ policy MUST be checked BEFORE execution of any agent action — cross-VTZ tool calls require explicit policy authorization; implicit cross-boundary access is denied. Denial MUST emit a `VTZEnforcementDecision` record with `verdict=block`.
+4. All trust, identity, policy, and cryptographic failures MUST fail closed: reject the action, log the event, surface to caller — `try/except/pass` is BANNED in enforcement code.
+5. Secrets, keys, tokens, and credentials MUST never appear in logs, error messages, generated code, or cleartext payloads — error messages include `component`, `operation`, `failure_reason`, `ctx_id` only.
+6. DTL labels are assigned at data ingestion and are immutable — derived data inherits the HIGHEST classification of any source; unlabeled data is treated as `CONFIDENTIAL` until explicitly reclassified.
+7. CTX-ID tokens are IMMUTABLE once issued — rotation creates a new token and immediately invalidates the old one; expired or missing CTX-ID MUST be treated as `UNTRUSTED`; validation MUST use TrustLock public key, not software-only checks. Missing CTX-ID MUST never infer identity from session state, process state, or surrounding context.
+8. Generated code is NEVER executed by the agent — no `eval()`, no `exec()`, no `subprocess` of generated content; `shell=True` is forbidden in all subprocess calls.
+9. All file writes MUST pass `path_security.validate_write_path()` before execution — no exceptions.
+10. External document content goes in the USER prompt, NEVER the SYSTEM prompt — all external input (documents, PR comments, CI output, XPC messages, generated content) is untrusted and validated before use.
+11. `SECURITY_REFUSAL` output is NEVER bypassed by rephrasing or retrying with another provider — stop, gate for operator input, log.
+12. Audit records are APPEND-ONLY, generated BEFORE execution, and MUST NOT contain secrets — replay of the full operational history MUST be possible from the audit stream alone.
+13. Unknown XPC message types MUST be discarded and logged — never raise as uncaught exceptions, never process optimistically.
+14. Gates wait indefinitely for operator input — there is NEVER any auto-approve, auto-merge, or implicit operator consent.
 
 ## Architecture Overview
 
-Enforcement order for every agent action:
+Enforcement order: **CTX-ID validation → VTZ policy check → DTL label verification → Action execution → TrustFlow emission → Audit record**.
 
-**CTX-ID validation → VTZ policy check → DTL label verification → Audit record → Action execution → TrustFlow emission**
-
-| Subsystem | Path | Enforces | MUST NOT |
+| Subsystem | Path | Enforces | Must NOT Do |
 |---|---|---|---|
-| **CAL** (Conversation Abstraction Layer) | `src/cal/` | Entry-point sequencing: CTX-ID validation → VTZ policy check → audit record → action execution → TrustFlow emission | NEVER execute an action before CTX-ID validation and VTZ policy check complete; NEVER swallow enforcement exceptions |
-| **VTZ** (Virtual Trust Zone) | `src/vtz/` | Binds each session to one zone; decides allow/restrict/block per policy | NEVER permit implicit cross-VTZ tool calls; NEVER mutate policy mid-session without re-authorization |
-| **DTL** (Data Trust Labels) | `src/dtl/` | Applies immutable classification at ingestion; verifies labels before trust-boundary crossing | NEVER downgrade derived data below the highest source classification; NEVER allow unlabeled data past a trust boundary without classifying it as CONFIDENTIAL |
-| **TrustFlow** | `src/trustflow/` | Emits synchronous action-outcome events (allow, restrict, block) with required fields: `event_id`, `session_id`, `ctx_id`, `ts`, `event_type`, `payload_hash` | NEVER buffer asynchronously in the enforcement path; NEVER skip emission silently |
-| **TrustLock** | `src/trustlock/` | Validates CTX-ID against the TrustLock public key with hardware-backed guarantees | NEVER accept software-only validation as sufficient; NEVER cache validation results past token expiry |
-| **MCP** (MCP Policy Engine) | `src/mcp/` | Evaluates explicit policy for tools, data movement, and cross-VTZ requests; all MCP payloads are untrusted input | NEVER allow implicit tool authorization; NEVER treat MCP payload content as trusted without validation |
-| **Audit** | `src/audit/` | Append-only audit records generated before execution; supports full replay | NEVER modify or delete audit records; NEVER include secrets in audit payloads |
-| **Path Security** | `src/path_security/` | Validates all file write destinations via `validate_write_path()` | NEVER allow a file write without prior path validation |
+| **CAL** (Conversation Abstraction Layer) | `src/cal/` | Processes agent actions; calls CTX-ID validation first on every entry point; checks VTZ policy before execution; emits TrustFlow event for every outcome. | Must NOT execute actions before trust validation; must NOT perform partial processing on validation failure. |
+| **VTZ** (Virtual Trust Zone) | `src/vtz/` | Binds each agent session to exactly one VTZ; enforces policy boundary for all tool calls and data access. | Must NOT allow implicit cross-VTZ tool calls; must NOT permit boundary crossing without explicit policy authorization. |
+| **TrustLock** (Cryptographic Identity) | `src/trustlock/` | Issues and validates CTX-ID tokens anchored to TrustLock public key; enforces token immutability and rotation semantics. | Must NOT accept software-only validation; must NOT allow token mutation after issuance. |
+| **TrustFlow** (Audit Stream) | `src/trustflow/` | Emits synchronous, append-only audit events for every enforcement decision (`allow`, `restrict`, `block`). | Must NOT buffer asynchronously; must NOT silently drop failed emissions; must NOT include secrets in events. |
+| **DTL** (Data Trust Labels) | `src/dtl/` | Assigns classification labels at data ingestion; enforces label immutability and inheritance (derived data inherits highest source classification). | Must NOT permit unlabeled data to cross trust boundaries; must NOT downgrade labels. |
+| **MCP** (MCP Policy Engine) | `src/mcp/` | Evaluates policy before execution for all MCP-routed actions. | Must NOT downgrade denials into warnings; must NOT execute before policy evaluation completes. |
+| **Rewind** (Replay Engine) | `src/rewind/` | Supports full operational replay from the audit stream alone. | Must NOT depend on external state missing from the audit stream. |
+| **Connector SDK** | `sdk/connector/` | Interfaces to external systems while preserving trust boundaries. | Must NOT bypass CAL, VTZ, or TrustFlow enforcement; must NOT establish unvalidated external connections. |
 
-## Cross-Subsystem Conflict Resolution
+## Enforcement Contracts
 
-When subsystem policies conflict, resolution follows this strict hierarchy (highest priority first):
+### CTX-ID Validation
+- Every public entry point calls `trustlock.validate_ctx_id(token)` before any other logic.
+- Returns validated identity or raises `CTXIDValidationError`.
+- Expired, malformed, or missing tokens → action rejected, `TrustFlow` event emitted with `verdict=block`, `failure_reason` logged.
 
-1. **CTX-ID / TrustLock** — identity validation failures override all other decisions; an invalid or missing CTX-ID means REJECT regardless of VTZ, DTL, or MCP policy.
-2. **VTZ** — zone boundary enforcement takes precedence over DTL and MCP; if VTZ policy denies an action, DTL allowance or MCP authorization cannot override.
-3. **DTL** — data classification constraints take precedence over MCP tool policy; data MUST NOT cross a trust boundary to a lower-classification zone even if MCP policy would allow the tool call.
-4. **MCP** — tool and data-movement policy applies after CTX-ID, VTZ, and DTL constraints are satisfied.
-5. **CAL** — orchestrates the above order; CAL MUST NOT reorder or skip any enforcement layer.
+### VTZ Policy Check
+- After CTX-ID validation, `vtz.check_policy(ctx_id, action, target_resource)` is called.
+- Cross-VTZ requests require explicit policy rule; absence of rule → deny.
+- Denial emits `VTZEnforcementDecision` with fields: `ctx_id`, `vtz_id`, `action`, `target_resource`, `verdict` (`allow` | `block`), `policy_rule_id`, `timestamp`.
 
-Ambiguity resolution rules:
-- If two subsystems return contradictory decisions for the same action, the MORE RESTRICTIVE decision wins.
-- If a subsystem returns no decision (timeout, error, missing policy), treat the result as DENY and emit a TrustFlow event with `event_type: enforcement_ambiguity`.
-- Mid-session VTZ policy changes MUST NOT apply retroactively — they take effect on the next action only.
-- DTL reclassification of existing data MUST only raise classification level, NEVER lower it, unless performed by an operator through a `gate_card` approval.
+### DTL Label Propagation
+- `dtl.assign_label(data, classification)` called at ingestion.
+- `dtl.derive_label(sources)` returns the highest classification among all sources.
+- Unlabeled data defaults to `CONFIDENTIAL`.
+- Labels are immutable after assignment; reclassification requires explicit operator action and audit record.
 
-## Development Workflow
+### TrustFlow Event Emission
+- `trustflow.emit(event)` called synchronously after every enforcement decision.
+- Event fields: `event_id`, `ctx_id`, `vtz_id`, `action`, `verdict` (`allow` | `restrict` | `block`), `dtl_label`, `timestamp`, `component`, `operation`, `failure_reason` (if applicable).
+- Emission failure → WARN-level audit event surfaced to caller; action outcome is NOT affected but failure is never silently dropped.
 
-- Run all enforcement tests before committing: tests validate the full enforcement chain (CTX-ID → VTZ → DTL → TrustFlow → Audit).
-- Every new subsystem entry point MUST include a test that verifies fail-closed behavior on invalid CTX-ID, expired CTX-ID, and missing CTX-ID.
-- Every new tool integration MUST include a test that verifies VTZ cross-boundary denial without explicit policy.
-- Every new data path MUST include a test that verifies DTL label inheritance from the highest-classification source.
-- NEVER commit code that disables, mocks out, or bypasses enforcement in production configuration.
-- All PRs that touch enforcement paths MUST include audit-stream replay verification.
+### Audit Record Format
+- Append-only; generated BEFORE action execution.
+- Fields: `record_id`, `event_id`, `ctx_id`, `vtz_id`, `action`, `verdict`, `dtl_label`, `timestamp`, `component`, `operation`, `failure_reason`.
+- MUST NOT contain secrets, keys, tokens, or credentials.
+- The full operational history MUST be replayable from audit records alone via `src/rewind/`.
+
+## Cross-Subsystem Conflict Resolution Hierarchy
+
+When multiple subsystems produce conflicting enforcement decisions, the following precedence applies (highest priority first):
+
+1. **CTX-ID validation failure** — overrides all other decisions; action is rejected immediately.
+2. **VTZ policy denial** — overrides DTL and MCP decisions; action is blocked.
+3. **DTL classification violation** — overrides MCP and CAL permissive decisions; data access is denied.
+4. **MCP policy denial** — overrides CAL-level permissions.
+5. **CAL enforcement** — lowest priority; applies only when all higher-priority subsystems allow.
+
+In all conflict cases: the MORE RESTRICTIVE decision wins. No subsystem may override a denial from a higher-priority subsystem. Every conflict resolution emits a TrustFlow event documenting all participating decisions.
+
+## Ambiguity Resolutions
+
+- **Ambiguity: What happens when TrustFlow emission fails during a block verdict?** Resolution: The block verdict stands (fail closed). The emission failure is logged as a WARN-level audit event via a secondary logging path. The action remains rejected.
+- **Ambiguity: Can DTL labels be reclassified downward?** Resolution: Only via explicit operator gate action with full audit trail. Automated downgrade is forbidden.
+- **Ambiguity: What if a VTZ policy rule and an MCP policy rule conflict?** Resolution: VTZ policy takes precedence per the conflict resolution hierarchy. MCP may further restrict within a VTZ but may never relax a VTZ denial.
+- **Ambiguity: How are unknown or malformed XPC messages handled?** Resolution: Discard and log. Never raise as uncaught exceptions. Never process optimistically.
+- **Ambiguity: What if an operator gate times out?** Resolution: Gates never time out. They wait indefinitely. There is no auto-approve path.
+- **Ambiguity: What if derived data has sources with different DTL labels?** Resolution: Derived data inherits the HIGHEST (most restrictive) classification of any source.
+- **Ambiguity: Is async TrustFlow emission ever acceptable for performance?** Resolution: No. Emission is always synchronous in the enforcement path. Performance is never a justification for async buffering of audit events.
