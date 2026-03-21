@@ -1,0 +1,184 @@
+{
+  "build_id": "consensusdevagent-d7ee9ddc",
+  "subsystem": "ConsensusDevAgent",
+  "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture",
+  "scope_statement": "Build the complete Consensus Dev Agent \u2014 a native macOS AI coding agent that uses dual-LLM consensus (Claude + GPT-4o with Claude arbitrating) to develop high-quality software autonomously from technical specifications. The system comprises a two-process architecture: a Swift/SwiftUI shell (UI, Touch ID auth, Keychain secrets, XPC channel, process management per TRD-1) and a Python 3.12 backend (ConsensusEngine per TRD-2, 8-stage BuildPipeline with 3-pass review per TRD-3, GitHubTool per TRD-5, BuildLedger per TRD-4, DocumentStore with FAISS vector retrieval per TRD-10, HolisticReview per TRD-6, TRDWorkflow with FOUNDER/ENGINEER/CONSULTANT modes per TRD-7), connected via authenticated Unix socket with line-delimited JSON (TRD-1 \u00a76, TRD-12), with Mac CI runner infrastructure for Swift validation (TRD-9), comprehensive security controls (TRD-11), recovery and state management (TRD-13), iterative code quality pipeline (TRD-14), and full testing/validation strategy (TRD-16). The agent decomposes plain-language intent into ordered PRDs, generates PR specs, implements code via parallel consensus generation, runs iterative fix loops (up to 20 passes with escalating strategies), executes CI, and gates on operator approval at every merge point.\n\nClarifications:\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - this will need to be entered later.\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - agreed\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - yes, but it also must be able to fail back if it does not detect the GPU\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - chose the best practices for this scenario and use the local trds to deconflict.\n  - Lock in Forge as the canonical customer user name. With Dev Agent as a subtitle",
+  "created_at": 1774120718.4815922,
+  "updated_at": 1774120718.481759,
+  "updated_by": "todd-gould",
+  "prd_plan": [
+    {
+      "prd_id": "PRD-001",
+      "title": "Product Identity, Branding, and Canonical Naming",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-002",
+      "title": "Swift macOS Shell Architecture and Application Skeleton",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-003",
+      "title": "Swift Authentication, Session Lifecycle, and Keychain Security",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-004",
+      "title": "Authenticated Swift\u2013Python IPC Channel and Runtime Handshake",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-005",
+      "title": "Backend Process Management, Startup Ordering, Health Monitoring, and Graceful Shutdown",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-006",
+      "title": "GitHub Integration Layer and Repository Bootstrap",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-007",
+      "title": "Document Import, Parsing UX, and Project Document Lifecycle",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-008",
+      "title": "Document Store, Embedding Pipeline, FAISS Retrieval, and Injection Defense",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-009",
+      "title": "Consensus Engine Core, Provider Adapters, and Arbitration Logic",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-010",
+      "title": "Build Ledger, Multi-Agent Coordination, and Dependency Journaling",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-011",
+      "title": "Intent Intake, Scope Confirmation, and Ordered PRD Planning",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-012",
+      "title": "PRD Generation and PR Specification Decomposition",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-013",
+      "title": "Code Generation Stage and Native-Output Pre-Commit Quality Gates",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-014",
+      "title": "Three-Pass Review, Security Scanning, and Unexpected URL Detection",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-015",
+      "title": "Iterative 20-Pass Local Fix Loop and Test Growth Engine",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-016",
+      "title": "CI Gate, Cross-Environment Validation, and Autonomous CI Fix Loop",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-017",
+      "title": "macOS CI Runner Infrastructure and Swift Validation Pipeline",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-018",
+      "title": "Operator Gates, Build Stream UX, and Context Panel Integration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-019",
+      "title": "Recovery, Checkpointing, Resume Flow, and State Durability",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-020",
+      "title": "Security Control Framework and Threat Model Enforcement",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-021",
+      "title": "TRD Workflow with FOUNDER, ENGINEER, and CONSULTANT Modes",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-022",
+      "title": "Holistic Review Workflow and Review Fix PR Generation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-023",
+      "title": "Comprehensive Test Strategy, Coverage Enforcement, and Live Validation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-024",
+      "title": "Operational Hardening, Observability, Settings Migration, and Release Readiness",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    }
+  ],
+  "pr_entries": {},
+  "knowledge_notes": [],
+  "version": 1,
+  "schema_version": 3,
+  "agent_version": "38.118.0"
+}
