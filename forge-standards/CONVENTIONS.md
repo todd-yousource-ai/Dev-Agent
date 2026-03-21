@@ -1,971 +1,300 @@
-# Code Conventions — Forge Platform
+# Code Conventions - Forge Platform
 
-This document defines coding conventions, naming rules, and code patterns for the full Forge platform. It applies across all repositories and subsystems unless a subsystem TRD explicitly overrides a convention.
+## File and Directory Naming
 
-The TRDs in `forge-docs/` are the source of truth. This document standardizes implementation style so code remains consistent with those specifications.
+1. **Place source files only in approved Forge directories.**
+   - Use these top-level paths exactly:
+     - `src/cal/`
+     - `src/dtl/`
+     - `src/trustflow/`
+     - `src/vtz/`
+     - `src/trustlock/`
+     - `src/mcp/`
+     - `src/rewind/`
+     - `sdk/connector/`
+     - `tests/<subsystem>/`
+   - Do not create new top-level source directories for ConsensusDevAgent code.
 
----
+2. **Mirror test paths exactly from source paths.**
+   - A source file at `src/mcp/policy_loader.py` must have tests under `tests/mcp/`.
+   - Preserve the same relative structure beneath the subsystem root.
+   - Example:
+     - Source: `src/cal/session/stream_parser.py`
+     - Test: `tests/cal/session/test_stream_parser.py`
 
-## Core Principles
+3. **Name Python files in `snake_case`.**
+   - Allowed: `build_map_client.py`, `path_security.py`
+   - Forbidden: `BuildMapClient.py`, `build-map-client.py`
 
-1. **TRDs are authoritative**
-   - Before changing code, identify the owning TRD.
-   - Do not invent interfaces, state transitions, security behavior, or error semantics.
-   - If a convention here conflicts with a TRD, follow the TRD.
+4. **Name test files `test_<unit>.py`.**
+   - Use the source module stem as `<unit>`.
+   - Example:
+     - `src/trustflow/audit_writer.py` → `tests/trustflow/test_audit_writer.py`
 
-2. **Security-first implementation**
-   - Treat all external input as untrusted.
-   - Never execute generated code.
-   - Respect trust boundaries between Swift shell and Python backend.
-   - Any credential, auth, policy, execution, CI, replay, or machine identity change must be reviewed against TRD-11.
+5. **Do not create generated dispatcher files.**
+   - A generated file must implement real logic.
+   - Forbidden patterns:
+     - A file whose only purpose is to import another generated file and call it
+     - A file containing only routing glue to another generated artifact
+     - Template files with runtime placeholders
 
-3. **Clear ownership by subsystem**
-   - Code must make subsystem ownership obvious from path, type name, and module usage.
-   - Cross-subsystem dependencies must be explicit and minimal.
+6. **Every generated file must be self-contained.**
+   - Do not require `eval()`, `exec()`, or `importlib.import_module()` to load related generated files.
+   - Use normal static imports only.
 
-4. **Deterministic, testable behavior**
-   - Prefer pure functions and explicit state transitions.
-   - Avoid hidden global state.
-   - Make side effects visible at module boundaries.
+7. **Use mandatory branch naming for all ConsensusDevAgent work.**
+   - Format exactly:
+     - `forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}`
+   - Example:
+     - `forge-agent/build/e17/consensus-dev-agent/pr-007-build-map-fallback`
 
-5. **Consistent naming over cleverness**
-   - Use descriptive names.
-   - Avoid abbreviations unless they are official subsystem names from the platform.
-
----
-
-## File and Directory Naming (exact `src/` layout)
-
-The Forge platform uses the following top-level source layout:
-
-```text
-src/
-  cal/         # Conversation Abstraction Layer
-  dtl/         # Data Trust Label
-  trustflow/   # TrustFlow audit stream
-  vtz/         # Virtual Trust Zone
-  trustlock/   # Cryptographic machine identity
-  mcp/         # MCP Policy Engine
-  rewind/      # Forge Rewind replay engine
-
-sdk/
-  connector/   # Forge Connector SDK
-
-tests/
-  <subsystem>/ # Mirrors src/ structure exactly
-```
-
-### Directory Rules
-
-- Directory names are lowercase.
-- Use singular subsystem names exactly as defined:
-  - `cal`
-  - `dtl`
-  - `trustflow`
-  - `vtz`
-  - `trustlock`
-  - `mcp`
-  - `rewind`
-  - `connector` under `sdk/`
-- Do not create alternate aliases such as:
-  - `conversation_layer`
-  - `data_trust_labels`
-  - `audit`
-  - `zone`
-  - `identity`
-- Tests must mirror source structure exactly.
-
-### Nested Directory Naming
-
-Use lowercase snake_case for internal directories:
-
-```text
-src/mcp/policy_engine/
-src/trustflow/event_stream/
-src/rewind/replay_store/
-```
-
-Use directories to reflect one of:
-- domain
-- protocol/interface
-- storage
-- transport
-- policy
-- adapters/integrations
-- models
-- services
-
-Preferred examples:
-
-```text
-src/cal/session/
-src/cal/providers/
-src/dtl/labels/
-src/dtl/validation/
-src/trustflow/events/
-src/trustflow/sinks/
-src/vtz/enforcement/
-src/vtz/boundaries/
-src/trustlock/identity/
-src/trustlock/attestation/
-src/mcp/policies/
-src/mcp/evaluation/
-src/rewind/replay/
-src/rewind/snapshots/
-sdk/connector/client/
-sdk/connector/auth/
-```
-
-Avoid generic folders like:
-- `misc`
-- `helpers`
-- `common`
-- `stuff`
-- `utils`
-
-If shared code is necessary, name it by responsibility:
-- `serialization`
-- `validation`
-- `formatting`
-- `adapters`
-- `contracts`
-
-### File Naming
-
-#### Python
-- Use `snake_case.py`
-- File names should reflect the primary type or capability in the file.
-
-Examples:
-- `policy_evaluator.py`
-- `trust_label_parser.py`
-- `audit_event_sink.py`
-- `replay_coordinator.py`
-
-#### Swift
-- Use `PascalCase.swift`
-- File name must match the primary type.
-
-Examples:
-- `PolicyEvaluator.swift`
-- `TrustLabelParser.swift`
-- `AuditEventSink.swift`
-
-#### Test Files
-- Python tests:
-  - `test_<unit>.py`
-- Swift tests:
-  - `<Unit>Tests.swift`
-
-Examples:
-- `tests/mcp/test_policy_evaluator.py`
-- `tests/dtl/test_trust_label_parser.py`
-- `MCPPolicyEvaluatorTests.swift`
-
----
+8. **Use lowercase slash-delimited subsystem slugs in paths and branch names.**
+   - Use directory names already standardized by Forge.
+   - Do not invent alternate spellings for an existing subsystem.
 
 ## Class and Function Naming
 
-Naming must reflect responsibility, subsystem, and abstraction level.
+1. **Use `PascalCase` for classes.**
+   - Examples:
+     - `ConsensusSession`
+     - `BuildMapClient`
+     - `PathValidationError`
 
-### General Rules
+2. **Use `snake_case` for functions, methods, and variables.**
+   - Examples:
+     - `fetch_build_map`
+     - `validate_write_path`
+     - `_strip_code_fences`
 
-- **Classes / structs / enums / protocols / actors:** `PascalCase`
-- **Functions / methods / variables:** `camelCase` in Swift, `snake_case` in Python
-- **Constants:** `UPPER_SNAKE_CASE` in Python, `lowerCamelCase` or `static let` in Swift per language conventions
-- **Private helpers:** name by behavior, not by visibility prefix
-- Do not use Hungarian notation.
-- Do not encode type names in variable names unless needed for clarity.
+3. **Prefix internal helpers with a single leading underscore.**
+   - Example:
+     - `_normalize_branch_name`
+     - `_strip_code_fences`
+   - Do not use double underscore name-mangling for subsystem helpers.
 
-### Allowed Acronyms
+4. **Keep `_strip_code_fences()` named exactly the same in every module that defines it.**
+   - The function name must be `_strip_code_fences`.
+   - Do not rename variants such as `_remove_code_fences`, `strip_code_block`, or `sanitize_fences`.
 
-Use official subsystem acronyms exactly:
-- `CAL`
-- `DTL`
-- `MCP`
-- `VTZ`
+5. **Keep `_strip_code_fences()` behavior identical across all five modules.**
+   - If one implementation changes, update all five in the same change set.
+   - The function must:
+     - Accept `""` or `None` and return it unchanged
+     - Preserve a trailing newline on non-empty output
+     - Leave code unchanged when there are no fences
+     - Leave unicode characters unchanged
+     - Remain synchronous
 
-For mixed-case language identifiers:
-- Swift type names: `CALSession`, `DTLLabel`, `MCPPolicy`, `VTZBoundary`
-- Python class names: `CALSession`, `DTLLabel`, `MCPPolicy`, `VTZBoundary`
-- Python functions/modules: `cal_session`, `dtl_label`, `mcp_policy`, `vtz_boundary`
+6. **Name exception classes with the `Error` suffix.**
+   - Examples:
+     - `PathTraversalError`
+     - `BuildMapFetchError`
+     - `ConsensusMismatchError`
 
-Use `TrustFlow`, `TrustLock`, and `Rewind` as words, not all-caps acronyms.
+7. **Use descriptive boolean names.**
+   - Prefer:
+     - `is_ready`
+     - `has_build_map`
+     - `should_retry`
+   - Avoid vague names like `flag`, `done`, or `status_ok`.
 
-### Type Naming Patterns
+8. **Use `axIdentifier` values with the exact format `{module}-{component}-{role}-{context?}` for interactive UI elements.**
+   - Set via `.accessibilityIdentifier()`.
+   - Examples:
+     - `auth-touchid-button`
+     - `settings-anthropic-key-field`
+     - `navigator-project-row-{projectId}`
+     - `stream-gate-yes-button-{gateId}`
 
-Use suffixes only when they communicate role clearly.
-
-Preferred suffixes:
-- `Manager` — lifecycle orchestration, only if it truly manages multiple resources
-- `Coordinator` — workflow coordination across components
-- `Service` — external-facing service layer
-- `Client` — outbound integration/API consumer
-- `Adapter` — translation between interfaces
-- `Provider` — pluggable backend/provider
-- `Repository` — persistence abstraction
-- `Store` — lower-level storage implementation
-- `Parser` — parsing external or serialized input
-- `Validator` — rule checking without side effects
-- `Evaluator` — policy or decision logic
-- `Resolver` — identifier or dependency resolution
-- `Factory` — object construction with nontrivial assembly
-- `Builder` — staged object construction
-- `Encoder` / `Decoder` — serialization transforms
-- `Serializer` / `Deserializer` — format mapping
-- `Recorder` — append-only event recording
-- `Replayer` — deterministic replay engine
-- `Attestor` — attestation generation/verification
-- `Enforcer` — policy or boundary enforcement
-
-Avoid weak suffixes:
-- `Helper`
-- `Util`
-- `Base`
-- `Impl`
-- `Thing`
-
-### Function Naming Patterns
-
-Function names should start with a verb and imply result/side effects.
-
-Preferred verbs:
-- `load`
-- `save`
-- `fetch`
-- `create`
-- `build`
-- `parse`
-- `validate`
-- `evaluate`
-- `enforce`
-- `record`
-- `replay`
-- `issue`
-- `verify`
-- `attest`
-- `authorize`
-- `reject`
-- `serialize`
-- `deserialize`
-- `transform`
-
-Boolean-returning functions should read as predicates:
-- `is_valid`
-- `has_boundary_violation`
-- `can_replay`
-- `should_redact`
-
-Swift:
-- `isValid`
-- `hasBoundaryViolation`
-- `canReplay`
-- `shouldRedact`
-
-### Interface Naming
-
-Protocols and abstract interfaces should be nouns or capability nouns.
-
-Examples:
-- `PolicyEvaluator`
-- `AuditEventSink`
-- `TrustLabelValidator`
-- `ReplayStore`
-- `MachineAttestor`
-
-Do not prefix interfaces with `I`.
-
-Bad:
-- `IPolicyEvaluator`
-
-Good:
-- `PolicyEvaluator`
-
----
+9. **Do not omit the contextual suffix when multiple interactive elements are repeated in a collection.**
+   - Required:
+     - `navigator-project-row-{projectId}`
+     - `stream-gate-stop-button-{gateId}`
+   - Forbidden:
+     - `navigator-project-row`
+     - `stream-gate-stop-button`
 
 ## Error and Exception Patterns
 
-Errors must be explicit, typed, and stable. They form part of the contract.
-
-### General Rules
-
-- Never swallow exceptions silently.
-- Never use bare `except:` in Python.
-- Never use catch-all error handling unless it logs context and re-raises or maps to a typed domain error.
-- Map low-level errors into subsystem-level errors at boundaries.
-- Error messages must be actionable and safe for logs.
-- Do not leak secrets, credentials, tokens, raw prompts, or sensitive payloads in error messages.
-
-### Python Error Conventions
-
-#### Base Pattern
-
-Each subsystem defines a base exception:
-
-```python
-class MCPError(Exception):
-    """Base exception for MCP subsystem."""
-```
-
-Derived exceptions use `PascalCase` and end in `Error` unless they represent a rejection or violation, in which case `Violation` or `Rejected` may be used if specified by TRD.
-
-Examples:
-- `PolicyEvaluationError`
-- `PolicyParseError`
-- `PolicyViolation`
-- `TrustLabelValidationError`
-- `AuditStreamWriteError`
-- `ReplayIntegrityError`
-- `AttestationVerificationError`
-
-#### Python Error Structure
-
-Custom exceptions should support:
-- stable message
-- optional machine-readable code
-- optional wrapped cause
-- relevant non-sensitive context
-
-Example pattern:
-
-```python
-class PolicyViolation(MCPError):
-    def __init__(self, message: str, code: str = "policy_violation", context: dict | None = None):
-        super().__init__(message)
-        self.code = code
-        self.context = context or {}
-```
-
-#### Raising Rules
-
-- Raise domain-specific errors from domain modules.
-- Raise `ValueError` or `TypeError` only for internal programmer misuse, not user/domain contract failures.
-- Use exception chaining:
-
-```python
-try:
-    policy = parse_policy(raw)
-except JsonError as exc:
-    raise PolicyParseError("Failed to parse MCP policy") from exc
-```
-
-### Swift Error Conventions
-
-- Prefer typed `Error` enums.
-- Use `LocalizedError` when user-presentable text is needed.
-- Use structured associated values for context, but do not attach secrets.
-
-Example:
-
-```swift
-enum MCPPolicyError: Error {
-    case parseFailed(reason: String)
-    case evaluationFailed(policyId: String)
-    case violation(ruleId: String)
-}
-```
-
-### Error Naming Rules
-
-Use these suffixes consistently:
-- `Error` — operational or contract failure
-- `Violation` — policy or trust boundary violation
-- `Rejected` — explicit deny/reject outcome
-- `Timeout` only when it is semantically distinct and handled separately
-
-Examples:
-- `ConnectorAuthenticationError`
-- `VTZBoundaryViolation`
-- `ReplayRequestRejected`
-- `TrustFlowFlushTimeout`
-
-### Logging and Errors
-
-When logging errors:
-- include operation name
-- include subsystem
-- include correlation/request/event ID when available
-- include sanitized context
-- do not include secrets or raw sensitive payloads
-
-Preferred format fields:
-- `subsystem`
-- `operation`
-- `error_code`
-- `resource_id`
-- `request_id`
-- `event_id`
-
----
-
-## Per-Subsystem Naming Rules
-
----
-
-### `src/cal/` — Conversation Abstraction Layer
-
-Purpose: conversation/session abstraction, provider interaction, prompt/message normalization, and consensus-facing conversation state.
-
-#### Naming Prefixes and Terms
-Use:
-- `CALSession`
-- `CALMessage`
-- `CALTurn`
-- `CALProvider`
-- `CALTranscript`
-- `CALContext`
-
-Do not shorten to:
-- `Conv`
-- `Chat`
-- `Msg`
-unless the TRD explicitly names a protocol that way.
-
-#### Recommended Type Names
-- `CALSessionCoordinator`
-- `CALProviderAdapter`
-- `CALTranscriptStore`
-- `CALMessageNormalizer`
-- `CALContextBuilder`
-
-#### Function Names
-- `create_session` / `createSession`
-- `append_message` / `appendMessage`
-- `normalize_message` / `normalizeMessage`
-- `build_context` / `buildContext`
-- `load_transcript` / `loadTranscript`
-
-#### Event/Model Names
-- `ConversationStarted`
-- `TurnAppended`
-- `TranscriptPersisted`
-
-Use `Turn` for one interaction unit, `Message` for a single message object, and `Transcript` for persisted ordered history.
-
----
-
-### `src/dtl/` — Data Trust Label
-
-Purpose: labeling, classification, propagation, validation, and trust-aware handling of data.
-
-#### Naming Prefixes and Terms
-Use:
-- `DTLLabel`
-- `DTLClassification`
-- `DTLPolicy`
-- `DTLPropagationRule`
-- `DTLValidator`
-
-Do not use ambiguous names like:
-- `Tag`
-- `Marker`
-- `Flag`
-when the concept is a trust label.
-
-#### Recommended Type Names
-- `DTLLabelParser`
-- `DTLLabelValidator`
-- `DTLClassificationResolver`
-- `DTLPropagationEvaluator`
-- `DTLRedactionPolicy`
-
-#### Function Names
-- `parse_label` / `parseLabel`
-- `validate_label` / `validateLabel`
-- `classify_data` / `classifyData`
-- `propagate_label` / `propagateLabel`
-- `redact_content` / `redactContent`
-
-#### Data Model Rules
-- Use `classification` for trust level/category.
-- Use `label` for the attached trust artifact.
-- Use `source_of_truth` or `sourceOfTruth` for originating authority.
-- Use `redaction_reason` / `redactionReason` for redaction metadata.
-
----
-
-### `src/trustflow/` — TrustFlow audit stream
-
-Purpose: append-only audit/event stream, trust decisions, policy actions, and compliance-visible traceability.
-
-#### Naming Prefixes and Terms
-Use:
-- `TrustFlowEvent`
-- `TrustFlowRecord`
-- `TrustFlowStream`
-- `TrustFlowSink`
-- `TrustFlowEnvelope`
-
-Do not collapse to generic:
-- `AuditItem`
-- `LogEntry`
-- `Record`
-without subsystem context.
-
-#### Recommended Type Names
-- `TrustFlowEventRecorder`
-- `TrustFlowStreamWriter`
-- `TrustFlowEnvelopeEncoder`
-- `TrustFlowSinkClient`
-- `TrustFlowRetentionPolicy`
-
-#### Function Names
-- `record_event` / `recordEvent`
-- `append_record` / `appendRecord`
-- `flush_stream` / `flushStream`
-- `encode_envelope` / `encodeEnvelope`
-- `verify_chain` / `verifyChain`
-
-#### Event Naming Rules
-Events should be past-tense, domain-specific, and immutable in meaning.
-
-Examples:
-- `PolicyEvaluated`
-- `BoundaryViolationDetected`
-- `ReplayStarted`
-- `ReplayCompleted`
-- `AttestationVerified`
-
-Use stable event names once introduced. Do not rename historical event types casually.
-
----
-
-### `src/vtz/` — Virtual Trust Zone
-
-Purpose: trust boundary enforcement, isolation rules, ingress/egress control, and protected execution constraints.
-
-#### Naming Prefixes and Terms
-Use:
-- `VTZBoundary`
-- `VTZPolicy`
-- `VTZEnforcer`
-- `VTZIngressRule`
-- `VTZEgressRule`
-
-Do not use:
-- `Sandbox` unless the TRD explicitly means OS sandboxing
-- `ZoneGuard` unless defined by spec
-
-#### Recommended Type Names
-- `VTZBoundaryEnforcer`
-- `VTZIngressValidator`
-- `VTZEgressValidator`
-- `VTZIsolationPolicy`
-- `VTZAccessDecision`
-
-#### Function Names
-- `enforce_boundary` / `enforceBoundary`
-- `validate_ingress` / `validateIngress`
-- `validate_egress` / `validateEgress`
-- `reject_transfer` / `rejectTransfer`
-- `authorize_transfer` / `authorizeTransfer`
-
-#### Outcome Naming
-Use:
-- `allowed`
-- `rejected`
-- `violated`
-- `requires_redaction`
-
-Avoid vague states like:
-- `bad`
-- `unsafe`
-- `maybe_ok`
-
----
-
-### `src/trustlock/` — Cryptographic machine identity
-
-Purpose: machine identity, attestation, TPM/hardware-rooted trust, key material references, and verification flows.
-
-#### Naming Prefixes and Terms
-Use:
-- `TrustLockIdentity`
-- `TrustLockAttestation`
-- `TrustLockKeyHandle`
-- `TrustLockVerifier`
-- `TrustLockIssuer`
-
-Do not use:
-- `MachineKey` for higher-level identity artifacts if the spec defines them as TrustLock identities or attestations.
-
-#### Recommended Type Names
-- `TrustLockAttestor`
-- `TrustLockAttestationVerifier`
-- `TrustLockIdentityStore`
-- `TrustLockKeyResolver`
-- `TrustLockCertificateChainValidator`
-
-#### Function Names
-- `issue_attestation` / `issueAttestation`
-- `verify_attestation` / `verifyAttestation`
-- `resolve_key_handle` / `resolveKeyHandle`
-- `load_identity` / `loadIdentity`
-- `validate_certificate_chain` / `validateCertificateChain`
-
-#### Data Naming
-- `key_handle` / `keyHandle` for indirect key references
-- `attestation_document` / `attestationDocument`
-- `identity_claims` / `identityClaims`
-- `verification_result` / `verificationResult`
-
-Never imply raw key extraction if the design uses handles/references.
-
----
-
-### `src/mcp/` — MCP Policy Engine
-
-Purpose: policy definition, parsing, evaluation, decisioning, and enforcement integration.
-
-#### Naming Prefixes and Terms
-Use:
-- `MCPPolicy`
-- `MCPRule`
-- `MCPDecision`
-- `MCPEvaluator`
-- `MCPPolicySet`
-
-Do not use generic names like:
-- `RuleEngine`
-- `PolicyThing`
-without MCP qualification in shared or boundary code.
-
-#### Recommended Type Names
-- `MCPPolicyParser`
-- `MCPPolicyEvaluator`
-- `MCPDecisionResolver`
-- `MCPRuleMatcher`
-- `MCPPolicyRepository`
-
-#### Function Names
-- `parse_policy` / `parsePolicy`
-- `evaluate_policy` / `evaluatePolicy`
-- `resolve_decision` / `resolveDecision`
-- `match_rule` / `matchRule`
-- `load_policy_set` / `loadPolicySet`
-
-#### Decision Naming
-Decision enums or values should use explicit outcomes:
-- `allow`
-- `deny`
-- `redact`
-- `escalate`
-
-Avoid:
-- `pass`
-- `fail`
-- `ok`
-
----
-
-### `src/rewind/` — Forge Rewind replay engine
-
-Purpose: deterministic replay, audit reconstruction, time-ordered event recovery, and historical verification.
-
-#### Naming Prefixes and Terms
-Use:
-- `RewindReplay`
-- `RewindSnapshot`
-- `RewindCursor`
-- `RewindEventSource`
-- `RewindIntegrityVerifier`
-
-Do not use:
-- `Playback` unless explicitly defined by the TRD
-- `HistoryThing`
-
-#### Recommended Type Names
-- `RewindReplayCoordinator`
-- `RewindSnapshotStore`
-- `RewindCursorEncoder`
-- `RewindIntegrityVerifier`
-- `RewindEventReplayer`
-
-#### Function Names
-- `start_replay` / `startReplay`
-- `resume_replay` / `resumeReplay`
-- `load_snapshot` / `loadSnapshot`
-- `advance_cursor` / `advanceCursor`
-- `verify_replay_integrity` / `verifyReplayIntegrity`
-
-#### State Naming
-Use explicit replay states:
-- `not_started`
-- `running`
-- `paused`
-- `completed`
-- `failed`
-
-Swift:
-- `notStarted`
-- `running`
-- `paused`
-- `completed`
-- `failed`
-
----
-
-### `sdk/connector/` — Forge Connector SDK
-
-Purpose: external integration SDK for connectors into the Forge platform.
-
-#### Naming Prefixes and Terms
-Use:
-- `ConnectorClient`
-- `ConnectorSession`
-- `ConnectorAuthProvider`
-- `ConnectorRequest`
-- `ConnectorResponse`
-
-Use `ForgeConnector` when qualification is needed outside the SDK boundary.
-
-#### Recommended Type Names
-- `ConnectorAPIClient`
-- `ConnectorSessionManager`
-- `ConnectorCredentialProvider`
-- `ConnectorRequestSigner`
-- `ConnectorWebhookVerifier`
-
-#### Function Names
-- `create_session` / `createSession`
-- `sign_request` / `signRequest`
-- `send_request` / `sendRequest`
-- `verify_webhook` / `verifyWebhook`
-- `refresh_credentials` / `refreshCredentials`
-
-#### SDK Design Rules
-- Public API names must be stable and explicit.
-- Avoid leaking internal subsystem names into connector-facing APIs unless they are part of the formal contract.
-- Public types require docstrings/documentation comments.
-
----
-
-## Cross-Subsystem Naming Rules
-
-### Boundary Types Must Be Qualified
-
-If a type crosses subsystem boundaries, qualify it with the subsystem name.
-
-Good:
-- `MCPDecision`
-- `DTLLabel`
-- `TrustFlowEvent`
-
-Bad:
-- `Decision`
-- `Label`
-- `Event`
-
-### Avoid Generic Shared Models
-
-Do not create broad shared types such as:
-- `Context`
-- `Payload`
-- `Data`
-- `Result`
-unless they are narrowly scoped or namespace-qualified.
-
-Prefer:
-- `CALContext`
-- `ConnectorRequestPayload`
-- `ReplayResult`
-- `TrustFlowEventEnvelope`
-
-### Adapter Naming
-
-For bridges between subsystems, use both names in the adapter.
-
-Examples:
-- `MCPToVTZDecisionAdapter`
-- `DTLToTrustFlowRecordAdapter`
-- `CALToConnectorRequestTransformer`
-
-### Serialization Naming
-
-For format-specific components:
-- `<Type>Encoder`
-- `<Type>Decoder`
-- `<Type>Serializer`
-- `<Type>Deserializer`
-
-Include format only when needed:
-- `TrustFlowEventJsonEncoder`
-- `MCPPolicyYamlParser`
-
----
-
-## Code Patterns
-
-### Prefer Explicit Domain Models
-
-Use explicit models over unstructured dictionaries/maps at internal boundaries.
-
-Bad:
-```python
-decision = {"ok": True, "rule": "R-1"}
-```
-
-Good:
-```python
-@dataclass
-class MCPDecision:
-    outcome: str
-    rule_id: str
-```
-
-### Separate Parsing, Validation, and Evaluation
-
-Do not combine multiple responsibilities in one function when they are conceptually distinct.
-
-Preferred flow:
-1. parse
-2. validate
-3. evaluate/enforce
-4. record
-
-Bad:
-```python
-def process_policy(raw):
-    ...
-```
-
-Good:
-```python
-policy = parse_policy(raw)
-validate_policy(policy)
-decision = evaluate_policy(policy, request)
-record_event(decision_event)
-```
-
-### Boundary Mapping
-
-At external boundaries, map:
-- transport types -> domain types
-- domain errors -> boundary-safe errors
-- internal events -> audit events
-
-### Immutable Event Models
-
-Audit and replay events should be immutable after creation wherever language/runtime supports it.
-
-### One Primary Responsibility per File
-
-A file should contain one primary type or closely related type group.
-If a file contains multiple unrelated classes, split it.
-
----
-
-## Testing Conventions
-
-### Test Layout
-
-Tests mirror source structure exactly.
-
-Examples:
-
-```text
-src/mcp/policy_evaluator.py
-tests/mcp/test_policy_evaluator.py
-
-src/rewind/replay/replay_coordinator.py
-tests/rewind/replay/test_replay_coordinator.py
-```
-
-### Test Naming
-
-#### Python
-- Test files: `test_<unit>.py`
-- Test functions: `test_<behavior>_<expected_outcome>()`
-
-Examples:
-- `test_evaluate_policy_denies_untrusted_input`
-- `test_verify_attestation_rejects_invalid_chain`
-
-#### Swift
-- Test methods:
-  - `test<Behavior><ExpectedOutcome>()`
-
-Examples:
-- `testEvaluatePolicyDeniesUntrustedInput`
-- `testVerifyAttestationRejectsInvalidChain`
-
-### Test Requirements
-
-- Test success paths and failure paths.
-- Test policy violations explicitly.
-- Test replay determinism.
-- Test serialization compatibility for persisted or wire-visible models.
-- Test redaction/sanitization behavior for logs and audit output.
-- Add regression tests for every bug fix.
-
----
-
-## Documentation Conventions
-
-- Public types and functions in SDKs and external boundary modules require documentation comments.
-- Document:
-  - purpose
-  - inputs
-  - outputs
-  - error conditions
-  - security-sensitive behavior where relevant
-- Keep examples aligned with actual API names.
-
----
-
-## Prohibited Patterns
-
-Do not introduce:
-- unnamed magic values for trust/policy decisions
-- generic `utils` dumping grounds
-- silent fallback behavior for policy enforcement
-- exception swallowing
-- mutable global policy state
-- ambiguous names like `Manager` when role is evaluator/parser/validator
-- raw secret/token logging
-- non-mirrored test layouts
-- subsystem alias names that differ from the canonical directory names
-
----
-
-## Naming Examples
-
-### Good
-
-- `MCPPolicyEvaluator`
-- `DTLLabelValidator`
-- `TrustFlowEventRecorder`
-- `VTZBoundaryEnforcer`
-- `TrustLockAttestationVerifier`
-- `RewindReplayCoordinator`
-- `ConnectorRequestSigner`
-
-### Bad
-
-- `Engine`
-- `Helper`
-- `Utils`
-- `DataManager`
-- `PolicyThing`
-- `ReplayStuff`
-- `AuditHelper`
-
----
-
-## Final Rules for Contributors and Agents
-
-Before submitting a change:
-
-1. Confirm the file path matches the canonical subsystem layout.
-2. Confirm names use the subsystem vocabulary defined above.
-3. Confirm errors are typed and sanitized.
-4. Confirm tests mirror source structure exactly.
-5. Confirm the implementation matches the owning TRD.
-6. Confirm security-relevant changes have been checked against TRD-11.
-
-If unsure, prefer the name and structure that is:
-- more explicit
-- more local to the subsystem
-- easier to test
-- easier to audit
-- closer to TRD terminology
+1. **Validate every user-supplied write path before any write operation.**
+   - Call `validate_write_path()` before opening, creating, overwriting, moving, or deleting a file path derived from external input.
+   - Required pattern:
+   ```python
+   from path_security import validate_write_path
+
+   safe_path = validate_write_path(user_supplied_path)
+   ```
+   - Do not pass raw user input directly to `open()`, `Path.write_text()`, `shutil.move()`, or similar APIs.
+
+2. **Use the validated path object/value returned by `validate_write_path()`.**
+   - After validation, write only to `safe_path`.
+   - Do not validate one variable and then write using another equivalent-looking path string.
+
+3. **Raise specific exceptions for contract violations; return `None` only for documented absence cases.**
+   - Example:
+     - `fetch_build_map()` must return `None` when no build map exists yet.
+     - It must not raise an exception for that first-build state.
+
+4. **Implement the build-map missing case exactly as a graceful absence path.**
+   - `fetch_build_map()` must support the state where no map exists for the first 5 PRs of a build.
+   - Tests must verify this using a case equivalent to `TestBuildMapLive`.
+
+5. **Do not convert security validation failures into silent fallbacks.**
+   - If `validate_write_path()` raises, allow the operation to fail explicitly or wrap and re-raise with subsystem context.
+   - Do not continue with a best-effort write.
+
+6. **Wrap external-system failures only when adding actionable context.**
+   - Good:
+     - `raise BuildMapFetchError(f"failed to fetch build map for build_id={build_id}") from exc`
+   - Bad:
+     - `raise Exception("failed")`
+
+7. **Never use broad `except:` blocks.**
+   - Catch explicit exception types.
+   - If a catch-all is temporarily required at a process boundary, re-raise an `Error`-suffixed exception with the original exception chained.
+
+## Import and Module Organisation
+
+1. **Use only static imports.**
+   - Forbidden:
+     - `eval()`
+     - `exec()`
+     - `importlib.import_module()` for generated-file loading
+   - Required:
+     - normal `import` / `from ... import ...`
+
+2. **Order imports in three groups, top to bottom.**
+   - Standard library
+   - Third-party packages
+   - Local project imports
+   - Separate groups with one blank line.
+
+3. **Import from the owning subsystem module directly.**
+   - Prefer:
+     - `from src.mcp.policy_loader import PolicyLoader`
+   - Avoid indirect barrel modules created only to re-export names.
+
+4. **Do not create modules whose only purpose is dispatch.**
+   - If a module exists, it must contain business logic, domain logic, or a stable interface implementation.
+   - Remove one-line forwarding modules.
+
+5. **Keep sanitization helpers local only when they are intentionally duplicated by TRD requirement.**
+   - `_strip_code_fences()` is the exception: it may exist in multiple modules, but the source text and behavior must remain identical across all five.
+
+6. **Keep module names aligned with a single responsibility.**
+   - Good:
+     - `build_map_client.py`
+     - `path_security.py`
+     - `consensus_reconciler.py`
+   - Bad:
+     - `helpers.py`
+     - `misc_utils.py`
+     - `stuff.py`
+
+## Comment and Documentation Rules
+
+1. **Write comments only for non-obvious intent, invariants, or TRD-driven behavior.**
+   - Good comment:
+     - `# Missing build map is expected for the first 5 PRs; return None instead of raising.`
+   - Bad comment:
+     - `# Increment counter`
+
+2. **When behavior is mandated by TRD, state the invariant in code comments or docstrings at the decision point.**
+   - Required for:
+     - missing build-map handling
+     - path validation before writes
+     - `_strip_code_fences()` parity across five modules
+
+3. **Document `_strip_code_fences()` with its exact contract in every module that defines it.**
+   - The docstring or adjacent comment must state:
+     - returns `None` and `""` unchanged
+     - preserves trailing newline on non-empty output
+     - leaves unfenced code unchanged
+     - leaves unicode unchanged
+     - is synchronous
+
+4. **Use examples in docs only when they match enforced formats exactly.**
+   - For branch names, show the full mandatory pattern.
+   - For `axIdentifier`, use `{module}-{component}-{role}-{context?}` examples only.
+
+5. **Do not leave TODOs without an owner or condition.**
+   - Allowed:
+     - `# TODO(e17): replace mock build-map source after live endpoint rollout`
+   - Forbidden:
+     - `# TODO: fix later`
+
+6. **Do not use comments as substitutes for missing validation.**
+   - If a path must be safe, call `validate_write_path()`.
+   - A comment saying input is trusted is insufficient unless the source is internally generated and enforced by code.
+
+## ConsensusDevAgent-Specific Patterns
+
+1. **Validate paths before any ConsensusDevAgent file write, patch write, artifact write, or transcript write.**
+   - This includes:
+     - generated source files
+     - test files
+     - temporary patch outputs
+     - logs or transcripts written from task input
+   - Required pattern:
+   ```python
+   from path_security import validate_write_path
+
+   safe_path = validate_write_path(target_path)
+   ```
+
+2. **Use the Forge branch format for every agent-created branch without exception.**
+   - Exact format:
+     - `forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}`
+   - Zero-pad PR number to 3 digits.
+   - Convert title to lowercase slug form.
+
+3. **Implement `fetch_build_map()` so “not created yet” returns `None`.**
+   - This is mandatory for early-build operation.
+   - Never raise for the no-map-yet condition.
+   - Add a live/integration test equivalent to `TestBuildMapLive` covering this case.
+
+4. **Treat `_strip_code_fences()` as a locked multi-module contract.**
+   - Before merging any change to one copy, update all five copies.
+   - Add or update tests in every affected module set.
+   - Do not introduce an async version.
+
+5. **Do not generate placeholder-driven templates in ConsensusDevAgent outputs.**
+   - Forbidden examples:
+     - files containing unresolved runtime markers
+     - files whose only job is to call another generated file
+     - dynamic module-loading stubs
+
+6. **Generate complete implementation files, not orchestration shells.**
+   - Each generated file must contain the logic needed for its stated responsibility.
+   - Split into multiple files only when each file has a distinct concrete responsibility.
+
+7. **For interactive macOS UI produced by this subsystem, every interactive control must set `.accessibilityIdentifier()`.**
+   - Use format:
+     - `{module}-{component}-{role}-{context?}`
+   - Apply to:
+     - buttons
+     - text fields
+     - toggles
+     - collection rows
+     - action controls in repeated cards or lists
+
+8. **For repeated UI elements, append stable domain context, not display text.**
+   - Use IDs such as:
+     - `{projectId}`
+     - `{gateId}`
+   - Do not use mutable labels like project names or button captions as the context token.
+
+9. **When implementing absence-tolerant fetch APIs, distinguish “missing” from “failed.”**
+   - Return `None` for documented not-yet-created resources such as the build map.
+   - Raise a typed exception for transport errors, auth failures, schema violations, or unexpected server responses.
+
+10. **Keep tests aligned with production contracts, not inferred behavior.**
+    - Required assertions:
+      - `fetch_build_map()` returns `None` when no map exists yet
+      - `_strip_code_fences()` preserves trailing newline
+      - `_strip_code_fences()` returns `None` unchanged
+      - path validation occurs before any write path is used
+
+11. **Do not merge ConsensusDevAgent code that writes files without an observable validation step.**
+    - The validation call must appear in the same control flow before the write.
+    - Indirect assumptions like “caller already validated it” are not acceptable unless the parameter type is a validated path object enforced by the API.
