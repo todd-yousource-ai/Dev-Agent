@@ -1,14 +1,16 @@
-VERSION:
+I need to produce two files: `VERSION` and `docs/VERSIONING.md`. I'll output them clearly separated.
+
+--- FILE: VERSION ---
 0.1.0
 
-docs/VERSIONING.md:
+--- FILE: docs/VERSIONING.md ---
 # Versioning Contract Specification
 
-> **Status:** Normative -- all version-sensitive code in this repository MUST comply with this contract.
->
-> **Effective from:** `0.1.0` (initial development version)
->
-> **References:** PRD-001, TRD-1 (macOS Application Shell), TRD-2 (Consensus Engine), AGENTS.md
+**Document:** Versioning Contract Specification
+**Status:** Normative -- all version-sensitive code and CI must comply
+**Version:** 1.0
+**Date:** 2025-01-01
+**Applies to:** Consensus Dev Agent (Swift shell, Python backend, CI, release artifacts)
 
 ---
 
@@ -20,56 +22,74 @@ The **single source of truth** for the Consensus Dev Agent version is:
 VERSION
 ```
 
-A plain-text file at the repository root containing exactly one line: a valid [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) string with **no `v` prefix**, **no leading/trailing whitespace beyond a single trailing newline**, and **no additional content**.
+This is a plain-text file at the repository root. It contains exactly one line: a valid [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) string with **no `v` prefix**, **no trailing whitespace**, and **no trailing newline beyond the final line**.
 
-Example contents:
+Example content:
 
 ```
 0.1.0
 ```
 
-All other version representations in the repository are **derived** from this file. If any derived representation diverges from the canonical source, the build is broken and must not proceed.
+All other version representations in the repository are **derived** from this file. If any derived target diverges from the `VERSION` file, the build is broken and must fail closed.
 
 ---
 
 ## 2. Propagation Targets
 
-The canonical version MUST be propagated to exactly the following targets. Each target has a defined binding location and format.
+The canonical version in `VERSION` must be propagated to exactly four targets. Each target has a defined binding location and format.
 
-| # | Target | File / Location | Field / Key | Format | Notes |
-|---|--------|----------------|-------------|--------|-------|
-| 1 | **Swift shell (macOS app)** | `Forge/Info.plist` | `CFBundleShortVersionString` | `{major}.{minor}.{patch}` | No pre-release suffix in `Info.plist`; `CFBundleVersion` uses build number separately |
-| 2 | **Python backend** | `forge_agent/version.py` | `AGENT_VERSION` | `"{major}.{minor}.{patch}"` or `"{major}.{minor}.{patch}-{pre-release}"` | String constant, quoted, used at runtime for handshake |
-| 3 | **Python packaging** | `pyproject.toml` | `version` | `"{major}.{minor}.{patch}"` or PEP 440 equivalent | Must be kept in sync; PEP 440 normalizes hyphens to dots for pre-release |
-| 4 | **Git release tag** | Git tag on release commit | `v{VERSION}` | `v` prefix added only here | Tag triggers release pipeline; annotated tags required |
+| # | Target | File | Field / Key | Format | Example |
+|---|--------|------|-------------|--------|---------|
+| 1 | **Swift shell** | `Forge/Info.plist` | `CFBundleShortVersionString` | Raw SemVer string (no prefix) | `0.1.0` |
+| 2 | **Python backend** | `forge_agent/version.py` | `AGENT_VERSION` | Python string literal | `AGENT_VERSION = "0.1.0"` |
+| 3 | **Python packaging** | `pyproject.toml` | `version` | TOML string value | `version = "0.1.0"` |
+| 4 | **Git release tag** | Git ref | Tag name | `v` prefix + SemVer | `v0.1.0` |
 
-### 2.1 Propagation Hierarchy
+### 2.1 Binding Rules
+
+- **Info.plist (`CFBundleShortVersionString`):** Must be the exact string from `VERSION`. No `v` prefix. No build metadata suffix. `CFBundleVersion` (build number) is managed separately and is not governed by this contract.
+- **version.py (`AGENT_VERSION`):** Must be a module-level string constant whose value is identical to the content of `VERSION`. This constant is read at runtime during the IPC handshake.
+- **pyproject.toml (`version`):** Must match `VERSION` exactly. This is the version reported by Python packaging tools (`pip show`, `importlib.metadata`).
+- **Git tag:** Created only at release time. Format is `v{VERSION}` (e.g., `v0.1.0`). The `v` prefix exists **only** on git tags, nowhere else.
+
+### 2.2 Propagation Target Hierarchy
 
 ```
-VERSION (canonical, plain text)
- ├── Forge/Info.plist        → CFBundleShortVersionString
- ├── forge_agent/version.py  → AGENT_VERSION
- ├── pyproject.toml          → version
- └── git tag                 → v{VERSION}
+VERSION  (canonical, plain text, repository root)
+  ├── Forge/Info.plist            → CFBundleShortVersionString
+  ├── forge_agent/version.py      → AGENT_VERSION
+  ├── pyproject.toml              → version
+  └── git tag                     → v{VERSION}
 ```
 
-No target may define its own version independently. All version values are **read from or validated against** the `VERSION` file.
+All arrows are **one-directional**. No derived target ever writes back to `VERSION`. The `VERSION` file is the root of the dependency graph.
 
 ---
 
 ## 3. Version Handshake Protocol
 
-Consensus Dev Agent is a **two-process architecture**: a Swift shell (macOS app) and a Python backend communicate over an authenticated Unix domain socket. Version coherence across this boundary is a **correctness requirement**.
+Consensus Dev Agent is a two-process architecture: a **Swift shell** (macOS application) and a **Python backend** (agent runtime). These processes communicate over an authenticated Unix domain socket. Version coherence across this boundary is a **correctness requirement**.
 
-### 3.1 Handshake Payload
+### 3.1 Handshake Sequence
 
-During the IPC `ready` handshake, both processes exchange a version payload. The payload is a JSON object with the following fields:
+During the IPC `ready` handshake, both processes exchange version information. The handshake occurs **before any work is dispatched**.
+
+1. The Python backend starts and binds to the Unix socket.
+2. The Swift shell connects to the socket.
+3. Both processes exchange a **version payload** as part of the `ready` handshake message.
+4. Each process validates that the remote version matches its own.
+5. If versions match, the connection proceeds.
+6. **If versions do not match, the connection is refused immediately.** This is a fail-closed behavior -- there is no degraded mode, no compatibility fallback, no warning-only path.
+
+### 3.2 Handshake Payload Schema
+
+The version payload is a JSON object with the following fields:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `product` | `string` | Yes | Product identifier. Must be `"consensus-dev-agent"`. |
-| `version` | `string` | Yes | Semantic version string matching the `VERSION` file contents. |
-| `protocol_version` | `string \| null` | Yes | Reserved for future IPC contract versioning. Must be `null` until a protocol version scheme is established. |
+| `version` | `string` | Yes | SemVer string from the process's compiled/embedded version constant. Must match `VERSION` file content. |
+| `protocol_version` | `string \| null` | Yes | Reserved for future IPC contract versioning. Must be `null` until a protocol version scheme is defined. |
 
 Example payload:
 
@@ -81,204 +101,233 @@ Example payload:
 }
 ```
 
-### 3.2 Handshake Validation Rules
+### 3.3 Mismatch Behavior (Fail Closed)
 
-1. Both the Swift shell and Python backend read their version from their respective propagation target at startup.
-2. During the `ready` handshake, each process sends its version payload to the peer.
-3. The receiving process performs **exact string equality** comparison of the `version` field against its own version.
-4. The `product` field must match `"consensus-dev-agent"` exactly.
+When a version mismatch is detected during the handshake:
 
-### 3.3 Failure Behavior (Fail Closed)
+1. The detecting process **immediately terminates the connection** with a version-mismatch error code.
+2. The error is **logged with full context**: local version, remote version, socket path, timestamp.
+3. The system **does not start**, **does not queue work**, and **does not attempt recovery**.
+4. The exit status is **non-zero** to signal failure to any parent process or supervisor.
 
-**If the version strings do not match, or if the product identifier is incorrect:**
+**Rationale:** Silent version incompatibilities can corrupt build pipeline state, produce incorrect consensus results, or violate security boundaries. The only safe response to a version mismatch is to stop.
 
-- The connection MUST be **refused immediately**.
-- The process detecting the mismatch MUST log an error with full context:
-  - Local version
-  - Remote version
-  - Mismatch field (`version` or `product`)
-  - Timestamp
-  - Socket path (if available)
-- The process MUST terminate the IPC connection with a **version-mismatch error code**.
-- The system MUST NOT fall back to degraded operation.
-- The system MUST NOT proceed with any build, consensus, or pipeline operations.
-- The error MUST be surfaced to the operator (UI alert in Swift shell, log entry at ERROR level in Python backend).
+### 3.4 Validation Logic
 
-**This is a fail-closed contract.** There is no compatibility mode, no version negotiation, and no grace period. Mismatched versions indicate a broken deployment and must be corrected before the system can operate.
+Version comparison is **strict string equality** after stripping leading and trailing whitespace. No range matching. No compatibility heuristics. The versions either match exactly or the handshake fails.
 
-### 3.4 Rationale
-
-Silent version incompatibilities across the IPC boundary could corrupt build pipeline state, produce incorrect consensus results, or violate security invariants established by a specific version's contract. The cost of refusing to start is always lower than the cost of operating with inconsistent assumptions.
+```
+strip(local.version) == strip(remote.version)  →  proceed
+strip(local.version) != strip(remote.version)  →  fail closed
+```
 
 ---
 
 ## 4. Semantic Versioning Rules
 
-This project follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) with the following **project-specific definitions** for bump triggers:
+This project follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) with project-specific definitions for what constitutes a major, minor, and patch change.
 
-### 4.1 Major Version (`X.0.0`)
+### 4.1 Version Format
 
-A major version bump is required for any change that breaks an existing contract or security boundary:
+```
+{major}.{minor}.{patch}
+```
 
-- **Breaking IPC change**: modification to the handshake protocol, message schema, or message routing that is not backward-compatible
-- **Breaking contract change**: alteration to the version propagation targets, security model, or authentication mechanism
-- **Security boundary change**: modification to trust boundaries, credential handling, or isolation guarantees
+All three components are non-negative integers with no leading zeros.
 
-> Major version zero (`0.x.y`) is for initial development. The public API (IPC contract) is not considered stable. Breaking changes MAY occur in minor version bumps during `0.x.y` development per SemVer §4.
+### 4.2 Major Version (Breaking Change)
 
-### 4.2 Minor Version (`x.Y.0`)
+Increment the **major** version when making a change that breaks an existing contract or boundary:
 
-A minor version bump is required for any change that adds a new capability without breaking existing contracts:
+- **IPC protocol change:** Modification to message schema, handshake protocol, socket authentication, or message framing that is incompatible with the previous version.
+- **Security boundary change:** Alteration to trust boundaries, permission model, credential handling, or sandboxing that changes the security contract.
+- **Contract change:** Modification to any normative specification (including this document) that invalidates assumptions made by existing components.
 
-- **New message type**: addition of a new IPC message type that existing peers can safely ignore or that extends (not modifies) the schema
-- **New pipeline stage**: addition of a build pipeline stage (e.g., new validation pass, new artifact type)
-- **New consensus mode**: addition of a new LLM consensus strategy or arbitration mode
-- **New configuration option**: addition of a new user-facing configuration that does not alter defaults
+Examples:
+- Changing the handshake payload schema (adding a required field, removing a field, changing a type)
+- Changing the Unix socket authentication mechanism
+- Changing the message envelope format between Swift shell and Python backend
 
-### 4.3 Patch Version (`x.y.Z`)
+**While major version is `0`:** Per SemVer §4, the `0.x.y` series is for initial development. The public API (IPC contract) is not considered stable. Breaking changes may occur in minor version increments. This exception ends when `1.0.0` is released.
 
-A patch version bump is used for changes that fix defects without altering any contract or capability:
+### 4.3 Minor Version (New Capability)
 
-- **Bug fix**: correction of incorrect behavior that does not change the IPC schema, message types, or public API
-- **Performance fix**: optimization that does not alter observable behavior
-- **Documentation correction**: fix to documentation that was incorrect relative to implemented behavior
-- **Dependency update**: security or compatibility update to a dependency that does not change the agent's public behavior
+Increment the **minor** version when adding a new capability that is backward-compatible:
+
+- **New message type:** Adding a new IPC message type that existing components can safely ignore.
+- **New pipeline stage:** Adding a new build/review/consensus stage.
+- **New consensus mode:** Adding a new arbitration or voting mode.
+- **New configuration option:** Adding a new setting with a safe default.
+
+The minor version resets the patch version to `0`.
+
+### 4.4 Patch Version (Bugfix)
+
+Increment the **patch** version for changes that fix incorrect behavior without altering any contract or capability:
+
+- Bug fixes that correct behavior to match existing specifications.
+- Performance improvements with no behavioral change.
+- Documentation corrections (non-normative).
+- Dependency updates that do not change the public API or IPC contract.
 
 ---
 
 ## 5. Pre-release Tag Format
 
-Pre-release versions follow the format:
+Pre-release versions use the following format:
 
 ```
 {major}.{minor}.{patch}-{stage}.{n}
 ```
 
-Where:
-
 | Component | Description | Allowed Values |
 |-----------|-------------|----------------|
-| `{major}.{minor}.{patch}` | The target release version | Valid SemVer components |
-| `{stage}` | Development stage identifier | `alpha`, `beta`, `rc` |
-| `{n}` | Sequential build number within the stage | Positive integer, starting at `1` |
+| `{major}.{minor}.{patch}` | The target release version | Any valid SemVer triple |
+| `{stage}` | Pre-release stage identifier | `alpha`, `beta`, `rc` |
+| `{n}` | Monotonically increasing sequence number within the stage | Non-negative integer, no leading zeros |
 
-### 5.1 Examples
+### 5.1 Stage Definitions
 
-| Version String | Meaning |
-|---------------|---------|
-| `0.2.0-alpha.1` | First alpha build targeting the 0.2.0 release |
-| `0.2.0-alpha.2` | Second alpha build targeting the 0.2.0 release |
-| `0.2.0-beta.1` | First beta build targeting the 0.2.0 release |
-| `1.0.0-rc.1` | First release candidate for 1.0.0 |
-| `1.0.0-rc.3` | Third release candidate for 1.0.0 |
+| Stage | Meaning | Stability Expectation |
+|-------|---------|----------------------|
+| `alpha` | Active development, incomplete features | Unstable. Breaking changes expected. |
+| `beta` | Feature-complete, under testing | Mostly stable. Breaking changes unlikely but possible. |
+| `rc` | Release candidate, final validation | Stable. Only critical bugfixes permitted before release. |
 
-### 5.2 Pre-release Precedence
+### 5.2 Examples
 
-Stages are ordered: `alpha` < `beta` < `rc` < (release). Within a stage, precedence is determined by `{n}`. This follows SemVer §11 rules for pre-release precedence.
+| Pre-release Version | Meaning |
+|---------------------|---------|
+| `0.2.0-alpha.1` | First alpha build targeting the `0.2.0` release |
+| `0.2.0-alpha.2` | Second alpha build targeting `0.2.0` |
+| `0.2.0-beta.1` | First beta build targeting `0.2.0` |
+| `1.0.0-rc.1` | First release candidate for `1.0.0` |
+| `1.0.0-rc.3` | Third release candidate for `1.0.0` |
 
-### 5.3 Pre-release Handshake Behavior
+### 5.3 Pre-release Precedence
 
-During initial development (`0.x.y`), pre-release versions participate in the handshake using **exact string equality**. A process running `0.2.0-alpha.1` will refuse to connect to a process running `0.2.0-alpha.2`. There is no range-based compatibility for pre-release versions.
+Per SemVer 2.0.0 §11, pre-release versions have **lower precedence** than the associated release version:
+
+```
+0.2.0-alpha.1 < 0.2.0-alpha.2 < 0.2.0-beta.1 < 0.2.0-rc.1 < 0.2.0
+```
+
+### 5.4 Pre-release Handshake Behavior
+
+Pre-release versions follow the **same strict string equality** rule as release versions during the IPC handshake. A Swift shell at `0.2.0-alpha.1` and a Python backend at `0.2.0-alpha.2` are **not compatible** and the handshake will fail closed.
 
 ---
 
 ## 6. CI Enforcement Rule
 
-### 6.1 Version Coherence Check
+### 6.1 Requirement
 
-A CI job named **`version-coherence`** MUST exist and MUST execute on every pull request and every push to the default branch. This job validates that all propagation targets contain the same version as the `VERSION` file.
+Every CI pipeline run **must** include a version coherence check. This check validates that all propagation targets (§2) contain a version string identical to the content of the `VERSION` file.
 
-### 6.2 Comparison Logic
+### 6.2 Check Name
 
-The check performs the following steps:
+The CI check is named `version-coherence`.
 
-1. Read the contents of the `VERSION` file, stripping leading and trailing whitespace.
-2. For each propagation target (see §2), extract the version value.
-3. Compare each extracted value to the canonical version using **exact string equality**.
-4. If **any** target diverges, the check MUST fail.
-
-### 6.3 Failure Behavior (Fail Closed)
-
-- **On mismatch:** The CI job MUST exit with a **non-zero exit code**. The build is broken. The PR cannot be merged.
-- **On missing target:** If a propagation target file does not yet exist (e.g., during early bootstrap when `Info.plist` has not been created), the check MUST be configured to either skip that target explicitly (with a logged justification) or fail. It MUST NOT silently pass.
-- **Never warn-only:** The version coherence check MUST NOT be configured as a warning, soft failure, advisory, or non-blocking check. It is a **required status check** on the default branch.
-
-### 6.4 Expected Failure Output
-
-On failure, the CI job MUST output:
+### 6.3 Comparison Logic
 
 ```
-VERSION COHERENCE FAILURE -- fail closed
-  Canonical (VERSION):          {canonical_version}
-  Info.plist:                   {infoplist_version}   {MATCH|MISMATCH}
-  forge_agent/version.py:       {python_version}      {MATCH|MISMATCH}
-  pyproject.toml:               {pyproject_version}    {MATCH|MISMATCH}
-  git tag (if release):         {tag_version}          {MATCH|MISMATCH}
+canonical = strip(read("VERSION"))
+
+targets = {
+    "Info.plist CFBundleShortVersionString": strip(read_plist("Forge/Info.plist", "CFBundleShortVersionString")),
+    "version.py AGENT_VERSION":             strip(read_python_string("forge_agent/version.py", "AGENT_VERSION")),
+    "pyproject.toml version":               strip(read_toml("pyproject.toml", "project.version")),
+}
+
+for name, value in targets:
+    if value != canonical:
+        log_error(f"Version mismatch: {name} has '{value}', expected '{canonical}'")
+        exit(1)
+
+exit(0)
 ```
+
+### 6.4 Failure Behavior (Fail Closed)
+
+- **Any mismatch:** The `version-coherence` check exits with a **non-zero exit code**.
+- **Never warn-only:** There is no `--warn` flag, no soft-fail mode, no override. A version divergence is a build-breaking error.
+- **Blocks merge:** The `version-coherence` check is a required status check. PRs cannot merge if it fails.
+- **Error context:** On failure, the check logs: the canonical version, each target's actual value, and which targets diverged.
+
+### 6.5 When the Check Runs
+
+The `version-coherence` check runs on:
+
+- Every pull request (all branches)
+- Every push to the default branch
+- Every release tag push
 
 ---
 
 ## 7. Version Bump Procedure
 
-### 7.1 Steps
+### 7.1 Step-by-Step
 
-Version bumps follow this exact sequence:
-
-1. **Update `VERSION`** -- Change the canonical version file to the new version string. This is always the first file modified.
-2. **Run sync tooling** -- Execute the version synchronization script (defined in a future PR) to propagate the new version to all targets listed in §2.
-3. **Verify coherence** -- Run the version-coherence check locally to confirm all targets match.
-4. **Commit** -- Commit all changed files in a single commit with message format: `chore: bump version to {new_version}`.
-5. **Tag (release only)** -- For release versions, create an annotated git tag: `git tag -a v{new_version} -m "Release {new_version}"`.
+1. **Edit `VERSION`:** Change the version string in the `VERSION` file to the new version. This is always the first step.
+2. **Run sync tooling:** Execute the version synchronization script (defined in a future PR) to propagate the new version to all targets listed in §2.
+3. **Verify coherence:** Run the `version-coherence` check locally to confirm all targets match.
+4. **Commit:** Commit all changed files in a single commit with message format: `chore: bump version to {new_version}`.
+5. **Tag (releases only):** For release versions, create an annotated git tag: `git tag -a v{new_version} -m "Release {new_version}"`.
 
 ### 7.2 Rules
 
-- The `VERSION` file is **always** the first file updated. No other file's version may be updated before `VERSION`.
-- All propagation targets MUST be updated in the **same commit** as the `VERSION` file change.
-- Version bump commits MUST NOT contain any other changes (feature code, bug fixes, etc.).
-- The sync tooling (future PR) will read `VERSION` and write to all targets. Manual editing of individual targets is prohibited once sync tooling exists.
+- **`VERSION` is always changed first.** No other file is edited before `VERSION`.
+- **All propagation targets are updated in the same commit.** There must never be a committed state where targets diverge from `VERSION`.
+- **Pre-release versions are not tagged** unless they are published as distribution artifacts.
+- **Version bumps are standalone commits.** They are not mixed with feature or bugfix changes.
+
+### 7.3 Automation
+
+A sync script (to be created in a future PR) will read `VERSION` and update all propagation targets automatically. Manual editing of individual targets is **prohibited** in normal workflow -- it is error-prone and will be caught by the `version-coherence` CI check.
 
 ---
 
 ## 8. Compatibility Matrix
 
-This matrix defines version interoperability rules for the two-process architecture:
+This matrix defines which version combinations are considered compatible across the Swift shell and Python backend processes.
 
 | Swift Shell Version | Python Backend Version | Compatible? | Behavior |
-|--------------------|----------------------|-------------|----------|
-| `X.Y.Z` | `X.Y.Z` | ✅ Yes | Normal operation |
-| `X.Y.Z` | `X.Y.W` (W ≠ Z) | ❌ No | Handshake refused, connection terminated |
-| `X.Y.Z` | `X.W.Z` (W ≠ Y) | ❌ No | Handshake refused, connection terminated |
-| `X.Y.Z` | `W.Y.Z` (W ≠ X) | ❌ No | Handshake refused, connection terminated |
-| `X.Y.Z-alpha.1` | `X.Y.Z-alpha.1` | ✅ Yes | Normal operation |
-| `X.Y.Z-alpha.1` | `X.Y.Z-alpha.2` | ❌ No | Handshake refused, connection terminated |
-| `X.Y.Z` | `X.Y.Z-rc.1` | ❌ No | Handshake refused, connection terminated |
+|--------------------|-----------------------|-------------|----------|
+| `X.Y.Z` | `X.Y.Z` | **Yes** | Handshake succeeds, normal operation |
+| `X.Y.Z` | `X.Y.W` (W ≠ Z) | **No** | Handshake fails closed, connection refused |
+| `X.Y.Z` | `X.A.B` (A ≠ Y) | **No** | Handshake fails closed, connection refused |
+| `X.Y.Z` | `A.B.C` (A ≠ X) | **No** | Handshake fails closed, connection refused |
+| `X.Y.Z` | `X.Y.Z-alpha.1` | **No** | Handshake fails closed, connection refused |
+| `X.Y.Z-alpha.1` | `X.Y.Z-alpha.1` | **Yes** | Handshake succeeds, normal operation |
+| `X.Y.Z-alpha.1` | `X.Y.Z-alpha.2` | **No** | Handshake fails closed, connection refused |
 
-**Rule: Exact string equality. No range matching. No compatibility negotiation.**
-
-The `protocol_version` field (§3.1) is reserved for potential future introduction of a compatibility range mechanism. Until such a mechanism is specified in a future version of this contract, only exact match is permitted.
+**Rule:** Compatibility is determined by **exact string equality** of the version field. There are no version ranges, no "compatible with" semantics, and no negotiation. This is intentional -- it eliminates an entire class of subtle incompatibility bugs at the cost of requiring coordinated deployments.
 
 ---
 
 ## 9. Expected Failure Modes
 
-The versioning system is designed to surface failures early and loudly. The following failure modes are expected and intentional:
+This section catalogs the failure modes that version enforcement is designed to produce. Each failure is intentional and indicates a real problem that must be resolved before the system can operate.
 
-| Failure Mode | Trigger | Behavior | Severity |
-|-------------|---------|----------|----------|
-| **Build failure** | Any propagation target version differs from `VERSION` | CI exits non-zero; PR cannot merge | Blocking |
-| **Startup failure** | Swift shell and Python backend report different versions during `ready` handshake | IPC connection refused; system does not operate | Critical |
-| **Release pipeline failure** | Git tag does not match `v{VERSION}` format, or tagged version is not a valid SemVer string | Release pipeline aborts; artifacts are not published | Blocking |
-| **Format validation failure** | `VERSION` file contains invalid SemVer (e.g., extra lines, `v` prefix, non-numeric components) | CI exits non-zero; all version-dependent operations halt | Blocking |
-
-All failure modes are **fail-closed**. There are no warning-only paths.
+| Failure Mode | Trigger | Behavior | Resolution |
+|--------------|---------|----------|------------|
+| **CI build failure** | Any propagation target diverges from `VERSION` | `version-coherence` check exits non-zero; PR cannot merge | Run sync tooling to align all targets with `VERSION` |
+| **Startup/readiness failure** | Swift shell and Python backend report different versions during handshake | Connection refused, both processes log version mismatch, non-zero exit | Ensure both processes are built from the same commit |
+| **Release pipeline failure** | `VERSION` contains invalid SemVer or git tag does not match `v{VERSION}` | Release workflow exits non-zero | Correct `VERSION` to valid SemVer; ensure tag matches |
+| **Format validation failure** | `VERSION` contains leading/trailing whitespace, `v` prefix, or non-SemVer content | `version-coherence` check exits non-zero | Edit `VERSION` to contain only a valid SemVer string |
 
 ---
 
-## 10. Security Considerations
+## 10. References
 
-- The `VERSION` file is **not a secret**, but its integrity matters. A tampered version could cause a malicious backend to pass the handshake against a legitimate shell (or vice versa). The handshake is one layer of defense; it does not replace code signing or authentication.
-- Version strings from IPC payloads are **untrusted external input** and MUST be validated against the SemVer format before comparison. Malformed version strings MUST cause handshake failure (fail closed), not parsing exceptions.
-- The `product` field in the handshake payload prevents cross-product connection attempts and MUST be validated with exact string comparison.
+| Document | Relevance |
+|----------|-----------|
+| [SemVer 2.0.0](https://semver.org/spec/v2.0.0.html) | Base versioning standard |
+| PRD-001: Product Foundation | Mandates single source-of-truth versioning |
+| TRD-1: macOS Application Shell | Swift shell version binding (`CFBundleShortVersionString`) |
+| TRD-2: Consensus Engine | Python backend version (`AGENT_VERSION`) |
+| TRD-12: Backend Runtime Startup | Version constants at startup |
+| AGENTS.md | Repository conventions for version management |
 
 ---
 
@@ -286,4 +335,4 @@ All failure modes are **fail-closed**. There are no warning-only paths.
 
 | Version | Date | Change |
 |---------|------|--------|
-| 1.0 | Initial | Created versioning contract specification; canonical version `0.1.0` |
+| 1.0 | 2025-01-01 | Initial versioning contract specification |
