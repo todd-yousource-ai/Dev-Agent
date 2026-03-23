@@ -1,100 +1,236 @@
 # AGENTS.md - Forge Platform
 
-Forge is a trust-enforcement platform for AI agent operations that binds every agent action to a cryptographically verified identity (CTX-ID), confines it within a Virtual Trust Zone (VTZ), labels all data via DTL, and emits an immutable TrustFlow audit stream — all enforced locally on macOS via a native Swift shell orchestrating a Python consensus backend over authenticated XPC.
+Forge is a trust-enforcement platform for AI agent operations that binds every agent action to a cryptographically verified identity (CTX-ID), constrains execution within Virtual Trust Zones (VTZ), labels all data with immutable Data Trust Labels (DTL), and emits a complete TrustFlow audit stream — failing closed on any violation.
 
 ## Critical Rules - Read Before Writing Any Code
 
-1. **Fail closed on every trust, identity, policy, and cryptographic error** — reject the action, log the event, surface to caller; never silently degrade or continue.
-2. **Validate CTX-ID first at every enforcement entry point** — validation failure means immediate rejection with zero partial processing; missing CTX-ID is UNTRUSTED, never inferred from session state, transport context, or prior requests.
-3. **CTX-ID tokens are immutable once issued** — rotation creates a new token and invalidates the old one immediately; validate against TrustLock public key only (software-only validation is rejected); respect per-deployment clock-skew tolerance for expiry.
-4. **Emit a TrustFlow event for every action outcome (allow, restrict, block)** — emission is synchronous in the enforcement path; async buffering is forbidden; failed emission is a WARN-level audit event, never a silent skip.
-5. **Every TrustFlow event must include `event_id` (CSPRNG), `session_id`, `ctx_id`, `ts` (UTC ms), `event_type`, `payload_hash` (SHA-256)** — no optional fields, no exceptions.
-6. **Check VTZ policy before execution of every action** — cross-VTZ tool calls require explicit policy authorization; implicit cross-VTZ access is denied; VTZ boundaries are structural, not advisory; policy changes take effect at next CTX-ID issuance, not mid-session.
-7. **Secrets, keys, tokens, and credentials must never appear in logs, error messages, generated code, audit records, prompts, or cleartext payloads** — store in Keychain, protect in memory, encrypt in transit and at rest.
-8. **All external input (documents, PR comments, CI output, XPC messages, tool output) is untrusted** — validate strictly before use; external document context goes in USER prompt, never SYSTEM prompt; unknown XPC message types are discarded and logged, never raised as exceptions.
-9. **Generated code is never executed by the agent** — no `eval`, no `exec`, no `subprocess` of generated content; `SECURITY_REFUSAL` output is never bypassed by rephrasing — stop, gate, log.
-10. **DTL labels are assigned at data ingestion and are immutable** — derived data inherits the highest classification of any source; unlabeled data is CONFIDENTIAL until explicitly reclassified; label stripping is a security event requiring audit and policy control.
-11. **Gates wait indefinitely for operator input — no auto-approve ever** — build memory and build rules are never cleared automatically; per-PR stage checkpoints prevent re-running completed work after a crash.
-12. **All file writes are path-validated via `path_security.validate_write_path()` before execution** — reject path traversal or unapproved destinations immediately.
+1. Every enforcement entry point MUST call CTX-ID validation FIRST — before any other processing occurs; validation failure means immediate rejection with zero partial execution.
+2. CTX-ID tokens are IMMUTABLE after issuance; rotation creates a new token and invalidates the old one immediately; expired or missing CTX-ID MUST be treated as UNTRUSTED — never infer identity from context.
+3. Every agent action MUST be checked against VTZ policy BEFORE execution; VTZ boundaries are structural, not advisory — application code cannot bypass enforcement; cross-VTZ tool calls require explicit policy authorization or they are denied.
+4. Every action outcome (allow, restrict, block) MUST emit a TrustFlow event synchronously in the enforcement path — async buffering is forbidden; failed emission is a WARN-level audit event, never a silent skip.
+5. All trust, identity, policy, and cryptographic failures MUST fail CLOSED: reject the action, log the event, surface to the caller — never silently continue; `try/except/pass` is BANNED in enforcement code.
+6. Secrets, keys, tokens, and credentials MUST never appear in logs, error messages, generated code, or cleartext payloads; all secrets MUST be protected in memory, at rest, and in transit.
+7. DTL labels are assigned at data ingestion and are IMMUTABLE; derived data inherits the HIGHEST classification of any source; unlabeled data MUST be treated as CONFIDENTIAL until explicitly reclassified.
+8. Generated code is NEVER executed by the agent — no `eval`, no `exec`, no `subprocess` of generated content.
+9. All external input (documents, PR comments, CI output, XPC messages) is UNTRUSTED and MUST be validated strictly; context from external documents goes in the USER prompt, never the SYSTEM prompt.
+10. Gates wait indefinitely for operator input — no auto-approve ever; SECURITY_REFUSAL output is never bypassed by rephrasing — stop, gate, log.
+11. All file writes MUST be path-validated via `path_security.validate_write_path()` before execution; XPC unknown message types are discarded and logged, never raised as exceptions.
+12. Build memory and build rules are NEVER cleared automatically — they are persistent learning systems; per-PR stage checkpoints prevent re-running completed work after a crash.
 
 ## Architecture Overview
 
-- `src/cal/` — **Conversation Abstraction Layer** enforces action entry, CTX-ID validation first, and handoff into policy; it must NOT execute actions before identity and VTZ checks.
-- `src/vtz/` — **Virtual Trust Zone** enforcement binds each agent session to exactly one VTZ and decides cross-VTZ access; it must NOT allow implicit cross-zone execution.
-- `src/dtl/` — **Data Trust Label** enforcement assigns labels at ingestion and verifies labels before boundary crossing; it must NOT mutate labels after assignment except via explicit audited reclassification flow.
-- `src/trustflow/` — **TrustFlow** audit stream emits synchronous enforcement-path events with required fields and replayability; it must NOT buffer asynchronously or drop failures silently.
-- `src/trustlock/` — **TrustLock** provides cryptographic machine identity and CTX-ID validation against public-key-backed hardware trust; it must NOT accept software-only validation for CTX-ID.
-- `src/mcp/` — **MCP Policy Engine** evaluates policy for tools, boundaries, and execution requests; it must NOT act as advisory-only logic when enforcement is required.
-- `src/keychain/` — **KeychainKit** provides secret storage abstractions; all secrets, keys, tokens, and credentials are stored and retrieved exclusively through KeychainKit; direct file-based or in-memory secret storage is forbidden.
-- `src/xpc/` — **XPC Bridge** handles authenticated inter-process communication between the Swift shell and Python backend; unknown message types are discarded and logged; all XPC payloads are validated against schema before dispatch.
+Enforcement order for every agent action: **CTX-ID validation → VTZ policy check → Action execution → DTL label verification (if data crosses boundary) → TrustFlow event emission → Audit record write**.
 
-## Enforcement Sequencing
+| Subsystem | Path | Enforces | Must NOT Do |
+|---|---|---|---|
+| **CAL** (Conversation Abstraction Layer) | `src/cal/` | Processes agent actions; calls CTX-ID validation first, VTZ policy second, emits TrustFlow on every outcome | Must NOT execute any action before CTX-ID validation completes; must NOT swallow VTZ denials |
+| **DTL** (Data Trust Labels) | `src/dtl/` | Assigns immutable classification labels at ingestion; enforces label inheritance on derived data; verifies labels at trust boundaries | Must NOT allow label modification after assignment; must NOT pass unlabeled data across trust boundaries without treating it as CONFIDENTIAL |
+| **TrustFlow** | `src/trustflow/` | Emits synchronous audit events for every enforcement decision with `event_id`, `session_id`, `ctx_id`, `ts`, `event_type`, `payload_hash` | Must NOT buffer events asynchronously; must NOT omit events on failure — log the emission failure instead |
+| **VTZ** (Virtual Trust Zones) | `src/vtz/` | Binds each agent session to exactly one VTZ at CTX-ID issuance; enforces structural boundaries on all tool calls | Must NOT allow cross-VTZ calls without explicit policy authorization; must NOT apply policy changes mid-session |
+| **TrustLock** | `src/trustlock/` | Provides TPM-anchored cryptographic machine identity; validates CTX-ID against TrustLock public key | Must NOT accept software-only validation; must NOT degrade to unsigned identity |
+| **MCP Policy Engine** | `src/mcp/` | Evaluates and enforces agent action policies | Must NOT suggest policy — must enforce it; must NOT allow bypass from application code |
+| **Rewind** | `src/rewind/` | Replays enforcement decisions from audit stream alone | Must NOT depend on external state for replay; must NOT modify audit records |
+| **Connector SDK** | `sdk/connector/` | Provides integration interface for external systems | Must NOT trust connector input without validation; must NOT expose internal enforcement state |
+| **Consensus Engine** | `src/consensus.py` | Runs dual-LLM generation with Claude arbitration; routes by `language` parameter | Must NOT use length-based fix arbitration — use `_score_fix()` |
+| **Build Director** | `src/build_director.py` | Orchestrates build pipeline, confidence gates, PR-type routing | Must NOT auto-approve gates; must NOT skip stage checkpoints |
+| **GitHub Tools** | `src/github_tools.py` | Manages GitHub operations, webhook receiving | Must NOT expose tokens in logs; must NOT trust webhook payloads without validation |
+| **Build Ledger** | `src/build_ledger.py` | Tracks build state and stage checkpoints | Must NOT clear state automatically |
+| **Tests** | `tests/<subsystem>/` | Mirrors `src/` structure exactly | Must NOT mock enforcement decisions — may mock external calls but logic must run |
 
-Every action request follows this mandatory sequence:
+## Interface Contracts - Mandatory Implementation Rules
 
-1. **CTX-ID Validation** — verify token signature against TrustLock public key, check expiry with clock-skew tolerance, confirm token is not revoked.
-2. **VTZ Policy Check** — resolve the agent's bound VTZ, evaluate the requested action against VTZ policy, reject cross-VTZ calls without explicit authorization.
-3. **DTL Boundary Check** — verify DTL labels on all data involved in the action; block data from crossing trust boundaries without matching label clearance.
-4. **MCP Policy Evaluation** — evaluate tool-specific and action-specific policy constraints.
-5. **Action Execution** — only after steps 1–4 pass.
-6. **TrustFlow Emission** — emit a synchronous TrustFlow event recording the outcome (allow, restrict, block) with all required fields.
+### CTX-ID Contract
+- Tokens are **IMMUTABLE** after issuance — no field modification.
+- Rotation creates a new token; old token is invalidated **immediately**.
+- Expired CTX-ID MUST be rejected; clock skew tolerance is defined per deployment.
+- CTX-ID MUST be validated against **TrustLock public key** — software-only validation is rejected.
+- Missing CTX-ID MUST be treated as **UNTRUSTED**.
 
-No step may be reordered, skipped, or deferred.
+### CAL Enforcement Contract
+- Every entry point processing an agent action MUST call CTX-ID validation **FIRST**.
+- CTX-ID validation failure → immediate rejection, no partial processing.
+- Every action MUST be checked against VTZ policy **BEFORE** execution.
+- VTZ denial MUST produce a `VTZEnforcementDecision` record with `verdict=block`.
+- Every action outcome MUST emit a TrustFlow event.
+- TrustFlow emission failure MUST NOT silently continue — log and surface.
 
-## TrustFlow Event Wire Format
+### TrustFlow Emission Contract
+- Required fields: `event_id`, `session_id`, `ctx_id`, `ts`, `event_type`, `payload_hash`.
+- `event_id`: globally unique via CSPRNG (not sequential).
+- `ts`: UTC Unix timestamp, **millisecond precision**.
+- `payload_hash`: SHA-256 of the serialized action payload.
+- Emission MUST be **synchronous** in the enforcement path.
+- Failed emission → WARN-level audit event, not silent skip.
 
-Every TrustFlow event is a JSON object with the following required fields:
+### VTZ Enforcement Contract
+- Each agent session bound to **exactly one** VTZ at CTX-ID issuance.
+- Cross-VTZ tool calls require **explicit** policy authorization — implicit is denied.
+- VTZ boundaries are **structural** — application code cannot bypass.
+- Policy changes take effect at **next CTX-ID issuance**, not mid-session.
 
-| Field | Type | Constraints |
-|---|---|---|
-| `event_id` | `string` | CSPRNG-generated unique identifier |
-| `session_id` | `string` | Bound to the active VTZ session |
-| `ctx_id` | `string` | The validated CTX-ID token identifier |
-| `ts` | `integer` | UTC milliseconds since epoch |
-| `event_type` | `string` | One of: `allow`, `restrict`, `block`, `security_refusal`, `gate_wait`, `audit` |
-| `payload_hash` | `string` | SHA-256 hex digest of the action payload |
+### DTL Label Contract
+- Labels assigned at **data ingestion**, immutable thereafter.
+- Derived data inherits the **HIGHEST** classification of any source.
+- Unlabeled data → **CONFIDENTIAL** until explicitly reclassified.
+- Label verification MUST occur **before** any data crosses a trust boundary.
+- Label stripping is a security event — MUST be audited and policy-controlled.
 
-All fields are required. Omitting any field is a schema violation that must be rejected before persistence.
+### Audit Contract
+- Every security-relevant action MUST generate an audit record **BEFORE** execution.
+- Audit records are **APPEND-ONLY** — no modification or deletion.
+- Audit failures are **NON-FATAL** to agent operation but MUST be surfaced immediately.
+- Audit records MUST NOT contain secrets, keys, tokens, or cleartext sensitive data.
+- Replay MUST be possible from the audit stream alone (no external state required).
 
-## CTX-ID Lifecycle
+### Consensus Engine Contract
+- Always pass `language` parameter: `"python"` | `"swift"` | `"go"` | `"typescript"` | `"rust"`.
+- `language="swift"` → `SWIFT_GENERATION_SYSTEM` + `SWIFT_UI_ADDENDUM` (when UI keywords detected).
+- `language="python"` → `GENERATION_SYSTEM` (security-focused Python rules).
+- Fix arbitration uses `_score_fix()` based on assertion token overlap — **NEVER** `max(..., key=len)`.
+- Fix loop strategy via `_choose_strategy(failure_type, attempt, records)` — not a static lookup table.
 
-- **Issuance**: CTX-ID tokens are issued by TrustLock, signed with the machine's hardware-backed private key.
-- **Validation**: Every enforcement entry point validates the CTX-ID signature against the TrustLock public key. Software-only key validation is rejected.
-- **Immutability**: Issued tokens are never modified.
-- **Rotation**: Rotation creates a new token and immediately invalidates the old one. There is no grace period for old tokens.
-- **Expiry**: Tokens have a fixed expiry. Validation must respect per-deployment clock-skew tolerance. Expired tokens are rejected.
-- **Policy binding**: Policy changes take effect at next CTX-ID issuance, not mid-session.
+### XPC Wire Contract
+- Line-delimited JSON, nonce-authenticated, max **16 MB** per message.
+- `ready`: `{ agent_version, min_swift_version, capabilities[], doc_store_status }`
+- `build_card`: `{ card_type, stage, content, progress }` — streamed to `BuildStreamView`.
+- `gate_card`: `{ gate_type, options[], description }` — blocks until operator responds.
+- `credentials`: `{ anthropic_api_key, openai_api_key, github_token, engineer_id }`
+- `doc_status`: `{ doc_id, doc_name, status, chunk_count, embedded_count }`
+- Unknown message types: **discard and log** — never raise as exceptions.
 
-## DTL Classification Rules
+## Wire Formats and Schemas
 
-- Labels are assigned at data ingestion and are immutable after assignment.
-- Unlabeled data is classified as `CONFIDENTIAL` until explicitly reclassified via audited reclassification flow.
-- Derived data inherits the highest classification of any source input.
-- Label stripping is a security event that must be audited and requires explicit policy authorization.
-- Data must not cross a trust boundary unless DTL labels are verified against the destination's clearance policy.
+### TrustFlow Event Schema
+```json
+{
+  "event_id": "string (CSPRNG-generated, globally unique)",
+  "session_id": "string",
+  "ctx_id": "string (validated CTX-ID token reference)",
+  "ts": "integer (UTC Unix timestamp, millisecond precision)",
+  "event_type": "string (allow | restrict | block | audit)",
+  "payload_hash": "string (SHA-256 hex of serialized action payload)"
+}
+```
 
-## KeychainKit Contract
+### VTZEnforcementDecision Schema
+```json
+{
+  "verdict": "allow | restrict | block",
+  "ctx_id": "string",
+  "vtz_id": "string",
+  "policy_ref": "string",
+  "reason": "string (no secrets)",
+  "ts": "integer (UTC Unix ms)"
+}
+```
 
-- All secrets, keys, tokens, and credentials are stored exclusively via KeychainKit abstractions.
-- KeychainKit wraps macOS Keychain Services; direct `Security.framework` calls from application code are forbidden.
-- Secret retrieval returns opaque handles; raw secret bytes must never be logged, serialized to disk outside Keychain, or included in error messages.
-- KeychainKit operations that fail must fail closed — the caller receives an error, never a fallback or default value.
-- Key deletion is immediate and audited via TrustFlow.
+### XPC Message Schemas
+See Interface Contracts above. All XPC messages are line-delimited JSON, nonce-authenticated. Maximum payload: 16 MB.
 
-## XPC Security Contract
+### Keychain Item Schema (KeychainKit)
+```
+kSecClass:            kSecClassGenericPassword
+kSecAttrService:      "ai.yousource.crafted.<service_identifier>"
+kSecAttrAccount:      "<credential_key>"
+kSecValueData:        <encrypted bytes>
+kSecAttrAccessible:   kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+kSecAttrAccessControl: biometry + device passcode (SecAccessControlCreateFlags)
+```
 
-- All XPC connections are authenticated before any message is processed.
-- XPC message payloads are validated against a strict schema; unknown message types are discarded and logged.
-- XPC transport errors are logged and surfaced to the caller; they never cause silent fallback to an unauthenticated channel.
-- XPC messages must never contain cleartext secrets; use KeychainKit references.
+Note: Additional TRD-specific schemas (beyond TRD-1) are not yet loaded. Add them to this section as TRDs are integrated.
 
-## Forbidden Patterns
+## Error Handling Rules
 
-- `eval()`, `exec()`, `subprocess` of generated content — always forbidden.
-- `async` TrustFlow buffering or batching — always forbidden.
-- Auto-approve, auto-merge, or timeout-based gate resolution — always forbidden.
-- Inferring identity from session state or transport context — always forbidden.
-- Storing secrets in environment variables, config files, or log output — always forbidden.
-- Implicit cross-VTZ access — always forbidden.
-- Mutable DTL labels outside audited reclassification — always forbidden.
-- Software-only CTX-ID validation without hardware-backed key — always forbidden.
+### Mandatory Behavior by Failure Type
+
+| Failure Type | Action | Log Level | Continue? |
+|---|---|---|---|
+| CTX-ID validation failure | Reject immediately, zero partial processing | ERROR | NO — fail closed |
+| CTX-ID expired | Reject, require re-issuance | ERROR | NO — fail closed |
+| CTX-ID missing | Treat as UNTRUSTED, reject | ERROR | NO — fail closed |
+| VTZ policy denial | Block action, produce `VTZEnforcementDecision(verdict=block)` | ERROR | NO — fail closed |
+| Cross-VTZ call without explicit auth | Deny | ERROR | NO — fail closed |
+| TrustFlow emission failure | Log WARN, surface to caller | WARN | YES — but audit the failure |
+| Cryptographic operation failure | Reject, log, never degrade to insecure | ERROR | NO — fail closed |
+| DTL label missing | Treat data as CONFIDENTIAL | WARN | YES — with CONFIDENTIAL enforcement |
+| DTL label verification failure at boundary | Block data transfer | ERROR | NO — fail closed |
+| Audit write failure | Surface immediately, do not block agent | WARN | YES — but surface |
+| XPC unknown message type | Discard and log | WARN | YES — discard silently |
+| SECURITY_REFUSAL from LLM | Stop, gate, log — never rephrase to bypass | ERROR | NO — gate for operator |
+| Keychain read/write failure | Fail closed, surface to caller, never return stale/empty secret | ERROR | NO — fail closed |
+| Path validation failure | Reject write operation | ERROR | NO — fail closed |
+
+### Banned Patterns
+
+```python
+# BANNED — swallowed exception in enforcement path
+try:
+    enforce_policy(action)
+except Exception:
+    pass  # NEVER
+
+# BANNED — silent continue on auth failure
+if not validate_ctx_id(token):
+    logger.debug("invalid token")
+    # missing: return / raise — MUST reject
+
+# BANNED — length-based fix arbitration
+winner = max(claude_fix, openai_fix, key=len)  # Use _score_fix()
+
+# BANNED — eval/exec of generated code
+eval(generated_code)      # NEVER
+exec(generated_code)      # NEVER
+subprocess.run(generated) # NEVER
+
+# BANNED — secrets in error messages
+raise AuthError(f"Token {token} expired")  # Exposes token
+# Correct:
+raise AuthError(f"CTX-ID expired for session {session_id}")
+```
+
+### Required Error Structure
+All errors MUST include: `component`, `operation`, `failure_reason`, `ctx_id` (if available).
+All errors MUST NOT include: keys, tokens, secrets, or cleartext payloads.
+
+## Testing Requirements
+
+- **90% minimum coverage** for all enforcement paths (CTX-ID, VTZ, TrustFlow, DTL, audit).
+- Every enforcement path MUST have at least **one negative test** (what happens on rejection).
+- Every cryptographic operation MUST have a test with **invalid and expired** material.
+- Every TrustFlow emission MUST be tested for **both success and failure** paths.
+- Tests MUST NOT mock the enforcement decision — they may mock external calls but the enforcement logic MUST run.
+- All parsing, policy, trust, and cryptographic logic MUST be tested against **malformed inputs**.
+- **Regression tests** MUST be added for every material bug.
+- **Benchmark tests** MUST exist for: network paths, crypto operations, policy evaluation, telemetry emission.
+- **Fuzz testing** MUST be used where inputs are complex, attacker-controlled, or parser-driven (XPC messages, document import, webhook payloads).
+- Run existing tests before making changes: `cd src && pytest ../tests/ -v --tb=short`
+
+### KeychainKit-Specific Testing
+- Test Keychain write → read round-trip with valid credentials.
+- Test read of nonexistent key → must return explicit error, not empty/nil.
+- Test write with invalid access control → must fail closed.
+- Test behavior when Keychain is locked (biometry not satisfied) → must fail closed, never return stale data.
+- Test concurrent access to the same Keychain item.
+- Test migration path if `kSecAttrService` format changes.
+
+## File Naming and Code Conventions
+
+### Directory Structure
+```
+src/cal/           — Conversation Abstraction Layer components
+src/dtl/           — Data Trust Label components
+src/trustflow/     — TrustFlow audit stream components
+src/vtz/           — Virtual Trust Zone enforcement
+src/trustlock/     — Cryptographic machine identity (TPM-anchored)
+src/mcp/           — MCP Policy Engine
+src/rewind/        — Forge Rewind replay engine
+sdk/connector/     — Forge Connector SDK
+tests/<subsystem>/ — Tests mirror src/ structure exactly
+```
+
+### Python Backend Files
+```
+src/consensus.py       — ConsensusEngine, GENERATION_SYSTEM, SWIFT_GENERATION_SYSTEM + UI_ADDENDUM
+src/build_director.py  — BuildPipeline orchestration, confidence gate, pr_type routing
+src/github_tools.py    — GitHubTool, WebhookReceiver
+src/build_ledger.py    —
