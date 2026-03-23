@@ -150,7 +150,7 @@ jobs:
             # Prior regex matched: openai_api_key = os.environ.get("OPENAI_API_KEY")
             # which is correct code, not a hardcoded secret.
             HITS=$(grep -rn "api_key[[:space:]]*=" src/ 2>/dev/null | grep -v "environ\|getenv\|os\.environ\|config\.\|\.get(" || true)
-            if echo "$HITS" | grep -q "['"][a-zA-Z0-9]"; then
+            if [ -n "$HITS" ]; then
               echo "FAIL: possible hardcoded API key detected"
               echo "$HITS"
               exit 1
