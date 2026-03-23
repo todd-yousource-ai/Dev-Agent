@@ -1,0 +1,177 @@
+{
+  "build_id": "consensusdevagent-315205b1",
+  "subsystem": "ConsensusDevAgent",
+  "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture.",
+  "scope_statement": "Build the Crafted Dev Agent \u2014 a native macOS AI coding agent that uses consensus AI (Claude + GPT-4o in parallel, Claude arbitrating) to develop high-quality software autonomously from TRD/PRD specifications. The system comprises a two-process architecture: a Swift/SwiftUI shell (UI, Touch ID, Keychain, XPC) and a Python 3.12 backend (ConsensusEngine, BuildPipeline, GitHubTool, DocumentStore, BuildLedger, HolisticReview, TRDWorkflow, BuildMemory, BuildRulesEngine), communicating via an authenticated Unix socket with line-delimited JSON, delivering a confidence-gated scope \u2192 PRD decomposition \u2192 PR generation \u2192 self-correction \u2192 lint gate \u2192 20-pass fix loop \u2192 CI gate \u2192 operator approval pipeline as specified across all 16 TRDs.\n\nClarifications:\n  - we building the Crafted Dev Agent itself from its own TRDs\n  - confirmed the full 16 trds are in scope\n  - Anywhere there is ambiguity in the trds ensure the PRDs contain the resolution\n  - Anywhere there is ambiguity in the trds ensure the PRDs contain the resolution. This can be resolved during the build\n  - We are focusing on the Mac build for now\n  - Anywhere there is ambiguity in the trds ensure the PRDs contain the resolution",
+  "created_at": 1774292717.348141,
+  "updated_at": 1774292717.348263,
+  "updated_by": "todd-gould",
+  "prd_plan": [
+    {
+      "prd_id": "PRD-001",
+      "title": "Product Canonicalization, TRD Normalization, and Scope Lock for Crafted Self-Build",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-002",
+      "title": "System Architecture Skeleton and Repository Baseline for Two-Process Crafted",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-003",
+      "title": "Secure Runtime Configuration, Version Contract, and Dependency Governance",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-004",
+      "title": "Swift macOS Shell Foundation: App Lifecycle, Scenes, Navigation, and State Containers",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-005",
+      "title": "Swift Secure Identity Layer: Touch ID, Session State, Keychain, and Session-Key Handling",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-006",
+      "title": "Authenticated Unix-Socket Bridge and Process Lifecycle Between Swift Shell and Python Backend",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-007",
+      "title": "Python Backend Runtime, Command Router, Ready Handshake, and Degraded-State Startup",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-008",
+      "title": "Document Ingestion, Retrieval, Injection Defense, and Cross-Project Knowledge Context",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-009",
+      "title": "Consensus Generation Core with Parallel Providers, Arbitration, Improvement Pass, and Language Routing",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-010",
+      "title": "GitHub Integration, Branch/PR Lifecycle, CI Workflow Generation, and Repository Bootstrap",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-011",
+      "title": "Recovery, Thread State, Mid-PR Checkpoints, Autosave, Context Management, and Cross-Run Learning",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-012",
+      "title": "Multi-Engineer Build Ledger, Claims, Heartbeats, Conflict Detection, and Journal Sharing",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-013",
+      "title": "Build Pipeline Orchestrator: Confidence Gate, PRD Planning, PR Routing, and Operator-Gated Execution Flow",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-014",
+      "title": "Pre-Test Code Quality Chain: Repo Context Fetch, Build Memory Injection, Self-Correction, and Lint Gate",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-015",
+      "title": "Failure Handler, 20-Pass Local Fix Loop, and CI Fix-Cycle Escalation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-016",
+      "title": "Holistic Code Review Workflow with Five Lenses, Report-First Gating, and Fix PRs",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-017",
+      "title": "TRD Development Workflow with Founder, Engineer, and Consultant Modes plus Pipeline Handoff",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-018",
+      "title": "Security Enforcement Layer Across Credentials, Context, Generated Code, Logging, and CI Boundaries",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-019",
+      "title": "Build Stream UI, Cards, Gates, Context Panel, and Operator Workflow Surfaces",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-020",
+      "title": "Settings, Onboarding, Document Import, Notifications, and Shell Utility Flows",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-021",
+      "title": "macOS CI Runner Integration, Workflow Hardening, Signing/Notarization Paths, and Swift Validation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-022",
+      "title": "Comprehensive Test, Regression, and Validation Program for Crafted v1 Mac Build",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-023",
+      "title": "Release Readiness, Operational Runbook Alignment, and Mac v1 Ship Criteria",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    }
+  ],
+  "pr_entries": {},
+  "knowledge_notes": [],
+  "version": 1,
+  "schema_version": 3,
+  "agent_version": "38.154.0"
+}
