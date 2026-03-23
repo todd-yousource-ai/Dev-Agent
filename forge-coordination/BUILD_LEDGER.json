@@ -1,0 +1,156 @@
+{
+  "build_id": "crafteddevagent-1dd9b831",
+  "subsystem": "CraftedDevAgent",
+  "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture.",
+  "scope_statement": "Build the Crafted Dev Agent \u2014 a native macOS two-process AI coding agent (Swift shell + Python backend) that uses dual-model consensus AI (Claude + GPT-4o with Claude arbitrating) to autonomously decompose build intents into ordered PRDs and PRs, generate implementation and test code via parallel consensus generation, validate through a multi-stage quality pipeline (self-correction \u2192 lint gate \u2192 20-pass fix loop \u2192 CI gate), and open GitHub pull requests gated on operator approval. The system encompasses 16 TRD-specified subsystems: macOS Application Shell (Swift/SwiftUI with Touch ID, Keychain, XPC), Consensus Engine, Build Pipeline with confidence-gated scope, Multi-Agent Coordination via GitHub-stored Build Ledger, GitHub Integration Layer, Holistic Code Review (5-lens), TRD Development Workflow (FOUNDER/ENGINEER/CONSULTANT modes), UI/UX Design System, Mac CI Runner, Document Store (FAISS + sentence-transformers), Security Threat Model enforcement, Backend Runtime Startup/Handshake, Recovery and State Management (3-layer persistence, per-PR checkpoints, BuildMemory, BuildRules), Code Quality CI Pipeline, Operational Runbook tooling, and Agent Testing/Validation (FM taxonomy, 35 regression tests).\n\nClarifications:\n  - Same product and Crafted is the product\n  - refer to the trds but resolve any ambiguities in the PRDs\n  - refer to the trds but resolve any ambiguities in the PRDs and use best practices\n  - refer to the trds but resolve any ambiguities in the PRDs and use best practices. Provide later in the build cycle\n  - refer to the trds but resolve any ambiguities in the PRDs and use best practices\n  - refer to the trds but resolve any ambiguities in the PRDs and use best practices\n  - refer to the trds but resolve any ambiguities in the PRDs and use best practices\n  - refer to the trds but resolve any ambiguities in the PRDs and use best practices\n  - refer to the trds but resolve any ambiguities in the PRDs and use best practices\n  - Crafted is the product name\n\nOperator on 'This is a full-platform build spanning 16 TRDs, Swift + Pyth':\nsingle build target\n\nOperator on 'The TRDs reference an existing codebase at version 38.153.0 ':\nrefer to the trds but resolve any ambiguities in the PRDs and use best practices\n\nOperator on 'TRD-8 \u00a724 introduces Figma MCP Server integration and sketch':\nrefer to the trds but resolve any ambiguities in the PRDs and use best practices\n\nOperator on 'The branch naming convention uses 'forge-agent/build/' prefi':\nmigrate to crafted/build/",
+  "created_at": 1774300585.952225,
+  "updated_at": 1774300585.952331,
+  "updated_by": "todd-gould",
+  "prd_plan": [
+    {
+      "prd_id": "PRD-001",
+      "title": "Foundation Architecture, Versioning, and Repository Alignment",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-002",
+      "title": "macOS Swift Shell, App Lifecycle, and Native Runtime Container",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-003",
+      "title": "Authentication, Keychain, Touch ID, and Session Security",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-004",
+      "title": "XPC Bridge, Handshake Protocol, and Backend Process Management",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-005",
+      "title": "Backend Runtime Startup, Compatibility Handshake, and Degraded Operation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-006",
+      "title": "Consensus Engine, Dual-Model Generation, and Arbitration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-007",
+      "title": "Document Store, Retrieval, Injection Defense, and Build Context Assembly",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-008",
+      "title": "GitHub Integration Layer, Branch/Commit/PR Lifecycle, and CI Polling",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-009",
+      "title": "Scope Confidence Gate, PRD Planning, and Ordered Build Decomposition",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-010",
+      "title": "PR Planning, PR Type Routing, and Execution Contracts",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-011",
+      "title": "Per-PR Generation Pipeline, Self-Correction, Lint Gate, and Fix Loop",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-012",
+      "title": "Recovery, Thread State, BuildMemory, BuildRules, and Resume Semantics",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-013",
+      "title": "Multi-Agent Coordination and GitHub Build Ledger",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-014",
+      "title": "Code Quality CI Pipeline, Workflow Generation, and Mac Runner Integration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-015",
+      "title": "Holistic Code Review Workflow and Five-Lens Review Automation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-016",
+      "title": "TRD Development Workflow and Multi-Mode Specification Authoring",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-017",
+      "title": "Security Threat Model Enforcement and Safe Failure Controls",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-018",
+      "title": "UI/UX Design System, Design-to-Code Inputs, and Figma Pipeline",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-019",
+      "title": "Operational Runbook Tooling, Diagnostics, and Operator Controls",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-020",
+      "title": "Agent Testing, Regression Contract, and Validation Harness",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    }
+  ],
+  "pr_entries": {},
+  "knowledge_notes": [],
+  "version": 1,
+  "schema_version": 3,
+  "agent_version": "38.166.0"
+}
