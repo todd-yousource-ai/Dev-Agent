@@ -1,374 +1,89 @@
-# AGENTS.md — Crafted Dev Agent
-
-Instructions for AI agents working in this repository. Read this before making any change.
-
----
-
-## Repository Identity
-
-**Product:** Crafted Dev Agent — a native macOS AI coding agent.
-**Architecture:** Two-process. Swift shell (UI, auth, Keychain, XPC) + Python backend (consensus, pipeline, GitHub).
-**Specification:** 16 TRDs in `forge-docs/`. They are the source of truth. Code must match them.
-**Security model:** TRD-11 governs all components. Read it before touching security-relevant code.
-**Current version:** 38.153.0
-
----
-
-## Before You Write Any Code
-
-1. **Find the TRD that owns the component you are modifying.** Check the TRD Index in `README.md`.
-2. **Read the relevant TRD sections** — especially: interfaces, error contracts, security, testing requirements.
-3. **Check TRD-11** if your change touches credentials, external content, generated code, or CI.
-4. **Run the existing tests** before making changes: `cd src && pytest ../tests/ -v --tb=short`
-
----
-
-## Repository Structure
-
-```
-forge-docs/                      ← ALL TRDs and PRDs live here. Read before building.
-  TRD-1-macOS-Application-Shell.docx
-  TRD-2-Consensus-Engine.docx
-  TRD-3-Build-Pipeline.docx
-  TRD-4-Multi-Agent-Coordination.docx
-  TRD-5-GitHub-Integration.docx
-  TRD-6-Holistic-Code-Review.docx
-  TRD-7-TRD-Development-Workflow.docx
-  TRD-8-UIUX-Design-System.docx
-  TRD-9-Mac-CI-Runner.docx
-  TRD-10-Document-Store.docx
-  TRD-11-Security-Threat-Model.docx
-  TRD-12-Backend-Runtime-Startup.docx
-  TRD-13-Recovery-State-Management.docx
-  TRD-14-Code-Quality-CI-Pipeline.docx
-  TRD-15-Agent-Operational-Runbook.docx
-  TRD-16-Agent-Testing-and-Validation.docx
-
-forge-standards/                 ← Coding standards, interface contracts, decisions
-  ARCHITECTURE.md
-  INTERFACES.md
-  DECISIONS.md
-  CONVENTIONS.md
-  build_rules.md                 ← Auto-generated per-run coding rules (from build_rules.py)
-
-src/                             ← Python backend
-  agent.py                       ← Entry point, REPL, version
-  build_director.py              ← Pipeline orchestration — confidence gate, pr_type routing
-  consensus.py                   ← ConsensusEngine — parallel generation + arbitration
-  providers.py                   ← ClaudeProvider, OpenAIProvider
-  build_ledger.py                ← BuildLedger — multi-engineer coordination
-  github_tools.py                ← GitHubTool — all GitHub API calls
-  document_store.py              ← DocumentStore — embeddings, FAISS, retrieval
-  ci_workflow.py                 ← crafted-ci.yml and crafted-ci-macos.yml generation
-  config.py                      ← AgentConfig — all configuration
-  api_errors.py                  ← classify_api_error(), is_transient_error()
-  path_security.py               ← validate_write_path() — must be called before every write
-  build_memory.py                ← BuildMemory — cross-run PR note persistence (workspace/)
-  build_rules.py                 ← BuildRulesEngine — derives coding rules from build history
-  context_manager.py             ← ContextManager — fix loop history trimming at 30k tokens
-  failure_handler.py             ← FailureHandler — fix loop, _choose_strategy(), _score_fix()
-  lint_gate.py                   ← LintGate — ast → ruff → import pre-test pipeline
-  self_correction.py             ← SelfCorrectionLoop — LLM self-review before tests
-  repo_context.py                ← RepoContextFetcher — existing file content before generation
-  pr_planner.py                  ← PRPlanner, PRSpec (pr_type field), PR_LIST_SYSTEM
-  prd_planner.py                 ← PRDPlanner — PRD decomposition
-  thread_state.py                ← ThreadStateStore — per-PR stage checkpoints
-  ci_checker.py                  ← CIChecker — GitHub Actions polling
-  pr_review_ingester.py          ← PR review comment ingestion
-  repo_bootstrap.py              ← Repository first-use setup
-  audit.py                       ← AuditLogger — build event recording
-  branch_scaffold.py             ← Branch setup (standards, build map)
-  build_map.py                   ← Build interface map — signatures across PRs
-  notifier.py                    ← EmailNotifier — batch complete, CI failure alerts
-  recover.py                     ← Recovery tool
-  FAILURE_TAXONOMY.md            ← 7 FM root cause buckets — v39 no-regression contract
-
-Crafted/                         ← Swift/SwiftUI application shell (TRD-1)
-CraftedTests/                    ← XCTest suites (TRD-9)
-tests/                           ← Python test suite (17 files)
-  test_regression_taxonomy.py    ← 35 regression tests — FM-1 through FM-7 contract
-.github/workflows/
-  crafted-ci.yml                 ← Ubuntu CI (Python, Go, TypeScript, Rust)
-  crafted-ci-macos.yml           ← Mac CI (Swift, xcodebuild) — requires self-hosted runner
-conftest.py                      ← src/ import resolution for pytest (auto-committed by ci_workflow)
-```
-
----
-
-## The Core Loop
-
-When `/prd start <intent>` is called:
-
-```
-ConfidenceGatedScope → PRDPlanStage → PRDGenStage → PRPlanStage
-    → for each PR:
-        RepoContextFetch → SelfCorrection → LintGate → CodeGenStage
-        → FixLoop (_choose_strategy) → CIGateStage → OperatorGateStage
-```
-
-Each stage is a separate class. Max cyclomatic complexity 15 per function. State checkpointed after every stage via `ThreadStateStore`. Never modify the stage sequence — it is in TRD-3.
-
-**PR type routing:** PRSpec.pr_type ("implementation" | "documentation" | "test") controls which stages run. Documentation PRs skip the test loop entirely. Test-only PRs skip the local loop and defer to CI after dependency PRs merge.
-
----
-
-## Scope Confidence Gate
-
-The scope phase now gates on document coverage quality before expensive PRD generation begins:
-
-```python
-# SCOPE_SYSTEM returns confidence (0–100) and coverage_gaps
-# _stage_scope gates at _CONFIDENCE_THRESHOLD = 85
-# Below threshold: shows gaps, offers proceed/answer/cancel
-# One-shot re-scope if operator provides gap answers — no loop
-```
-
----
-
-## Consensus Engine Usage
-
-Always pass language:
-
-```python
-result = await self._consensus.run(
-    task=f"Implement: {spec.title}",
-    context=context_string,
-    language=spec.language,   # "python" | "swift" | "go" | "typescript" | "rust"
-)
-code = result.final_code
-```
-
-`language="swift"` selects `SWIFT_GENERATION_SYSTEM` + optional `SWIFT_UI_ADDENDUM` (injected when UI keywords detected).
-`language="python"` selects `GENERATION_SYSTEM` — security-focused Python rules.
-
-Fix loop strategy is now failure-type-aware via `_choose_strategy(failure_type, attempt, records)` — not a static lookup table. Fix arbitration uses `_score_fix()` based on assertion token overlap — not response length.
-
-Never call providers directly from pipeline code. Always go through `ConsensusEngine.run()`.
-
----
-
-## Document Store Usage
-
-```python
-# Context for generation (primary use case)
-ctx = self._doc_store.auto_context(
-    query=f"{thread.subsystem} {spec.title}",
-    project_id=project_id,
-    doc_filter=thread.relevant_docs or None,   # restrict to relevant TRDs
-    max_chars=24_000,
-)
-
-# Load a specific document (e.g. PRODUCT_CONTEXT.md)
-content = self._doc_store.get_document_content("PRODUCT_CONTEXT.md", project_id)
-```
-
-`auto_context()` returns text already wrapped in injection-defense delimiters. Append it to the user prompt — never the system prompt. Build rules (build_rules.md in Mac-Docs) are loaded automatically alongside TRDs.
-
----
-
-## Build Memory and Build Rules
-
-```python
-# build_memory.json — survives fresh installs, thread state wipes
-# Location: workspace/{engineer_id}/build_memory.json
-# Written: after every successful PR via build_memory.record_pr()
-# DO NOT delete on clean runs — cross-run learning is intentional
-
-# build_rules.md — self-improving coding rules derived from build history
-# Location: Mac-Docs/build_rules.md (loaded by DocumentStore automatically)
-# Written: after each build run when 3+ recurring failure patterns found
-# DO NOT delete on clean runs unless switching to a completely new codebase
-```
-
----
-
-## GitHub Operations
-
-```python
-# ALL GitHub ops go through GitHubTool. Never use the GitHub API directly.
-self._github.commit_file(branch, path, content, message)
-self._github.create_pr(branch, title, body)
-self._github.get_file(path)
-
-# Validate paths before ANY write
-from path_security import validate_write_path
-safe_path = validate_write_path(user_supplied_path)  # returns safe default on traversal
-```
-
-Branch naming convention (mandatory — kept intentionally as forge-agent for compatibility):
-`forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}`
-
-CI workflow files: `crafted-ci.yml` (Ubuntu) and `crafted-ci-macos.yml` (macOS Swift).
-conftest.py is auto-committed by `ci_workflow.ensure()` for src/ import resolution.
-
----
-
-## Error Handling Patterns
-
-**Transient API errors (529, 500):**
-```python
-# In failure_handler.py: _choose_strategy(failure_type, attempt, records)
-# Failure type is the primary signal; attempt count is secondary escalation
-# assertion_error → test_driven immediately
-# import_error / runtime_error → converse first, then test_driven
-# attempt >= 8 → nuclear every 3rd attempt
-# Never retry indefinitely — max 20 local attempts, then move on
-```
-
-**GitHub rate limits:**
-```python
-# 403 primary: exponential backoff (2s → 4s → 8s → 16s → 32s → 64s)
-# 429 secondary: respect Retry-After header
-# ETag caching on all polling endpoints
-```
-
-**Context rot in long fix loops:**
-```python
-# ContextManager auto-trims at 30k tokens
-# Preserves spec-anchor first turn + last 6 messages
-# CI log output truncated at 8k chars (70% head / 30% tail)
-# No action required — automatic
-```
-
-**SECURITY_REFUSAL in LLM output:**
-```python
-# STOP. Do not retry. Do not rephrase.
-# Emit error card. Gate. Log full prompt context.
-# Operator must explicitly override.
-```
-
----
-
-## CI Routing
-
-| Language | Runner | Workflow file |
-|----------|--------|--------------|
-| Python, Go, TypeScript, Rust | `ubuntu-latest` | `crafted-ci.yml` |
-| Swift | `[self-hosted, macos, xcode, x64]` | `crafted-ci-macos.yml` |
-
-Key CI hardening (v38.145+): PYTHONPATH at job level, exit code 5 treated as success (no tests collected), ruff errors-only (E999,F821,F811), concurrency cancel-in-progress, least-privilege permissions, pip caching.
-
----
-
-## Version Management
-
-VERSION file and `pyproject.toml` must always match. The test `TestVersionConsistency.test_version_matches_pyproject` enforces this.
-
-When bumping version: update BOTH files.
-```bash
-echo "38.XX.0" > VERSION
-sed -i 's/version = "38.YY.0"/version = "38.XX.0"/' pyproject.toml
-```
-
----
-
-## v39 No-Regression Contract
-
-Before any v39 modular refactor ships, all 35 regression tests must pass:
-```bash
-pytest tests/test_regression_taxonomy.py -v
-# All 35 must be green. FM-1 through FM-7 buckets covered.
-```
-
----
-
-## Security Checklist (Run Before Every PR)
-
-- [ ] No hardcoded credentials, keys, or tokens in any string literal
-- [ ] No `shell=True` in any subprocess call
-- [ ] No `eval()` or `exec()` on any external content
-- [ ] No HTTP response bodies in log statements
-- [ ] All new file write paths pass through `path_security.validate_write_path()`
-- [ ] All new document chunks pass through `_scan_for_injection()` before storage
-- [ ] External content only in user prompt — never system prompt
-- [ ] New LLM generation calls use `self._gen_system` (language-aware), not hardcoded string
-- [ ] New XPC message types: unknown message types are discarded, not raised
-- [ ] pyyaml present in requirements.txt (needed for CI workflow validation)
-
----
-
-## What Generates What
-
-| You want | Call this |
-|----------|-----------|
-| Implementation code for a PR | `ConsensusEngine.run(task, context, language)` |
-| Tests for a PR | `PRPlanner.generate_tests(spec, impl_code)` |
-| PRD document | `PRDPlanner.generate_prd(item, context)` |
-| PR plan for a PRD | `PRPlanner.plan_prs(prd_result, thread)` |
-| TRD document | `TRDWorkflow.generate_trd(session)` |
-| Holistic review | `ReviewDirector.run(branch, scope, lenses)` |
-| Context string for any of the above | `DocumentStore.auto_context(query, project_id)` |
-| Build memory for generation context | `BuildMemory.pr_generation_injection(pr_title, impl_files, subsystem)` |
-| Self-improving rules for next run | `BuildRulesEngine.analyze_and_update()` — called automatically at build completion |
-
----
-
-## Critical Files — Read Before Modifying
-
-| File | Why It Matters |
-|------|---------------|
-| `src/consensus.py` | Core generation loop — changes here affect every PR the agent builds |
-| `src/build_director.py` | Pipeline orchestration — complexity 15 limit strictly enforced |
-| `src/github_tools.py` | All GitHub I/O — path validation, rate limiting, SHA protocol |
-| `src/path_security.py` | Security boundary — every write path must pass through here |
-| `src/ci_workflow.py` | Generates the YAML that runs in CI — template bugs break every build |
-| `src/failure_handler.py` | Fix loop strategy dispatch — _choose_strategy() is the core escalation logic |
-| `src/pr_planner.py` | PRSpec + PR_LIST_SYSTEM — pr_type field drives all routing decisions |
-| `src/build_memory.py` | Cross-run learning — do not clear without understanding the impact |
-| `src/build_rules.py` | Self-improving rules — output goes to Mac-Docs, loaded by DocumentStore |
-| `src/context_manager.py` | Fix loop history trimming — prevents context rot at 30k tokens |
-| `Crafted/XPCBridge.swift` | The bridge between Swift and Python — wire protocol is TRD-1 §6 |
-| `Crafted/AuthManager.swift` | Touch ID + Keychain — biometric failures must lock session, not degrade |
-| `.github/workflows/crafted-ci-macos.yml` | Mac runner workflow — YAML errors break all Swift CI |
-
----
-
-## Forbidden Patterns
-
-These will fail code review. Do not write them.
-
-```python
-# FORBIDDEN: shell injection
-subprocess.run(cmd, shell=True)
-
-# FORBIDDEN: credential in log
-logger.info(f"Using key: {api_key}")
-
-# FORBIDDEN: credential in prompt
-system = f"Use this key: {self._config.anthropic_api_key}"
-
-# FORBIDDEN: direct execution of generated code
-exec(result.final_code)
-eval(result.final_code)
-
-# FORBIDDEN: path traversal
-open(f"../{user_input}")  # must use path_security.validate_write_path()
-
-# FORBIDDEN: blind GitHub write (no SHA)
-github.create_file(path, content)  # use commit_file() which handles SHA
-
-# FORBIDDEN: context in system prompt
-system = f"Context: {doc_store.auto_context(query)}"  # context goes in user prompt
-
-# FORBIDDEN: ignoring SECURITY_REFUSAL
-if "SECURITY_REFUSAL" in output:
-    output = await self._generate_openai(prompt)  # WRONG — do not retry
-
-# FORBIDDEN: static strategy lookup (replaced by _choose_strategy)
-strategies = ["converse", "test_driven", ...]  # WRONG — use _choose_strategy()
-
-# FORBIDDEN: length-based fix arbitration (replaced by _score_fix)
-winner = max(claude_fix, openai_fix, key=len)  # WRONG — use _score_fix()
-```
-
-```swift
-// FORBIDDEN: force unwrap
-let value = optional!
-
-// FORBIDDEN: LLM API call from Swift
-let client = AnthropicClient(apiKey: keychainValue)
-
-// FORBIDDEN: Keychain read for backend
-let token = KeychainKit.read("github_token")  // Python reads nothing from Keychain
-// Only Swift reads Keychain, only to deliver via XPC
-```
+# AGENTS.md - Forge Platform
+
+Forge is a security-first, policy-enforcing platform that binds every agent action to a cryptographically verified identity (CTX-ID), enforces Virtual Trust Zone (VTZ) boundaries, labels data at ingestion with Data Trust Labels (DTL), and emits synchronous TrustFlow audit events for every security-relevant action — with all failures failing closed.
+
+## Critical Rules - Read Before Writing Any Code
+
+1. Validate CTX-ID **first** at every enforcement entry point and reject immediately on failure with no partial processing.
+2. Check VTZ policy **before** executing any action and never allow implicit cross-VTZ access; cross-VTZ tool calls require explicit policy authorization.
+3. Emit a TrustFlow event synchronously in the enforcement path for every action outcome (`allow`, `restrict`, `block`) and never silently skip emission failures; failed emission is a WARN-level audit event, never a silent skip.
+4. Treat missing CTX-ID as `UNTRUSTED` and never infer identity from session context, transport state, or caller location; expired CTX-ID MUST be rejected.
+5. Fail closed on all trust, identity, policy, and cryptographic errors and never degrade into permissive behavior.
+6. Treat unlabeled data as `CONFIDENTIAL` and verify DTL labels before any trust-boundary crossing; derived data MUST inherit the highest classification of any source.
+7. Never modify a CTX-ID after issuance; rotation MUST mint a new token and invalidate the old token immediately.
+8. Validate every file write with `path_security.validate_write_path()` before execution and reject invalid paths.
+9. Never execute generated code; no `eval`, no `exec`, and no subprocess execution of generated content.
+10. Never place secrets, keys, tokens, credentials, or cleartext sensitive payloads in logs, errors, audit records, or generated code.
+11. Discard and log unknown XPC message types and never raise them as uncaught exceptions.
+12. Gates MUST wait indefinitely for operator input and MUST never auto-approve, bypass, or infer approval; `SECURITY_REFUSAL` output is never bypassed by rephrasing — stop, gate, log.
+13. All external input (documents, PR comments, CI output, XPC messages) is **untrusted** — validate strictly before use; context from external documents goes in the USER prompt, never the SYSTEM prompt.
+14. Audit records are **append-only** (no modification or deletion), MUST be generated **before** execution, and MUST NOT contain secrets, keys, tokens, or cleartext sensitive data.
+15. DTL labels are assigned at data ingestion and are **immutable**; post-ingestion relabeling MUST NOT occur without an explicit audited policy flow.
+
+## Enforcement Pipeline Order
+
+Every agent action MUST pass through this sequence in order:
+
+**CTX-ID validation → VTZ policy check → DTL label verification → action execution → TrustFlow emission → audit record**
+
+No step may be skipped. Failure at any step MUST halt the pipeline and fail closed.
+
+## Architecture Overview
+
+| Subsystem | Path | Enforces | MUST NOT |
+|---|---|---|---|
+| **CAL** (Conversation Abstraction Layer) | `src/cal/` | Calls CTX-ID validation first on every agent action entry point; orchestrates the enforcement pipeline | Never process an action without CTX-ID validation; never skip VTZ check |
+| **VTZ** (Virtual Trust Zones) | `src/vtz/` | Binds each session to exactly one VTZ; enforces zone boundaries on every tool call | Never permit implicit cross-VTZ tool calls; never allow zone escalation without policy authorization |
+| **DTL** (Data Trust Labels) | `src/dtl/` | Assigns immutable labels at data ingestion; verifies labels before trust-boundary crossings | Never permit mutable post-ingestion relabeling without explicit audited policy flow; never treat unlabeled data as anything other than CONFIDENTIAL |
+| **TrustFlow** | `src/trustflow/` | Synchronous emission of audit events for every action outcome (allow, restrict, block) in the enforcement path | Never async-buffer events; never silently drop or skip emission |
+| **TrustLock** | `src/trustlock/` | Cryptographic machine identity and CTX-ID validation using TrustLock public key material; verifies hardware-anchored identity | Never allow software-only validation; never accept expired or tampered CTX-ID |
+| **MCP** (MCP Policy Engine) | `src/mcp/` | Evaluates policy decisions before action execution; returns enforceable allow/restrict/block verdicts | Never produce advisory-only results where enforcement is required; never permit action before policy evaluation completes |
+| **Rewind** | `src/rewind/` | Replay engine for audit reconstruction from append-only audit data | Never require hidden external state to reconstruct security-relevant flows; never modify audit records during replay |
+| **Forge Connector SDK** | `sdk/connector/` | Preserves Forge security contracts at integration boundaries; propagates CTX-ID, VTZ, and DTL through external connectors | Never strip or downgrade security context during cross-system calls; never allow unauthenticated connector sessions |
+
+## AuthKit Session State Machine
+
+AuthKit manages session lifecycle through the following state machine:
+
+### States
+
+| State | Description |
+|---|---|
+| `UNINITIALIZED` | No session exists; CTX-ID has not been presented |
+| `VALIDATING` | CTX-ID presented and undergoing cryptographic verification via TrustLock |
+| `ACTIVE` | CTX-ID validated; session is bound to a VTZ; actions may proceed through the enforcement pipeline |
+| `EXPIRED` | Session timeout has elapsed; all actions MUST be rejected; re-authentication is required |
+| `REVOKED` | CTX-ID has been explicitly invalidated (rotation or administrative action); all actions MUST be rejected |
+| `FAILED` | Validation failed (invalid signature, unknown key, tampered token); session MUST NOT be created; fail closed |
+
+### Transitions
+
+| From | To | Trigger | Action |
+|---|---|---|---|
+| `UNINITIALIZED` | `VALIDATING` | CTX-ID presented at enforcement entry point | Begin TrustLock cryptographic verification |
+| `VALIDATING` | `ACTIVE` | TrustLock verification succeeds and VTZ binding completes | Emit TrustFlow `session.activated` event; start timeout clock |
+| `VALIDATING` | `FAILED` | TrustLock verification fails (invalid signature, expired token, unknown key) | Emit TrustFlow `session.failed` event; reject action; fail closed |
+| `ACTIVE` | `EXPIRED` | Session timeout elapses with no valid activity | Emit TrustFlow `session.expired` event; reject all subsequent actions |
+| `ACTIVE` | `REVOKED` | CTX-ID rotation or administrative revocation | Emit TrustFlow `session.revoked` event; invalidate immediately; reject all subsequent actions |
+| `ACTIVE` | `ACTIVE` | Valid action processed within timeout window | Reset timeout clock; emit TrustFlow action event |
+| `EXPIRED` | `VALIDATING` | New CTX-ID presented for re-authentication | Begin fresh TrustLock verification; old session context MUST NOT carry over |
+| `FAILED` | `UNINITIALIZED` | Caller retries with new CTX-ID | Previous failure context MUST NOT influence new validation |
+| `REVOKED` | `UNINITIALIZED` | New CTX-ID presented after rotation | Old token MUST remain permanently invalid |
+
+### Timeout Contracts
+
+- `session.idle_timeout_ms`: Maximum milliseconds of inactivity before an `ACTIVE` session transitions to `EXPIRED`. MUST be configured per-VTZ policy. MUST NOT be zero or negative. MUST NOT be silently extended.
+- `session.absolute_timeout_ms`: Maximum milliseconds from session activation to mandatory expiration regardless of activity. MUST be configured per-VTZ policy. MUST be greater than or equal to `idle_timeout_ms`. When reached, session transitions to `EXPIRED` unconditionally.
+- `session.validation_timeout_ms`: Maximum milliseconds allowed for TrustLock cryptographic verification in the `VALIDATING` state. If exceeded, session transitions to `FAILED` — never to `ACTIVE`.
+- All timeout values MUST be positive integers. Missing timeout configuration MUST cause session creation to fail closed — never default to permissive values.
+- Timeout expiration MUST emit a TrustFlow event **before** rejecting the action.
+- Expired or revoked sessions MUST NOT be reactivated — a new session MUST be created through full re-authentication.
+
+### Invariants
+
+- A session MUST NOT reach `ACTIVE` without successful TrustLock CTX-ID verification.
+- A session MUST be bound to exactly one VTZ upon entering `ACTIVE`; VTZ binding MUST NOT change for the lifetime of the session.
+- Every state transition MUST emit a TrustFlow event synchronously.
+- No action MUST proceed through the enforcement pipeline unless the session is in `ACTIVE` state.
+- `FAILED`, `EXPIRED`, and `REVOKED` are terminal for the current session — no transition back to `ACTIVE` is permitted.
+- Session state MUST NOT be inferred from transport state, cookies, or caller network location — only from validated CTX-ID.
