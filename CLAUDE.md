@@ -1,106 +1,97 @@
 # CLAUDE.md - Forge Platform
 
-Forge is a trust-enforcement platform for AI agent operations that binds every agent action to a cryptographically verified identity (CTX-ID), enforces policy boundaries (VTZ), labels data at ingestion (DTL), and emits an immutable audit stream (TrustFlow) — all enforced locally on macOS via a two-process Swift/Python architecture with XPC communication.
+Forge is a trust-enforcement platform for AI agent operations that cryptographically binds every agent action to a verified machine identity (CTX-ID), enforces policy boundaries (VTZ), labels data at ingestion (DTL), and emits an immutable audit stream (TrustFlow) — all fail-closed, all auditable, no exceptions.
 
 ## Critical Rules - Read Before Writing Any Code
 
-1. Validate CTX-ID first at every enforcement entry point and reject immediately on validation failure with no partial processing.
-2. Check VTZ policy before executing any action and record `VTZEnforcementDecision` with `verdict=block` on denial.
-3. Emit a synchronous TrustFlow event for every action outcome (`allow`, `restrict`, `block`) and never silently skip emission failures.
-4. Treat missing CTX-ID as `UNTRUSTED` and never infer identity from ambient context, session state, or prior requests.
-5. Treat all external input as untrusted, including documents, PR comments, CI output, XPC messages, and generated code. Context from external documents goes in the USER prompt, never the SYSTEM prompt.
-6. Fail closed on all auth, crypto, identity, trust, and policy errors — reject the action, log the event, surface the failure to the caller with context, never silently continue.
-7. Never execute generated code by `eval`, `exec`, dynamic import, shell execution, or subprocess invocation of generated content — under any circumstance.
-8. Validate every file write with `path_security.validate_write_path()` before execution and reject invalid paths — no exceptions.
-9. Keep secrets, keys, tokens, credentials, and cleartext sensitive payloads out of logs, errors, audit records, generated code, and error messages — not in any code path, not in any environment.
-10. Preserve DTL immutability: assign labels at ingestion, inherit the highest classification in derived data, and treat unlabeled data as `CONFIDENTIAL` until explicitly reclassified.
-11. Discard and log unknown XPC message types — never raise them as uncaught exceptions, never process them.
-12. Never auto-approve gates: operator gates (`gate_card`) block indefinitely until an explicit human response is received — no timeout-based approval.
-13. VTZ boundaries are structural and enforced — cross-VTZ tool calls require explicit policy authorization; implicit access is denied. VTZ policy changes take effect at NEXT CTX-ID issuance, not mid-session.
-14. Build memory and build rules are NEVER cleared automatically — they are persistent learning systems.
-15. `SECURITY_REFUSAL` output is never bypassed by rephrasing — stop, gate, log.
+1. Validate CTX-ID **first** at every enforcement entry point — before any other processing; validation failure MUST result in immediate rejection with no partial execution.
+2. Check VTZ policy before execution of every agent action and emit a `VTZEnforcementDecision` record with `verdict=block` on denial; cross-VTZ tool calls require explicit policy authorization or they are denied.
+3. Emit a synchronous TrustFlow event for every action outcome (`allow`, `restrict`, `block`) in the enforcement path — asynchronous buffering is **not permitted**; emission failures MUST NOT be silently skipped.
+4. Treat missing CTX-ID as `UNTRUSTED` and MUST never infer identity from ambient context, session state, or UI state; expired CTX-ID MUST be rejected; CTX-ID tokens are immutable once issued; rotation creates a new token and the old one is invalidated immediately.
+5. Fail **closed** on all trust, identity, policy, authentication, authorization, and cryptographic errors — reject the action, log the event, surface to caller — never silently continue, never degrade into permissive behavior.
+6. Treat all external input as untrusted — documents, PR comments, CI output, XPC payloads, and generated code metadata — and validate strictly before use; context from external documents goes in the USER prompt, never the SYSTEM prompt.
+7. Never execute generated code via `eval`, `exec`, `subprocess`, shell execution, dynamic subprocess input, or equivalent runtime interpretation — generated code is never executed by the agent.
+8. Validate every file write path with `path_security.validate_write_path()` before the write occurs and reject invalid paths before any filesystem mutation.
+9. Never put secrets, keys, tokens, credentials, or cleartext sensitive payloads in logs, error messages, audit records, TrustFlow payloads, or generated code.
+10. Gates MUST wait indefinitely for operator input — no auto-approve, no bypass, no inferred approval from prior state, ever.
+11. Discard and log unknown XPC message types; never raise them as uncaught exceptions and never process them speculatively.
+12. Build memory and build rules are persistent learning systems and MUST never be cleared automatically, implicitly, or on crash recovery.
+13. DTL labels are assigned at data ingestion, are immutable thereafter, and derived data inherits the **highest** classification of any source; unlabeled data is treated as `CONFIDENTIAL` and MUST NOT cross trust boundaries as low sensitivity.
+14. `try/except/pass` is **banned** in all enforcement code; every exception MUST be caught with explicit handling, logging, and caller notification.
 
 ## Architecture Overview
 
-Forge runs as a two-process model: a **Swift process** (UI, authentication, Keychain, XPC server) and a **Python process** (build intelligence, consensus, enforcement logic). The enforcement order for every agent action is:
+Enforcement order for every agent action: **CTX-ID validation → VTZ policy check → Action execution → TrustFlow emission → Audit record**.
 
-**CTX-ID validation → VTZ policy check → action execution → TrustFlow emission → audit record**
-
-| Subsystem | Path | Enforces | Must NOT |
+| Subsystem | Path | Enforces | MUST NOT |
 |---|---|---|---|
-| **CAL** (Conversation Abstraction Layer) | `src/cal/` | CTX-ID validation at every entry point; action routing through VTZ policy | Never process an action without CTX-ID validation first; never execute actions before identity and policy checks complete |
-| **VTZ** (Virtual Trust Zones) | `src/vtz/` | Boundary access decisions before execution; explicit policy authorization for cross-VTZ calls | Never allow implicit cross-VTZ calls; never permit boundary crossing without policy check |
-| **DTL** (Data Trust Labels) | `src/dtl/` | Immutable label assignment at ingestion; highest-classification inheritance for derived data; label verification before boundary crossing | Never downgrade or strip labels without policy-controlled audit; never allow unlabeled data to cross boundaries without CONFIDENTIAL classification |
-| **TrustFlow** | `src/trustflow/` | Immutable, append-only audit stream; synchronous emission in the enforcement path | Never buffer asynchronously in the enforcement path; never silently drop emission failures |
-| **TrustLock** | `src/trustlock/` | Cryptographic machine identity and CTX-ID validation against TrustLock public key | Never accept software-only validation; never infer identity from ambient context |
-| **MCP** (MCP Policy Engine) | `src/mcp/` | Deterministic and explainable policy evaluation | Never make unenforced advisory-only decisions; never produce non-deterministic policy results |
-| **Rewind** (Forge Rewind) | `src/rewind/` | Replay from append-only audit records | Never depend on hidden mutable external state for replay |
+| **CAL** (Conversation Abstraction Layer) | `src/cal/` | Entry-point validation; calls CTX-ID check first, VTZ policy second, emits TrustFlow on every outcome | MUST NOT process any action before CTX-ID validation completes |
+| **TrustFlow** | `src/trustflow/` | Immutable, append-only audit stream with globally unique event IDs and synchronous emission in the enforcement path | MUST NOT buffer asynchronously; MUST NOT silently drop failed emissions |
+| **CTX-ID / TrustLock** | `src/trustlock/` | Cryptographic machine identity anchored to TPM/Secure Enclave; token issuance, validation, rotation, and revocation; validates CTX-ID against the TrustLock public key | MUST NOT rely on software-only validation; MUST NOT accept expired or missing CTX-ID |
+| **VTZ** (Virtual Trust Zone) | `src/vtz/` | Structural policy boundaries; decides `allow`/`restrict`/`block` before execution; emits `VTZEnforcementDecision` with `verdict` field | MUST NOT allow implicit cross-VTZ actions; MUST NOT treat boundaries as advisory |
+| **DTL** (Data Trust Labels) | `src/dtl/` | Immutable sensitivity labels assigned at ingestion; enforces label inheritance (highest classification wins) | MUST NOT allow unlabeled data to cross trust boundaries as low sensitivity; MUST NOT permit label downgrade after assignment |
+| **MCP Policy Engine** | `src/mcp/` | Control-plane policy decisions; enforces policy as binding enforcement | MUST NOT act as advisory-only; MUST NOT permit policy bypass |
 
-## TrustFlow Event Wire Format
+## Structured Logging Subsystem
 
-Every TrustFlow event MUST include the following fields:
+Path: `src/logging/`
 
-| Field | Type | Description |
-|---|---|---|
-| `event_id` | `string (UUID)` | Unique identifier for this event |
-| `session_id` | `string (UUID)` | Session in which the event occurred |
-| `ctx_id` | `string` | CTX-ID of the agent whose action produced this event |
-| `ts` | `string (ISO 8601)` | Timestamp of event emission |
-| `event_type` | `string` | One of: `action_allow`, `action_restrict`, `action_block`, `vtz_enforcement`, `dtl_violation`, `identity_failure`, `policy_error` |
-| `payload_hash` | `string (SHA-256)` | Hash of the event payload for integrity verification |
+### Purpose
 
-TrustFlow events are append-only and immutable. No event is ever deleted, modified, or reordered after emission.
+All log entries produced by Forge components MUST pass through the structured logging subsystem, which enforces privacy annotations, deterministic field layout, and TrustFlow integration.
 
-## VTZ Enforcement Decision Record
+### Log Entry Schema
 
-When VTZ policy denies an action, the enforcement layer MUST record a `VTZEnforcementDecision` with:
-- `verdict`: one of `allow`, `restrict`, `block`
-- `ctx_id`: the requesting agent's CTX-ID
-- `source_vtz`: the agent's current VTZ
-- `target_vtz`: the VTZ the action would cross into
-- `policy_rule`: the specific policy rule that produced the verdict
-- `ts`: timestamp of the decision
+Every log entry MUST be a structured record with the following fields:
 
-## Structured Logging Subsystem with Privacy Annotations
-
-All log entries MUST be structured (JSON format) and MUST include privacy annotations on every field.
-
-### Privacy Annotation Levels
-
-| Annotation | Meaning | Retention | May appear in external reports |
+| Field | Type | Required | Description |
 |---|---|---|---|
-| `@public` | No privacy restriction | Unlimited | Yes |
-| `@internal` | Internal operational data | Per retention policy | No |
-| `@confidential` | DTL-CONFIDENTIAL or higher | Per DTL policy | Never |
-| `@secret` | Keys, tokens, credentials | NEVER logged | Never |
+| `event_id` | `string` (UUID v4) | MUST | Globally unique identifier for this log entry |
+| `timestamp` | `string` (ISO 8601, UTC) | MUST | Time of emission; MUST be UTC |
+| `level` | `enum` (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL`) | MUST | Severity level |
+| `subsystem` | `string` | MUST | Originating subsystem identifier (e.g., `cal`, `vtz`, `trustflow`, `trustlock`, `dtl`, `mcp`) |
+| `ctx_id` | `string` | MUST when available; `"UNTRUSTED"` when missing | The CTX-ID of the agent or caller associated with this event |
+| `vtz_zone` | `string` | MUST when in VTZ scope | The VTZ zone identifier for the current execution context |
+| `message` | `string` | MUST | Human-readable description of the event |
+| `privacy` | `enum` (`PUBLIC`, `INTERNAL`, `CONFIDENTIAL`, `RESTRICTED`) | MUST | Privacy annotation for this log entry; determines downstream handling |
+| `fields` | `map<string, AnnotatedValue>` | MAY | Additional structured key-value pairs; every value MUST carry a privacy annotation |
+| `trustflow_event_id` | `string` (UUID v4) | MUST when log corresponds to a TrustFlow event | Correlation ID linking to the TrustFlow audit record |
+| `dtl_label` | `string` | MUST | DTL classification of this log entry; defaults to `CONFIDENTIAL` if unset; derived from highest classification of any source data referenced |
 
-### Structured Log Entry Fields
+### AnnotatedValue Schema
 
-Every log entry MUST include:
-
-| Field | Privacy | Type | Description |
+| Field | Type | Required | Description |
 |---|---|---|---|
-| `log_id` | `@public` | `string (UUID)` | Unique log entry identifier |
-| `ts` | `@public` | `string (ISO 8601)` | Timestamp of log emission |
-| `level` | `@public` | `string` | One of: `DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL` |
-| `subsystem` | `@public` | `string` | Originating subsystem (`cal`, `vtz`, `dtl`, `trustflow`, `trustlock`, `mcp`, `rewind`) |
-| `ctx_id` | `@internal` | `string` | CTX-ID of the agent in context (or `NONE` if pre-validation) |
-| `vtz_id` | `@internal` | `string` | Current VTZ identifier |
-| `message` | `@internal` | `string` | Human-readable log message — MUST NOT contain secrets, keys, tokens, or credentials |
-| `event_ref` | `@internal` | `string (UUID) or null` | Reference to associated TrustFlow `event_id` if applicable |
-| `dtl_label` | `@internal` | `string` | DTL classification of the data context — derived data inherits highest source classification |
-| `error_code` | `@public` | `string or null` | Structured error code if this is an error entry |
-| `privacy_annotations` | `@public` | `object` | Map of field name → privacy annotation for every field in this entry |
+| `value` | `any` | MUST | The payload value |
+| `privacy` | `enum` (`PUBLIC`, `INTERNAL`, `CONFIDENTIAL`, `RESTRICTED`) | MUST | Privacy classification of this specific value |
+| `redact_for` | `list<string>` | MAY | List of output contexts where this value MUST be redacted (e.g., `["external_audit", "debug_console"]`) |
 
-### Logging Rules
+### Privacy Annotation Rules
 
-1. Every log entry MUST include a `privacy_annotations` map declaring the privacy level of every field present in that entry.
-2. Fields annotated `@secret` MUST never be written to any log sink — the logging subsystem MUST strip or reject them before serialization.
-3. Fields annotated `@confidential` MUST only be written to log sinks that enforce DTL-CONFIDENTIAL access controls.
-4. Log entries associated with a TrustFlow event MUST include the `event_ref` field pointing to the TrustFlow `event_id`.
-5. Log entries MUST inherit the highest DTL classification of any data they reference — the `dtl_label` field reflects this.
-6. The logging subsystem MUST fail closed: if a log entry cannot be written (sink unavailable, serialization error), the originating action MUST be blocked and a TrustFlow event emitted recording the logging failure.
-7. Log sinks MUST be append-only within a session — no log entry is ever deleted or modified after emission.
-8. The structured logging subsystem MUST validate that no `@secret`-annotated data appears in `message`, `error_code`, or any other string field before emission — this validation is enforced at serialization time, not as an advisory.
-9. Cross-VTZ log aggregation MUST enforce VTZ boundary policy — logs from one VTZ are not readable by another VTZ without explicit policy authorization.
-10. All log entries from the XPC boundary MUST include the originating process identifier (Swift or Python) as an additional `@internal` field named `xpc_origin`.
+1. Every log field MUST carry an explicit privacy annotation; unannotated fields MUST be rejected at emission time — the logger MUST NOT emit a record with unannotated fields.
+2. Privacy annotations are immutable once assigned; downstream processors MUST NOT downgrade a privacy annotation.
+3. When a log entry references data from multiple sources, the entry-level `privacy` field MUST be set to the **highest** classification of any referenced source, consistent with DTL inheritance rules.
+4. Fields annotated `RESTRICTED` MUST be redacted from all outputs except the encrypted audit archive; fields annotated `CONFIDENTIAL` MUST be redacted from external-facing outputs.
+5. Secrets, keys, tokens, credentials, and cleartext sensitive payloads MUST never appear in any log field regardless of annotation — the logger MUST reject entries containing detected secret patterns before emission.
+6. The structured logger MUST expose a `redact(entry, output_context) -> RedactedEntry` function that strips or masks fields based on their `privacy` and `redact_for` annotations for the given output context.
+
+### Emission Rules
+
+1. Log entries associated with enforcement decisions (`allow`, `restrict`, `block`) MUST include a valid `trustflow_event_id` linking to the synchronous TrustFlow event.
+2. Log emission failures MUST fail closed: if the logger cannot write the entry, the originating operation MUST be halted and an error surfaced to the caller — logs MUST NOT be silently dropped.
+3. Log entries MUST be emitted synchronously in enforcement paths; asynchronous emission is permitted only for `TRACE` and `DEBUG` levels outside enforcement paths.
+4. All log sinks (file, network, console) MUST apply the `redact()` function for their output context before writing; no sink may write an unredacted `RESTRICTED` or `CONFIDENTIAL` field to an unauthorized destination.
+
+### Integration Contracts
+
+- **CAL → Logger**: CAL MUST call the structured logger for every enforcement entry-point event, passing the active `ctx_id` and `vtz_zone`.
+- **TrustFlow → Logger**: TrustFlow events MUST include a `trustflow_event_id` that the logger cross-references; the logger MUST reject enforcement-path log entries that lack a corresponding `trustflow_event_id`.
+- **DTL → Logger**: The logger MUST query DTL for the classification of any referenced data and set `dtl_label` accordingly; if DTL classification is unavailable, `dtl_label` defaults to `CONFIDENTIAL`.
+- **TrustLock → Logger**: The logger MUST validate that `ctx_id` is a currently valid CTX-ID before including it in the log entry; if validation fails, `ctx_id` MUST be set to `"UNTRUSTED"` and the entry `privacy` MUST be elevated to `RESTRICTED`.
+
+### Banned Patterns
+
+- `print()`, `NSLog()`, `os_log()` without structured wrapper — all log output MUST go through the structured logging subsystem.
+- `try/except/pass` in any logging code path — every exception MUST be caught with explicit handling.
+- String interpolation of secrets or tokens into log messages — the logger MUST reject entries matching secret patterns.
+- Logging raw request/response bodies without privacy annotation — every field MUST be annotated.
