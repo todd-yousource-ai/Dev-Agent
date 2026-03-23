@@ -4,15 +4,38 @@
   "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture.",
   "scope_statement": "Build the complete Crafted Dev Agent \u2014 a native macOS two-process application (Swift shell + Python backend) that uses consensus AI (Claude + GPT-4o in parallel, Claude arbitrating) to autonomously develop high-quality software from TRD/PRD specifications. The system encompasses all 16 TRD-specified subsystems: macOS Application Shell with Touch ID/Keychain/XPC (TRD-1), Consensus Engine with dual-provider parallel generation and comparative evaluation (TRD-2), Build Pipeline with confidence-gated scope, interleaved PRD-then-PR execution, self-correction, lint gate, and 20-pass fix loop (TRD-3), Multi-Agent Coordination via GitHub-stored Build Ledger with optimistic locking (TRD-4), GitHub Integration Layer with PAT auth, rate limiting, and CI workflow management (TRD-5), Holistic Code Review with 5 lenses (TRD-6), TRD Development Workflow with FOUNDER/ENGINEER/CONSULTANT adaptive modes (TRD-7), SwiftUI Design System with Figma pipeline (TRD-8), Mac CI Runner infrastructure (TRD-9), Document Store with FAISS vector index and injection defense (TRD-10), Security Threat Model enforcement across all components (TRD-11), Backend Runtime Startup and Version Handshake (TRD-12), Recovery and State Management with three-layer persistence, build memory, and self-improving build rules (TRD-13), Code Quality and CI Pipeline with seven false-positive fixes (TRD-14), Operational Runbook procedures (TRD-15), and Testing/Validation with FM taxonomy and 35 regression tests (TRD-16). Per operator gap answers, the PRD decomposition phase will also resolve specifications for: CommandRouter (REPL command dispatch), EmailNotifier (SMTP notification delivery), WebhookReceiver (inbound GitHub event handling), PRDPlanner decomposition algorithm (SCOPE_SYSTEM/PRD_PLAN_SYSTEM prompt schemas), and scripts/build_python_bundle.sh (Python bundling for CI).\n\nClarifications:\n  - leverage the prd process to resolve this issue\n  - leverage the prd process to resolve this issue\n  - not sandboxed for now\n  - leverage the prd process to resolve this issue\n  - leverage the prd process to resolve this issue\n  - leverage the prd process to resolve this issue\n  - crafted-agent",
   "created_at": 1774294842.584346,
-  "updated_at": 1774294842.584565,
+  "updated_at": 1774295476.889458,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
       "prd_id": "PRD-001",
       "title": "macOS Shell Foundation and Application Lifecycle",
-      "status": "pending",
+      "status": "in_progress",
       "engineer_id": "",
-      "pr_ids": []
+      "pr_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22
+      ]
     },
     {
       "prd_id": "PRD-002",
@@ -162,9 +185,818 @@
       "pr_ids": []
     }
   ],
-  "pr_entries": {},
+  "pr_entries": {
+    "1": {
+      "prd_id": "PRD-001",
+      "pr_num": 1,
+      "title": "Bootstrap Swift package workspace with eight module targets",
+      "branch": "",
+      "status": "available",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Create the macOS Swift package foundation with Package.swift defining all eight module targets (AppShell, AuthKit, KeychainKit, XPCBridge, ProcessManager, BuildStream, Settings, DocImport) with their inter-module dependency graph matching TRD-1 Section 2.3. Each target gets a placeholder public enum namespace file. Includes .gitignore, minimum deployment target (macOS 14), and ensures the dependency DAG compiles with no cycles.",
+      "impl_files": [
+        "Package.swift",
+        "Sources/AppShell/AppShell.swift",
+        "Sources/AuthKit/AuthKit.swift",
+        "Sources/KeychainKit/KeychainKit.swift",
+        "Sources/XPCBridge/XPCBridge.swift",
+        "Sources/ProcessManager/ProcessManager.swift",
+        "Sources/BuildStream/BuildStream.swift",
+        "Sources/Settings/Settings.swift",
+        "Sources/DocImport/DocImport.swift",
+        ".gitignore"
+      ],
+      "test_files": [
+        "Tests/WorkspaceTests/ModuleDependencyGraphTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "low",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "2": {
+      "prd_id": "PRD-001",
+      "pr_num": 2,
+      "title": "Implement structured logging subsystem with privacy annotations",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        1
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Add shared logging infrastructure using os.Logger with privacy annotations per TRD-1 Section 9 and TRD-11 SEC-LOG controls. Define subsystem/category constants for each module, convenience Logger extensions, privacy annotation helpers (.private for secrets, .public for user-visible data), and log-level configuration. Every subsequent module imports this for consistent structured logging. No secrets or credentials are ever logged at any level.",
+      "impl_files": [
+        "Sources/AppShell/Logging/CraftedLogger.swift",
+        "Sources/AppShell/Logging/LogSubsystems.swift",
+        "Sources/AppShell/Logging/LogCategories.swift",
+        "Sources/AppShell/Logging/LogPrivacy+Extensions.swift"
+      ],
+      "test_files": [
+        "Tests/AppShellTests/AppLoggerTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": true,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "3": {
+      "prd_id": "PRD-001",
+      "pr_num": 3,
+      "title": "Implement Settings schema, defaults bootstrap, and migration infrastructure",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        1,
+        2
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Build the Settings module foundation: SettingsSchema struct defining all UserDefaults keys with typed accessors, default values, and validation rules per TRD-1 Section 15. Add SchemaMigrator for sequential version-based migrations. Per TRD-11 SEC-CRED, no secrets/tokens/passwords stored in UserDefaults \u2014 only non-sensitive preferences (theme, window size, onboarding-complete flag, backend port, log level). Includes SettingsValidator for runtime validation of loaded values.",
+      "impl_files": [
+        "Sources/Settings/SettingsSchema.swift",
+        "Sources/Settings/SettingsKeys.swift",
+        "Sources/Settings/SettingsDefaults.swift",
+        "Sources/Settings/SettingsStore.swift",
+        "Sources/Settings/SchemaMigrator.swift",
+        "Sources/Settings/SettingsValidator.swift"
+      ],
+      "test_files": [
+        "Tests/SettingsTests/SettingsSchemaTests.swift",
+        "Tests/SettingsTests/SchemaMigratorTests.swift",
+        "Tests/SettingsTests/SettingsValidatorTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": true,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "4": {
+      "prd_id": "PRD-001",
+      "pr_num": 4,
+      "title": "Implement KeychainKit secret storage abstractions",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        1,
+        2
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Build KeychainKit with typed SecretDescriptor models, a KeychainClient protocol with CRUD operations, error mapping via KeychainError, and a protocol-based client for future use by AuthKit, XPCBridge, ProcessManager, and Settings. Secret material never touches UserDefaults or logs. Includes a mock conformance for testing.",
+      "impl_files": [
+        "Sources/KeychainKit/KeychainStoring.swift",
+        "Sources/KeychainKit/KeychainClient.swift",
+        "Sources/KeychainKit/KeychainItem.swift",
+        "Sources/KeychainKit/KeychainError.swift",
+        "Sources/KeychainKit/SecretDescriptor.swift",
+        "Sources/KeychainKit/KeychainMock.swift"
+      ],
+      "test_files": [
+        "Tests/KeychainKitTests/KeychainClientTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": true,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "5": {
+      "prd_id": "PRD-001",
+      "pr_num": 5,
+      "title": "Implement AuthKit session state machine and timeout contracts",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        1,
+        2,
+        4
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Create AuthKit session primitives: AuthState enum (locked, authenticating, authenticated, expired, error), SessionCoordinator protocol, timeout policy with SessionTimeoutController, and LocalAuthentication integration seams. Depends on KeychainKit for credential retrieval. Includes AuthError type and mock coordinator for tests.",
+      "impl_files": [
+        "Sources/AuthKit/AuthProviding.swift",
+        "Sources/AuthKit/AuthState.swift",
+        "Sources/AuthKit/AuthError.swift",
+        "Sources/AuthKit/AuthSessionCoordinator.swift",
+        "Sources/AuthKit/AuthPolicy.swift",
+        "Sources/AuthKit/LocalAuthenticationClient.swift",
+        "Sources/AuthKit/SessionTimeoutController.swift",
+        "Sources/AuthKit/AuthMock.swift"
+      ],
+      "test_files": [
+        "Tests/AuthKitTests/AuthSessionCoordinatorTests.swift",
+        "Tests/AuthKitTests/SessionTimeoutControllerTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": true,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "6": {
+      "prd_id": "PRD-001",
+      "pr_num": 6,
+      "title": "Tests for package topology, logging privacy, settings bootstrap, and keychain boundaries",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        2,
+        3,
+        4
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Focused cross-cutting test PR: validate package target topology assumptions, verify logging privacy annotations redact .private fields, test settings bootstrap edge cases and migration rollback, verify keychain mock behavior, and confirm no secret leakage into UserDefaults. Includes LogPrivacyAuditTest scanning Logger call sites.",
+      "impl_files": [],
+      "test_files": [
+        "Tests/WorkspaceTests/PackageTopologySnapshotTests.swift",
+        "Tests/SecurityTests/LogPrivacyAuditTests.swift",
+        "Tests/SettingsTests/SettingsBootstrapRegressionTests.swift",
+        "Tests/SecurityTests/KeychainBoundaryTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": true,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "7": {
+      "prd_id": "PRD-001",
+      "pr_num": 7,
+      "title": "Wire Settings to UserDefaults persistence with KeychainKit-aware validation",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        3,
+        4,
+        5
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Integrate settings schema with UserDefaults persistence via SettingsRepository, add secure secret references through KeychainKit, and AuthKit-aware validation hooks. SettingsBootstrapper coordinates first-launch defaults registration and migration execution. This gives AppShell a fully functional settings layer.",
+      "impl_files": [
+        "Sources/Settings/SettingsRepository.swift",
+        "Sources/Settings/UserDefaultsSettingsStore.swift",
+        "Sources/Settings/SettingsBootstrapper.swift",
+        "Sources/Settings/SettingsValidationContext.swift"
+      ],
+      "test_files": [
+        "Tests/SettingsTests/SettingsRepositoryTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": true,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "8": {
+      "prd_id": "PRD-001",
+      "pr_num": 8,
+      "title": "Define AppState observable session model and session phase enum",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        2,
+        5,
+        7
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Implement the core AppState class as an @Observable type owned by AppShell. Defines SessionPhase enum (locked, onboarding, authenticating, ready, error) with validated transitions. Holds current session phase, optional authenticated user context (no credentials per SEC-CRED), window state, and a published error channel. Single source of truth for app lifecycle state with doc comments describing the state machine.",
+      "impl_files": [
+        "Sources/AppShell/State/AppState.swift",
+        "Sources/AppShell/State/SessionPhase.swift",
+        "Sources/AppShell/State/StartupSnapshot.swift"
+      ],
+      "test_files": [
+        "Tests/AppShellTests/AppStateTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "9": {
+      "prd_id": "PRD-001",
+      "pr_num": 9,
+      "title": "Implement single-instance enforcement (TRD-1 Section 12)",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        2
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Add multi-instance prevention per TRD-1 Section 12. On launch, check for existing running instance via NSRunningApplication or file-based lock in Application Support directory. If duplicate detected, activate existing instance and terminate self. SingleInstanceGuard utility includes lock file cleanup on termination. Structured logging emits message on duplicate-launch detection.",
+      "impl_files": [
+        "Sources/AppShell/Lifecycle/SingleInstanceGuard.swift"
+      ],
+      "test_files": [
+        "Tests/AppShellTests/SingleInstanceGuardTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "low",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "10": {
+      "prd_id": "PRD-001",
+      "pr_num": 10,
+      "title": "Implement CraftedError protocol and global error presentation layer",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        8
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Add global error handling: CraftedError protocol that all module errors conform to with user-facing message, recovery suggestion, and log-safe debug description (no secrets per SEC-LOG). ErrorPresenter subscribes to AppState's error channel and displays alerts/banners via SwiftUI .alert modifiers. ErrorBannerView for inline error display. Wired into root view hierarchy.",
+      "impl_files": [
+        "Sources/AppShell/Error/CraftedError.swift",
+        "Sources/AppShell/Error/ErrorPresenter.swift",
+        "Sources/AppShell/Views/ErrorBannerView.swift"
+      ],
+      "test_files": [
+        "Tests/AppShellTests/CraftedErrorTests.swift",
+        "Tests/AppShellTests/ErrorPresenterTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": true,
+      "estimated_complexity": "low",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "11": {
+      "prd_id": "PRD-001",
+      "pr_num": 11,
+      "title": "Implement XPCBridge message model and socket transport abstraction",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        1,
+        2,
+        4
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Build XPCBridge foundation with typed XPCMessage request/response envelopes, codec interfaces for serialization, socket transport abstraction, peer identity validation hooks, and XPCBridgeClient. Required for backend communication. Excludes process launch concerns (handled by ProcessManager).",
+      "impl_files": [
+        "Sources/XPCBridge/XPCChannelProviding.swift",
+        "Sources/XPCBridge/XPCMessage.swift",
+        "Sources/XPCBridge/XPCCodec.swift",
+        "Sources/XPCBridge/SocketTransport.swift",
+        "Sources/XPCBridge/PeerIdentity.swift",
+        "Sources/XPCBridge/XPCBridgeClient.swift",
+        "Sources/XPCBridge/XPCError.swift",
+        "Sources/XPCBridge/XPCBridgeStub.swift"
+      ],
+      "test_files": [
+        "Tests/XPCBridgeTests/XPCCodecTests.swift",
+        "Tests/XPCBridgeTests/SocketTransportTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": true,
+      "estimated_complexity": "high",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "12": {
+      "prd_id": "PRD-001",
+      "pr_num": 12,
+      "title": "Implement ProcessManager backend launch and health monitoring",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        1,
+        2,
+        4,
+        11
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Create ProcessManager abstractions for backend process launch via ProcessLauncher, PID tracking, health checks via ProcessHealthMonitor, restart policy skeleton, and integration points to XPCBridge and KeychainKit for the two-process architecture startup lifecycle.",
+      "impl_files": [
+        "Sources/ProcessManager/ProcessManaging.swift",
+        "Sources/ProcessManager/BackendProcessConfiguration.swift",
+        "Sources/ProcessManager/ProcessLauncher.swift",
+        "Sources/ProcessManager/ProcessHealthMonitor.swift",
+        "Sources/ProcessManager/RestartPolicy.swift",
+        "Sources/ProcessManager/ProcessError.swift",
+        "Sources/ProcessManager/ProcessManagerStub.swift"
+      ],
+      "test_files": [
+        "Tests/ProcessManagerTests/ProcessManagerTests.swift",
+        "Tests/ProcessManagerTests/RestartPolicyTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": true,
+      "estimated_complexity": "high",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "13": {
+      "prd_id": "PRD-001",
+      "pr_num": 13,
+      "title": "Implement BuildStream models and observable stream state",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        1,
+        11
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Build the BuildStream module with BuildCard models, gate/progress state representations, BuildStreamStore protocol, and observable BuildStreamViewModel for the shell UI to render backend build activity. Receives updates via XPCBridge transport.",
+      "impl_files": [
+        "Sources/BuildStream/BuildStreamProviding.swift",
+        "Sources/BuildStream/BuildCard.swift",
+        "Sources/BuildStream/BuildGateState.swift",
+        "Sources/BuildStream/BuildProgress.swift",
+        "Sources/BuildStream/BuildStreamStore.swift",
+        "Sources/BuildStream/BuildStreamViewModel.swift",
+        "Sources/BuildStream/BuildStreamStub.swift"
+      ],
+      "test_files": [
+        "Tests/BuildStreamTests/BuildStreamViewModelTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "14": {
+      "prd_id": "PRD-001",
+      "pr_num": 14,
+      "title": "Implement DocImport document selection and extraction foundation",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        1,
+        2
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Create DocImport with drag-and-drop parsing interfaces, NSOpenPanel wrapper, supported file type detection, extracted document metadata models, and DocumentImportCoordinator for future PRD ingestion workflows.",
+      "impl_files": [
+        "Sources/DocImport/DocumentImporting.swift",
+        "Sources/DocImport/ImportedDocument.swift",
+        "Sources/DocImport/DocumentTypeDetector.swift",
+        "Sources/DocImport/OpenPanelClient.swift",
+        "Sources/DocImport/DocumentImportCoordinator.swift",
+        "Sources/DocImport/DocImportStub.swift"
+      ],
+      "test_files": [
+        "Tests/DocImportTests/DocumentTypeDetectorTests.swift",
+        "Tests/DocImportTests/DocumentImportCoordinatorTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "15": {
+      "prd_id": "PRD-001",
+      "pr_num": 15,
+      "title": "Integration tests for XPCBridge, ProcessManager, BuildStream, and cross-module security",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        5,
+        7,
+        11,
+        12,
+        13
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Integration tests validating: message envelope round-tripping through XPCCodec, process lifecycle handshake simulation, build stream update propagation, AuthKit+Settings secure storage boundaries, and session timeout flows. Confirms no secret leakage across module boundaries.",
+      "impl_files": [],
+      "test_files": [
+        "Tests/IntegrationTests/XPCProcessHandshakeTests.swift",
+        "Tests/IntegrationTests/BuildStreamTransportTests.swift",
+        "Tests/IntegrationTests/SecureSettingsIntegrationTests.swift",
+        "Tests/IntegrationTests/AuthStateSettingsFlowTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": true,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "16": {
+      "prd_id": "PRD-001",
+      "pr_num": 16,
+      "title": "Implement dependency injection container and environment wiring",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        5,
+        7,
+        8,
+        11,
+        12,
+        13,
+        14
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Create DependencyContainer in AppShell that resolves all module protocols (AuthProviding, KeychainStoring, XPCChannelProviding, ProcessManaging, BuildStreamProviding, DocumentImporting) to their real or stub implementations. Factory methods, @Environment keys for SwiftUI injection, and registration configuration. Ensures future PRDs can swap implementations without modifying AppShell.",
+      "impl_files": [
+        "Sources/AppShell/DI/DependencyContainer.swift",
+        "Sources/AppShell/DI/EnvironmentKeys.swift",
+        "Sources/AppShell/DI/DependencyContainer+Registration.swift"
+      ],
+      "test_files": [
+        "Tests/AppShellTests/DependencyContainerTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "17": {
+      "prd_id": "PRD-001",
+      "pr_num": 17,
+      "title": "Implement root flow controller and navigation decision tree",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        8,
+        10,
+        16
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Build the RootFlowController that decides between onboarding, authentication gate, and main shell presentation based on settings bootstrap state, session status from AuthKit, and backend readiness from ProcessManager. Drives AppState transitions. This is the central orchestration logic connecting all modules.",
+      "impl_files": [
+        "Sources/AppShell/Navigation/RootFlowController.swift",
+        "Sources/AppShell/Navigation/RootRoute.swift"
+      ],
+      "test_files": [
+        "Tests/AppShellTests/RootFlowControllerTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "high",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "18": {
+      "prd_id": "PRD-001",
+      "pr_num": 18,
+      "title": "Implement SwiftUI scene structure, root container views, and window lifecycle",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        9,
+        16,
+        17
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Build the SwiftUI App entry point (@main CraftedDevAgentApp) with: WindowGroup scene definition, root ContentView switching on SessionPhase via RootFlowController, NSWindow delegate hooks for close/minimize/restore, menu bar customization stubs, window size/position restoration from Settings. Integrates SingleInstanceGuard in app init. AppState injected via environment. Accessibility identifiers on all root views per TRD-1 Section 13.",
+      "impl_files": [
+        "Sources/AppShell/CraftedDevAgentApp.swift",
+        "Sources/AppShell/Scenes/RootScene.swift",
+        "Sources/AppShell/Views/ContentView.swift",
+        "Sources/AppShell/Views/RootContainerView.swift",
+        "Sources/AppShell/Views/MainShellView.swift",
+        "Sources/AppShell/Lifecycle/WindowDelegate.swift",
+        "Sources/AppShell/Accessibility/AccessibilityIdentifiers.swift"
+      ],
+      "test_files": [
+        "Tests/AppShellTests/RootContainerViewTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "high",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "19": {
+      "prd_id": "PRD-001",
+      "pr_num": 19,
+      "title": "Implement onboarding entry flow and first-launch detection",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        7,
+        17,
+        18
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Build onboarding SwiftUI views gated by Settings.onboardingComplete flag. On first launch (flag false), present OnboardingContainerView with: welcome step, PAT entry prompt (value passed to KeychainKit \u2014 never stored in UserDefaults), repo configuration step, completion step that sets onboardingComplete. Step state machine navigation. If complete, root router skips to auth gate. All views have accessibility identifiers. PAT handling is security-critical.",
+      "impl_files": [
+        "Sources/AppShell/Views/Onboarding/OnboardingContainerView.swift",
+        "Sources/AppShell/Views/Onboarding/OnboardingStep.swift",
+        "Sources/AppShell/Views/Onboarding/WelcomeStepView.swift",
+        "Sources/AppShell/Views/Onboarding/PATEntryStepView.swift",
+        "Sources/AppShell/Views/Onboarding/RepoConfigStepView.swift",
+        "Sources/AppShell/Views/Onboarding/CompletionStepView.swift",
+        "Sources/AppShell/Views/Onboarding/OnboardingViewModel.swift"
+      ],
+      "test_files": [
+        "Tests/AppShellTests/OnboardingViewModelTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": true,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "20": {
+      "prd_id": "PRD-001",
+      "pr_num": 20,
+      "title": "Implement app lifecycle event handling: activate, resign, terminate",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        8,
+        9,
+        12,
+        18
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Implement NSApplicationDelegate hooks (via AppDelegate adapter) for: applicationDidBecomeActive (resume session timers), applicationWillResignActive (pause/lock after timeout per AuthKit), applicationWillTerminate (flush settings, clean up SingleInstanceGuard lock file, log shutdown). Integrates with AppState for phase transitions on lifecycle events. AppBootstrapPipeline coordinates startup sequence. Structured logging for each lifecycle transition.",
+      "impl_files": [
+        "Sources/AppShell/Lifecycle/AppLifecycleHandler.swift",
+        "Sources/AppShell/Lifecycle/AppDelegateAdapter.swift",
+        "Sources/AppShell/Lifecycle/AppBootstrapPipeline.swift"
+      ],
+      "test_files": [
+        "Tests/AppShellTests/AppLifecycleHandlerTests.swift",
+        "Tests/AppShellTests/AppBootstrapPipelineTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "21": {
+      "prd_id": "PRD-001",
+      "pr_num": 21,
+      "title": "Tests for scene routing, onboarding security, DI resolution, and accessibility",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        10,
+        17,
+        19
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Unit and UI-level tests: verify RootFlowController selects correct route for each SessionPhase; test OnboardingViewModel step transitions and completion flag persistence; verify onboarding PAT entry does NOT store value in UserDefaults (SEC-CRED compliance); verify DependencyContainer resolves all six protocols; verify accessibility identifiers present on root views; test CraftedError implementations never include secrets in debug descriptions.",
+      "impl_files": [],
+      "test_files": [
+        "Tests/AppShellTests/RootViewRouterTests.swift",
+        "Tests/SecurityTests/OnboardingSecurityTests.swift",
+        "Tests/AppShellTests/AccessibilityIdentifierTests.swift",
+        "Tests/SecurityTests/ErrorLeakageTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": true,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "22": {
+      "prd_id": "PRD-001",
+      "pr_num": 22,
+      "title": "End-to-end integration test: app launch \u2192 onboarding \u2192 ready state",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        19,
+        20,
+        21
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Integration test that exercises the full app lifecycle: single-instance guard activates, settings defaults registered, AppState starts in correct phase, onboarding flow displays on first launch, completing onboarding transitions to authenticating/ready phase (with auth stub), window restores size from settings, lifecycle events correctly transition state, structured logs emitted for each event. Validates entire PRD-001 foundation as a cohesive unit.",
+      "impl_files": [],
+      "test_files": [
+        "Tests/IntegrationTests/AppLaunchIntegrationTests.swift",
+        "Tests/IntegrationTests/OnboardingIntegrationTests.swift",
+        "Tests/IntegrationTests/AppLifecycleIntegrationTests.swift"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "high",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    }
+  },
   "knowledge_notes": [],
-  "version": 1,
+  "version": 2,
   "schema_version": 3,
   "agent_version": "38.156.0"
 }
