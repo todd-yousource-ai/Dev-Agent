@@ -1,906 +1,299 @@
-# Code Conventions — Forge Platform
+# Code Conventions - Forge Platform
 
-This document defines coding conventions, naming rules, and implementation patterns for the full Forge platform.
+## File and Directory Naming
 
-Forge is a multi-subsystem platform with strict specification ownership. All code must align with the controlling TRD for the subsystem being modified. Where repository guidance, subsystem guidance, and TRDs differ, the TRD is authoritative.
+1. Put Python application code under `src/` only. Do not add production Python modules at repository root.
 
-## Core Principles
+2. Use `snake_case.py` for every Python file name.
+   - Correct: `src/build_director.py`
+   - Incorrect: `src/BuildDirector.py`, `src/build-director.py`
 
-- Follow the owning TRD before writing code.
-- Do not invent interfaces, states, or error semantics not defined by spec.
-- Keep boundaries explicit between subsystems.
-- Prefer small, composable units over broad utility layers.
-- Never weaken security, auditability, or determinism for convenience.
-- Generated code must never be executed automatically.
-- Tests must mirror source structure and verify documented contracts.
+3. Use the established subsystem directories exactly as named:
+   - `src/cal/`
+   - `src/dtl/`
+   - `src/trustflow/`
+   - `src/vtz/`
+   - `src/trustlock/`
+   - `src/mcp/`
+   - `src/rewind/`
+   - `sdk/connector/`
 
-## Repository and Architectural Context
+4. Place tests under `tests/<subsystem>/` and mirror the `src/` structure exactly.
+   - If code is in `src/mcp/policy_engine.py`, the test file must be in `tests/mcp/test_policy_engine.py`.
 
-Forge follows a two-process architecture:
+5. Keep canonical platform modules at their defined file paths. Do not rename or duplicate them:
+   - `src/consensus.py`
+   - `src/build_director.py`
+   - `src/github_tools.py`
+   - `src/build_ledger.py`
+   - `src/document_store.py`
+   - `src/ci_workflow.py`
 
-- Swift shell:
-  - UI
-  - authentication
-  - Keychain and secret custody
-  - XPC / platform-native integration
-- Python backend:
-  - consensus
-  - pipeline orchestration
-  - generation
-  - GitHub operations
-  - policy and trust services
+6. Keep CI workflow file names exactly:
+   - `crafted-ci.yml`
+   - `crafted-ci-macos.yml`
 
-Processes communicate over authenticated local IPC using line-delimited JSON. Maintain strict serialization contracts and explicit error envelopes across process boundaries.
+7. Do not create alternate CI workflow names such as `ci.yml`, `macos.yml`, or `github-actions.yml` for the crafted pipeline.
 
-## TRD Authority and Change Discipline
+8. Treat `conftest.py` as CI-managed when added by `ci_workflow.ensure()` for `src/` imports. Do not hand-edit generated import-bootstrapping content unless the generator is being changed in the same PR.
 
-Before modifying code:
+9. Name new directories in lowercase `snake_case`, except for externally mandated names already defined by the project.
 
-1. Identify the owning TRD.
-2. Read interface, state machine, error contract, security, and testing sections.
-3. For anything involving credentials, generated content, CI, policy, or external content, read the security TRD first.
-4. Run relevant existing tests before changing behavior.
-5. Preserve contract compatibility unless the TRD explicitly changes it.
+10. Name non-test support files by function, not by ticket or temporary purpose.
+    - Correct: `src/trustflow/audit_writer.py`
+    - Incorrect: `src/trustflow/fix_final_v2.py`
 
-## General Style Rules
+11. When writing any file from code using a path that can be influenced externally, validate the path before the write.
+    ```python
+    from path_security import validate_write_path
 
-### Naming
+    safe_path = validate_write_path(user_supplied_path)
+    ```
+    Apply this before opening, overwriting, appending, copying, moving, or generating files.
 
-- Use names that reflect domain meaning, not implementation detail.
-- Prefer explicit nouns for types and explicit verbs for operations.
-- Avoid abbreviations unless they are established subsystem names.
-- Keep subsystem prefixes in filenames and package paths, not in every symbol unless required for clarity.
+12. Never write directly to a user-supplied path string without `validate_write_path(...)`, even for temp files, exported reports, workflow files, or generated docs.
 
-### Composition
+13. Branch names must use this exact format:
+    `forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}`
 
-- Prefer pure functions for transformations.
-- Keep side effects at edges.
-- Separate:
-  - parsing
-  - validation
-  - authorization
-  - execution
-  - persistence
-  - audit emission
-
-### State Handling
-
-- Model state transitions explicitly.
-- Make invalid states unrepresentable where language features allow.
-- Use typed enums for finite states.
-- Do not encode state with booleans when a discrete state model exists.
-
-### Contracts
-
-- All external boundaries must use explicit schemas.
-- Validate inputs at boundaries, not deep in business logic.
-- Log and audit with structured fields.
-- Never silently coerce security-relevant input.
-
----
-
-## File and Directory Naming (exact `src/` layout)
-
-Use the following canonical layout for platform subsystems:
-
-```text
-src/
-  cal/           # Conversation Abstraction Layer
-  dtl/           # Data Trust Label
-  trustflow/     # TrustFlow audit stream
-  vtz/           # Virtual Trust Zone enforcement
-  trustlock/     # Cryptographic machine identity
-  mcp/           # MCP Policy Engine
-  rewind/        # Forge Rewind replay engine
-
-sdk/
-  connector/     # Forge Connector SDK
-
-tests/
-  cal/
-  dtl/
-  trustflow/
-  vtz/
-  trustlock/
-  mcp/
-  rewind/
-  connector/
-```
-
-### Directory Rules
-
-- Tests must mirror `src/` structure exactly.
-- Do not create top-level subsystem aliases outside this layout.
-- Shared code belongs in a clearly named shared package only if:
-  - used by multiple subsystems
-  - domain-neutral
-  - not violating trust boundaries
-- Do not move code across subsystem boundaries to “simplify” imports without architectural approval.
-
-### File Naming Rules
-
-Use lowercase snake_case for source filenames unless the language requires otherwise.
-
-Examples:
-
-- `src/cal/session_router.py`
-- `src/dtl/label_parser.py`
-- `src/trustflow/audit_stream.py`
-- `src/vtz/policy_enforcer.py`
-- `src/trustlock/device_identity.py`
-- `src/mcp/policy_compiler.py`
-- `src/rewind/replay_coordinator.py`
-
-Swift files should use PascalCase filenames matching the primary type when that is the established project convention:
-
-- `ShellViewModel.swift`
-- `AuthenticatedSocketClient.swift`
-- `TrustZonePanel.swift`
-
-### File Naming Patterns by Role
-
-Use these suffixes consistently:
-
-- `_model` for internal data models
-- `_schema` for serialization schemas
-- `_parser` for parsing logic
-- `_validator` for validation logic
-- `_service` for orchestration logic
-- `_client` for outbound adapters
-- `_adapter` for provider or protocol bridges
-- `_store` for persistence access
-- `_repository` only when implementing aggregate repository semantics
-- `_controller` only for UI or API request coordination
-- `_engine` for deterministic execution engines
-- `_coordinator` for multi-step orchestration
-- `_emitter` for event production
-- `_consumer` for event handling
-- `_policy` for policy definitions or evaluators
-- `_auth` for authentication-specific logic
-- `_crypto` for cryptographic operations
-
-Avoid vague filenames such as:
-
-- `utils.py`
-- `helpers.py`
-- `misc.py`
-- `common.py`
-
-If a file would otherwise be named one of the above, the responsibility is too broad or too poorly named.
+14. Keep `{subsystem_slug}` aligned with the actual subsystem directory or logical component name, using lowercase hyphenated slug form in the branch even if the code directory uses underscores.
 
 ---
 
 ## Class and Function Naming
 
-## Class Naming
+1. Name classes in `PascalCase`.
+   - Correct: `ConsensusEngine`, `BuildPipeline`, `GitHubTool`, `BuildLedger`, `DocumentStore`
 
-Use PascalCase for classes, structs, enums, protocols, and typed interfaces.
+2. Name functions and methods in `snake_case`.
+   - Correct: `claim_build()`, `release_lock()`, `retrieve_chunks()`
 
-Examples:
+3. Name module-level constants in `UPPER_SNAKE_CASE`.
+   - Correct: `GENERATION_SYSTEM`, `SWIFT_GENERATION_SYSTEM`, `UI_ADDENDUM`
 
-- `ConversationSession`
-- `TrustLabel`
-- `AuditStreamEmitter`
-- `VirtualTrustZone`
-- `MachineIdentityProvider`
-- `PolicyDecisionEngine`
-- `ReplayCoordinator`
+4. Prefix private helpers with a single leading underscore.
+   - Correct: `_load_policy()`
+   - Incorrect: `loadPolicyInternal()`, `__load_policy()` unless name mangling is specifically required
 
-### Class Naming Patterns
+5. Name boolean-returning functions and variables as predicates or state flags.
+   - Preferred: `is_docs_pr`, `has_claim`, `should_retry`, `can_write`
 
-- Entities: noun
-  - `TrustLabel`
-  - `PolicyDecision`
-- Services: noun + role
-  - `TrustLabelValidator`
-  - `AuditStreamWriter`
-- Engines: noun + `Engine`
-  - `ConsensusEngine`
-  - `PolicyEvaluationEngine`
-- Coordinators: noun + `Coordinator`
-  - `ReplayCoordinator`
-- Adapters: provider/protocol + `Adapter`
-  - `GitHubAdapter`
-  - `SocketProtocolAdapter`
-- Clients: target + `Client`
-  - `ProviderClient`
-  - `AuditIngestClient`
-- Stores: subject + `Store`
-  - `LabelStore`
-  - `IdentityStore`
+6. Preserve the existing docs-PR detector naming pattern for compatibility when implementing similar logic.
+   - Use names like `_docs_keywords` for keyword sets
+   - Use names like `_is_docs_pr(...)` or `is_docs_pr(...)` for detectors
 
-### Protocol / Interface Naming
+7. Use noun names for stateful service classes and verb names for action functions.
+   - Class: `WebhookReceiver`
+   - Function: `receive_webhook()`
 
-- Swift protocols: noun or capability adjective ending in `Providing`, `Serving`, `Coordinating`, `Validating`, etc.
-  - `IdentityProviding`
-  - `PolicyEvaluating`
-- Python abstract interfaces: noun + `Protocol` where typing protocols are used.
-  - `AuditEmitterProtocol`
+8. Name exception classes with the `Error` suffix.
+   - Correct: `BuildLedgerError`, `PathValidationError`
 
-Do not use `I` prefixes such as `IClient`.
+9. Name test files as `test_<module>.py`.
 
-## Function and Method Naming
+10. Name test functions as `test_<behavior>()`.
+    - Correct: `test_validate_write_path_blocks_traversal()`
 
-Use lower_snake_case in Python and lowerCamelCase in Swift.
+11. For Swift/macOS accessibility identifiers, use this exact shape:
+    `{module}-{component}-{role}-{context?}`
 
-Functions should be verb-first and intention-revealing.
+12. Set `.accessibilityIdentifier(...)` on all interactive SwiftUI/AppKit/UIKit elements.
 
-Examples:
+13. Build accessibility identifiers from stable domain tokens, not user-facing text.
+    - Correct: `"settings-anthropic-key-test-button"`
+    - Incorrect: `"Test API Key Button"`
 
-- `parse_label`
-- `validate_policy`
-- `emit_audit_event`
-- `replay_session`
-- `derive_machine_identity`
-- `evaluate_access_request`
+14. Include entity IDs in accessibility identifiers where row/card/button instances repeat in a list.
+    - Correct: `"navigator-project-row-\(projectId)"`
+    - Correct: `"stream-gate-yes-button-\(gateId)"`
 
-### Function Naming Rules
+15. Use the role token consistently in accessibility identifiers:
+    - `button`
+    - `field`
+    - `row`
+    - `card`
 
-- `get_` only when retrieval is cheap and non-mutating.
-- `load_` for I/O-backed retrieval.
-- `build_` for in-memory object construction.
-- `create_` for new persisted or externally visible objects.
-- `derive_` for deterministic values computed from trusted inputs.
-- `resolve_` for selection among candidates.
-- `validate_` for contract checks returning structured validation results or raising documented validation errors.
-- `enforce_` for policy decisions that may reject or stop execution.
-- `emit_` for event publication.
-- `record_` for persistence of facts or logs.
-- `replay_` for deterministic historical execution.
-- `sync_` for convergence with external systems.
-
-Avoid ambiguous verbs:
-
-- `handle`
-- `process`
-- `manage`
-- `do`
-
-Use them only when the abstraction is genuinely generic and documented.
-
-## Boolean and Predicate Naming
-
-Use affirmative predicates.
-
-Python:
-
-- `is_trusted`
-- `has_valid_signature`
-- `can_replay`
-
-Swift:
-
-- `isTrusted`
-- `hasValidSignature`
-- `canReplay`
-
-Avoid negated names such as `is_not_allowed`.
-
-## Constant Naming
-
-- Python constants: `UPPER_SNAKE_CASE`
-- Swift static constants: `lowerCamelCase` unless global constants must match platform conventions
-
-Examples:
-
-- `MAX_REPLAY_DEPTH`
-- `defaultSocketTimeout`
-
-## Enum Case Naming
-
-- Python enum values: `UPPER_SNAKE_CASE` or lowercase string values if serialized
-- Swift enum cases: `lowerCamelCase`
-
-Use domain-specific names:
-
-- `trusted`
-- `quarantined`
-- `rejected`
-- `pendingReview`
+16. Do not abbreviate accessibility identifier segments unless the abbreviation is already a subsystem term.
 
 ---
 
 ## Error and Exception Patterns
 
-Errors must be explicit, typed, and stable at subsystem boundaries.
+1. Raise specific exceptions. Do not use bare `Exception` for domain failures.
 
-## General Error Rules
+2. Define domain exceptions in the module that owns the domain behavior unless multiple modules share them; in that case, place them in a dedicated subsystem exceptions module.
 
-- Do not raise generic `Exception` except at true top-level guards.
-- Do not swallow exceptions.
-- Preserve original causes when translating errors.
-- Use structured error payloads at IPC, API, and storage boundaries.
-- Security-relevant failures must be auditable.
-- Validation failures must be distinguishable from system failures.
-- Policy denials must be distinguishable from execution errors.
+3. Include actionable context in every raised exception message.
+   - Correct: `raise BuildLedgerError(f"claim already held for build_id={build_id}")`
+   - Incorrect: `raise BuildLedgerError("ledger failed")`
 
-## Error Taxonomy
+4. When rejecting or repairing a file write target, validate first with `validate_write_path(...)` and operate only on the returned safe path.
 
-Use these broad categories consistently:
+5. Do not catch path validation issues and then continue using the original path.
 
-- `ValidationError`
-  - malformed input
-  - schema mismatch
-  - missing required fields
-- `PolicyError` / `PolicyDeniedError`
-  - explicit policy rejection
-- `AuthenticationError`
-  - identity proof failure
-- `AuthorizationError`
-  - insufficient permission
-- `TrustError`
-  - trust chain, label, or attestation failure
-- `SerializationError`
-  - encode/decode failure
-- `TransportError`
-  - IPC/network framing or delivery failure
-- `PersistenceError`
-  - storage read/write failure
-- `ConcurrencyError`
-  - lock, race, or ordering contract violation
-- `ReplayError`
-  - non-replayable or invalid replay state
-- `ExternalServiceError`
-  - upstream provider failure
-- `InternalInvariantError`
-  - impossible state indicating bug
+6. Convert external library errors into Forge-domain exceptions at module boundaries where the rest of the subsystem expects domain semantics.
 
-Use subsystem-specific variants where appropriate:
+7. In webhook, build, CI, and ledger flows, log or raise with the identifiers needed for traceability:
+   - `build_id`
+   - `pr_number`
+   - `workflow_name`
+   - `job_id`
+   - `project_id`
+   Include whichever identifiers are available in that code path.
 
-- `DTLValidationError`
-- `TrustFlowAppendError`
-- `VTZPolicyDeniedError`
-- `TrustLockAttestationError`
-- `MCPCompilationError`
-- `RewindConsistencyError`
+8. Re-raise exceptions with preserved cause when wrapping:
+   ```python
+   try:
+       ...
+   except SomeLibraryError as exc:
+       raise BuildPipelineError(f"failed to enqueue workflow for pr_number={pr_number}") from exc
+   ```
 
-## Error Naming
+9. Do not silently swallow exceptions in orchestration code such as `build_director`, `ci_workflow`, `github_tools`, or `build_ledger`.
 
-Exception classes must end with `Error`.
+10. Return structured failure values only when the API explicitly uses result objects; otherwise, raise exceptions.
 
-Examples:
-
-- `LabelParseError`
-- `AuditEmissionError`
-- `IdentityDerivationError`
-- `PolicyCompilationError`
-
-Do not use:
-
-- `LabelException`
-- `BadThingHappened`
-- `Failure`
-
-## Error Translation
-
-At subsystem boundaries:
-
-- translate low-level library errors into Forge domain errors
-- preserve the original cause
-- attach stable context fields
-- avoid leaking secrets, token material, raw credentials, or untrusted content in messages
-
-Python example pattern:
-
-```python
-try:
-    record = schema.loads(payload)
-except SomeLibraryError as exc:
-    raise SerializationError("failed to decode audit payload") from exc
-```
-
-Swift example pattern:
-
-```swift
-do {
-    return try decoder.decode(EventEnvelope.self, from: data)
-} catch {
-    throw TransportError.decodeFailed(underlying: error)
-}
-```
-
-## Error Payload Structure
-
-Structured error payloads crossing process boundaries should include:
-
-- `code`
-- `message`
-- `subsystem`
-- `operation`
-- `retryable`
-- `details` - sanitized, structured only
-- `correlation_id`
-
-Never send stack traces across public or cross-process contracts unless explicitly defined for debug-only channels.
+11. In tests, assert the exception type and a meaningful fragment of the message.
 
 ---
 
-## Per-Subsystem Naming Rules
+## Import and Module Organisation
 
-## `src/cal/` — Conversation Abstraction Layer
+1. Group imports in this order:
+   1. Python standard library
+   2. Third-party packages
+   3. Local project imports from `src` packages/modules
 
-Purpose: conversation/session abstraction, prompt envelope shaping, turn state, provider-facing conversation coordination.
+2. Separate each import group with one blank line.
 
-### Naming Rules
+3. Prefer absolute imports from `src` modules/packages over relative imports when importing across subsystem boundaries.
+   - Preferred: `from src.build_ledger import BuildLedger`
+   - Avoid: `from ..build_ledger import BuildLedger`
 
-Use `conversation`, `session`, `turn`, `prompt`, `context`, and `envelope` consistently.
+4. Use relative imports only for tightly coupled modules within the same package when absolute imports would reduce clarity.
 
-Preferred type names:
+5. Import concrete symbols when a module uses only a small, explicit surface.
+   - Preferred: `from path_security import validate_write_path`
 
-- `ConversationSession`
-- `TurnState`
-- `PromptEnvelope`
-- `ContextWindow`
-- `SessionCoordinator`
-- `ConversationAdapter`
+6. Do not use wildcard imports.
 
-Preferred file names:
+7. Keep one import per line except when importing multiple symbols from the same module and the line remains readable.
 
-- `session_coordinator.py`
-- `turn_state_model.py`
-- `prompt_envelope_schema.py`
-- `context_window_validator.py`
+8. If a module’s main purpose maps to one primary class, keep that class in the same-named file when possible.
+   - `src/document_store.py` contains `DocumentStore`
 
-Avoid mixing UI terms with CAL internals. Do not name CAL objects as `chat_*`.
+9. Keep orchestration logic in orchestration modules and do not move it into utility modules.
+   - `src/build_director.py` owns build pipeline orchestration
+   - `src/ci_workflow.py` owns crafted CI workflow generation/ensuring
 
-### CAL Function Patterns
+10. Do not place GitHub webhook receiver logic outside `src/github_tools.py` unless the subsystem is being intentionally refactored in the same change.
 
-- `build_prompt_envelope`
-- `append_turn`
-- `trim_context_window`
-- `serialize_session_state`
-- `restore_session_state`
+11. Keep generated workflow file handling in `src/ci_workflow.py`, including logic related to `crafted-ci.yml` and `crafted-ci-macos.yml`.
 
-## `src/dtl/` — Data Trust Label
+12. Keep constants near the top of the module, below imports.
 
-Purpose: label creation, parsing, validation, propagation, and trust metadata enforcement.
+13. Order module contents as:
+   1. Imports
+   2. Constants
+   3. Exceptions
+   4. Data structures/types
+   5. Main classes/functions
+   6. Private helpers
 
-### Naming Rules
-
-Always use `label` for the core artifact, not `tag`, `marker`, or `stamp`.
-
-Preferred type names:
-
-- `TrustLabel`
-- `LabelDescriptor`
-- `LabelValidator`
-- `LabelPropagationPolicy`
-- `TrustClassification`
-
-Preferred file names:
-
-- `label_parser.py`
-- `label_validator.py`
-- `label_propagation_policy.py`
-- `trust_classification_model.py`
-
-### DTL Function Patterns
-
-- `parse_label`
-- `validate_label`
-- `propagate_label`
-- `classify_content_trust`
-- `merge_label_constraints`
-
-## `src/trustflow/` — TrustFlow Audit Stream
-
-Purpose: append-only audit events, provenance tracking, trace correlation, audit export.
-
-### Naming Rules
-
-Use `audit`, `event`, `stream`, `append`, `provenance`, and `correlation` consistently.
-
-Preferred type names:
-
-- `AuditEvent`
-- `AuditEnvelope`
-- `AuditStreamWriter`
-- `ProvenanceRecord`
-- `CorrelationContext`
-
-Preferred file names:
-
-- `audit_event_schema.py`
-- `audit_stream_writer.py`
-- `provenance_record_model.py`
-- `correlation_context.py`
-
-### TrustFlow Function Patterns
-
-- `append_audit_event`
-- `emit_provenance_record`
-- `load_audit_stream`
-- `correlate_event_chain`
-- `export_audit_segment`
-
-Never imply mutability of historical audit records. Avoid verbs like `update_audit_event`.
-
-## `src/vtz/` — Virtual Trust Zone
-
-Purpose: enforcement boundaries, isolation policies, execution gating, trust-zone decisions.
-
-### Naming Rules
-
-Use `zone`, `boundary`, `enforcement`, `isolation`, `gate`, and `attestation` consistently.
-
-Preferred type names:
-
-- `VirtualTrustZone`
-- `ZoneBoundary`
-- `EnforcementGate`
-- `IsolationPolicy`
-- `ZoneAttestation`
-
-Preferred file names:
-
-- `zone_boundary.py`
-- `enforcement_gate.py`
-- `isolation_policy.py`
-- `zone_attestation_validator.py`
-
-### VTZ Function Patterns
-
-- `enforce_zone_boundary`
-- `evaluate_isolation_policy`
-- `attest_zone_state`
-- `gate_sensitive_operation`
-- `reject_boundary_violation`
-
-Use denial-specific naming when behavior is security-enforcing.
-
-## `src/trustlock/` — Cryptographic Machine Identity
-
-Purpose: TPM-/hardware-anchored machine identity, attestation, key custody, device binding.
-
-### Naming Rules
-
-Use `identity`, `attestation`, `device`, `binding`, `key`, and `custody` consistently.
-
-Preferred type names:
-
-- `MachineIdentity`
-- `DeviceBinding`
-- `AttestationBundle`
-- `KeyCustodyService`
-- `IdentityProvider`
-
-Preferred file names:
-
-- `machine_identity.py`
-- `device_binding_store.py`
-- `attestation_bundle_schema.py`
-- `key_custody_service.py`
-
-### TrustLock Function Patterns
-
-- `derive_machine_identity`
-- `verify_attestation_bundle`
-- `bind_device_identity`
-- `rotate_custody_key`
-- `load_identity_material`
-
-Never name sensitive key operations with generic verbs like `handle_key`.
-
-## `src/mcp/` — MCP Policy Engine
-
-Purpose: policy definition, compilation, evaluation, decision explanation, enforcement integration.
-
-### Naming Rules
-
-Use `policy`, `rule`, `decision`, `effect`, `evaluation`, and `compiler` consistently.
-
-Preferred type names:
-
-- `PolicyRule`
-- `PolicyDecision`
-- `PolicyCompiler`
-- `PolicyEvaluationEngine`
-- `DecisionExplanation`
-
-Preferred file names:
-
-- `policy_rule_model.py`
-- `policy_compiler.py`
-- `policy_evaluation_engine.py`
-- `decision_explanation.py`
-
-### MCP Function Patterns
-
-- `compile_policy`
-- `evaluate_policy`
-- `resolve_policy_effect`
-- `explain_decision`
-- `enforce_policy_decision`
-
-Distinguish clearly between:
-- compilation
-- evaluation
-- enforcement
-- explanation
-
-Do not collapse these into one generic `process_policy`.
-
-## `src/rewind/` — Forge Rewind Replay Engine
-
-Purpose: deterministic replay, timeline reconstruction, historical state re-evaluation, diffing.
-
-### Naming Rules
-
-Use `replay`, `timeline`, `checkpoint`, `frame`, `reconstruction`, and `consistency` consistently.
-
-Preferred type names:
-
-- `ReplayCoordinator`
-- `ReplayFrame`
-- `TimelineCheckpoint`
-- `StateReconstruction`
-- `ConsistencyVerifier`
-
-Preferred file names:
-
-- `replay_coordinator.py`
-- `replay_frame_model.py`
-- `timeline_checkpoint_store.py`
-- `consistency_verifier.py`
-
-### Rewind Function Patterns
-
-- `replay_timeline`
-- `load_checkpoint`
-- `reconstruct_state`
-- `verify_replay_consistency`
-- `diff_replayed_output`
-
-Use `replay` only for deterministic historical reproduction, not generic retries.
-
-## `sdk/connector/` — Forge Connector SDK
-
-Purpose: external integration surface for connectors, adapters, and partner/system interoperability.
-
-### Naming Rules
-
-Use `connector`, `integration`, `capability`, `manifest`, `binding`, and `transport` consistently.
-
-Preferred type names:
-
-- `ConnectorManifest`
-- `ConnectorCapability`
-- `ConnectorBinding`
-- `IntegrationClient`
-- `ConnectorTransport`
-
-Preferred file names:
-
-- `connector_manifest_schema.py`
-- `connector_binding.py`
-- `integration_client.py`
-- `connector_transport.py`
-
-### Connector Function Patterns
-
-- `load_connector_manifest`
-- `validate_connector_capability`
-- `bind_connector`
-- `negotiate_transport`
-- `invoke_connector_operation`
-
-Do not leak internal subsystem terms into SDK contracts unless explicitly part of the public spec.
+14. Avoid circular imports by extracting shared types/helpers into a lower-level subsystem module rather than importing orchestration modules into each other.
 
 ---
 
-## Cross-Language Conventions
+## Comment and Documentation Rules
 
-## Python
+1. Write comments only when they convey behavior, constraints, or rationale that is not obvious from the code.
 
-- Follow PEP 8 with project-specific domain naming above.
-- Use type hints on all public functions, methods, and module-level constants where applicable.
-- Prefer `dataclass` or explicit typed models for structured data.
-- Use `Enum` for finite states and decision types.
-- Module-level globals are discouraged except immutable constants.
-- Side-effectful code must not run at import time.
+2. Do not restate the code in comments.
+   - Avoid:
+     ```python
+     # Increment counter
+     counter += 1
+     ```
 
-### Python Imports
+3. When a rule is compatibility-driven, state the compatibility target explicitly in the comment.
+   - Example: branch naming retained as `forge-agent` for compatibility
 
-- Standard library
-- third-party
-- local package imports
+4. Document any write-path security boundary directly above the write logic if the source path can be externally influenced.
+   - Example:
+     ```python
+     # Validate externally influenced path before write to prevent traversal.
+     safe_path = validate_write_path(target_path)
+     ```
 
-Use absolute imports from the repository root package when available. Avoid circular imports by extracting contracts to schema/model modules.
+5. When code depends on CI-managed side effects, note the source of truth.
+   - Example: `conftest.py` is auto-committed by `ci_workflow.ensure()`
 
-## Swift
+6. Keep docstrings imperative or descriptive and specific.
+   - Good: `"""Generate crafted CI workflow files for the repository."""`
+   - Bad: `"""This function does stuff."""`
 
-- Follow Swift API Design Guidelines.
-- Types use `PascalCase`; members use `lowerCamelCase`.
-- Prefer value types for immutable state.
-- Use `enum` for finite state and typed errors.
-- Mark access control explicitly for nontrivial modules.
-- Avoid force unwraps except in tightly controlled test-only code.
-- Bridge IPC payloads with explicit `Codable` schemas.
+7. For public classes and functions, document inputs and outputs when they are not obvious from type signatures.
 
----
+8. Include exact required external filenames and identifier formats in docs/comments when the code depends on them.
+   - `crafted-ci.yml`
+   - `crafted-ci-macos.yml`
+   - `forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}`
 
-## Serialization and Schema Conventions
+9. When implementing docs-PR detection logic derived from legacy behavior, note that the v5.0 keyword list was removed in v6.0 if that distinction affects behavior.
 
-- Every cross-process message must have a named schema/model.
-- Do not pass raw dictionaries where a typed schema is appropriate.
-- Version serialized contracts explicitly when they may evolve.
-- Use stable field names; do not rename serialized keys casually.
-- Separate wire schemas from domain models when semantics differ.
+10. Do not leave TODO comments without an owner or a concrete trigger condition.
+    - Required form: `TODO(<owner>): <action> when <condition>`
 
-Preferred naming:
-
-- `*_schema.py`
-- `EventEnvelope`
-- `PolicyDecisionPayload`
-- `ReplayFrameRecord`
+11. Keep markdown docs and code examples aligned with actual file names and module names in the repository.
 
 ---
 
-## Logging, Audit, and Observability
+## FullPlatform-Specific Patterns
 
-- Use structured logging only.
-- Include subsystem and operation names in every meaningful log.
-- Include correlation IDs for multi-step flows.
-- Do not log:
-  - secrets
-  - raw tokens
-  - private keys
-  - unredacted credentials
-  - untrusted generated code bodies unless explicitly permitted by TRD
-- Security decisions and policy denials must emit audit events where required by spec.
+1. In FullPlatform code that routes builds, keep PR-type routing logic in `src/build_director.py` or a directly associated module imported by it.
 
-Preferred field names:
+2. Keep confidence gate logic with build pipeline orchestration, not in unrelated utility modules.
 
-- `subsystem`
-- `operation`
-- `correlation_id`
-- `session_id`
-- `policy_id`
-- `decision`
-- `trust_level`
-- `retryable`
+3. Put GitHub integration entry points in `src/github_tools.py`, including tool wrappers and webhook receiver behavior.
 
----
+4. Put claim/release/heartbeat ledger behavior in `src/build_ledger.py`.
 
-## Testing Conventions
+5. Put chunk/embed/retrieve document operations in `src/document_store.py`.
 
-## Test Layout
+6. Put workflow creation/ensuring behavior for `crafted-ci.yml` and `crafted-ci-macos.yml` in `src/ci_workflow.py`.
 
-Tests must mirror source structure exactly.
+7. If FullPlatform code writes workflow files, repository support files, generated tests, or docs from externally influenced paths, call `validate_write_path(...)` immediately before the write target is resolved.
 
-Examples:
+8. For CI bootstrap behavior, assume `conftest.py` may be auto-committed by `ci_workflow.ensure()` to make `src/` imports work. Code that verifies CI artifacts must treat that file as expected output, not stray noise.
 
-```text
-src/dtl/label_validator.py
-tests/dtl/test_label_validator.py
+9. When adding docs-PR classification behavior for legacy compatibility, keep the keyword set in a private constant such as `_docs_keywords` and the detector in a predicate such as `_is_docs_pr(...)`.
 
-src/mcp/policy_compiler.py
-tests/mcp/test_policy_compiler.py
-```
+10. If implementing legacy docs-PR keyword matching, perform matching against normalized lowercase text.
+    - Pattern:
+      ```python
+      title_lower = title.lower()
+      is_docs = any(kw in title_lower for kw in _docs_keywords)
+      ```
 
-## Test Naming
+11. In Swift/macOS FullPlatform UI, every interactive control must set `.accessibilityIdentifier(...)` using the mandated token order.
+    - Required examples:
+      - `"auth-touchid-button"`
+      - `"auth-passcode-button"`
+      - `"settings-anthropic-key-field"`
+      - `"settings-anthropic-key-test-button"`
+      - `"settings-anthropic-key-reveal-button"`
 
-Use descriptive names that capture behavior and condition.
+12. In navigator and stream/gate UI lists, append the stable entity identifier at the end of the accessibility identifier.
+    - Required patterns:
+      - `"navigator-project-row-{projectId}"`
+      - `"stream-gate-card-{gateId}"`
+      - `"stream-gate-yes-button-{gateId}"`
+      - `"stream-gate-skip-button-{gateId}"`
+      - `"stream-gate-stop-button-{gateId}"`
 
-Python:
+13. Do not omit the final entity ID segment from repeated interactive elements in Swift/macOS views.
 
-- `test_validate_label_rejects_missing_origin`
-- `test_evaluate_policy_returns_deny_for_untrusted_input`
+14. When generating or checking branch names from automation, emit exactly the mandatory branch format and zero-pad PR numbers to 3 digits.
+    - Example: `pr-007-add-ledger-heartbeat`
 
-Swift:
-
-- `testSocketClientRejectsInvalidHandshake()`
-- `testTrustZonePanelRendersDeniedState()`
-
-## Test Rules
-
-- Test documented contracts, not incidental implementation.
-- Include positive, negative, and boundary cases.
-- Add regression tests for every bug fix.
-- Security-sensitive code must include failure-mode tests.
-- Replay and audit systems require determinism tests.
-- Policy engines require explanation and denial-path tests.
-
----
-
-## Code Patterns to Prefer
-
-## Validation Then Execution
-
-```python
-def evaluate_policy(request: PolicyRequest) -> PolicyDecision:
-    validate_policy_request(request)
-    return policy_engine.evaluate(request)
-```
-
-## Boundary Translation
-
-```python
-def load_attestation_bundle(raw_payload: bytes) -> AttestationBundle:
-    try:
-        return attestation_bundle_schema.loads(raw_payload)
-    except DecodeError as exc:
-        raise SerializationError("invalid attestation bundle payload") from exc
-```
-
-## Explicit Decision Objects
-
-```python
-@dataclass(frozen=True)
-class PolicyDecision:
-    effect: PolicyEffect
-    reason: str
-    rule_id: str
-```
-
-## Append-Only Audit Pattern
-
-```python
-def append_audit_event(event: AuditEvent) -> None:
-    validated = validate_audit_event(event)
-    stream_writer.append(validated)
-```
-
----
-
-## Patterns to Avoid
-
-- generic utility dumping grounds
-- hidden side effects in model constructors
-- broad catch-and-log without rethrow or translation
-- silent policy fallback
-- implicit trust elevation
-- mutable shared state across subsystem boundaries
-- schema-less cross-process payloads
-- using replay terminology for retry behavior
-- using audit terminology for mutable operational logs
-
----
-
-## Naming Anti-Patterns
-
-Avoid these classes of names:
-
-- vague:
-  - `Manager`
-  - `Handler`
-  - `Processor`
-  - `Thing`
-- misleading:
-  - `TrustedLabel` when trust is only asserted, not verified
-  - `SecureClient` without a documented security property
-- overloaded:
-  - `Context` without qualification
-  - `State` without scope
-  - `Data` as a primary type name
-
-Prefer:
-
-- `SessionCoordinator`
-- `AuditStreamWriter`
-- `PolicyEvaluationEngine`
-- `LabelValidationResult`
-
----
-
-## Pull Request and Change Hygiene
-
-- Keep changes scoped to one logical concern.
-- Name files and symbols according to subsystem ownership.
-- If introducing a new abstraction, document why an existing pattern was insufficient.
-- Update tests in the mirrored subsystem path.
-- If a serialized contract changes, update schema, compatibility handling, and tests together.
-- If a security control changes, verify compliance against the security TRD before merging.
-
----
-
-## Final Rule
-
-If a name, pattern, or abstraction makes it harder to determine:
-
-- which subsystem owns it
-- what contract it implements
-- what trust boundary it crosses
-- what error it can produce
-
-then it is not acceptable for Forge.
+15. When FullPlatform automation creates files on behalf of an agent, validate destination paths before any write and persist only to the validated path returned by `validate_write_path(...)`.
