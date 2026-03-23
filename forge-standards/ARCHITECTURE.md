@@ -2,457 +2,376 @@
 
 ## What This Subsystem Does
 
-FullPlatform is the end-to-end build orchestration subsystem for Forge’s macOS native AI coding agent. It coordinates the complete lifecycle from operator build intent to gated merge, spanning:
+FullPlatform is the end-to-end orchestration subsystem for Forge’s native macOS AI coding agent workflow. It coordinates the complete build lifecycle from user build intent through scoped planning, pull-request decomposition, multi-provider code generation, validation, CI execution, operator gating, and merge progression.
 
-- scope interpretation and confidence gating
-- document/context loading
-- PR-plan decomposition
-- code and test generation using multiple LLM providers
-- arbitration and self-correction
-- lint and iterative fix loops
-- CI execution and result handling
-- operator gates and approval
-- GitHub PR lifecycle operations
-- persistent learning via build memory and build rules
-- crash-safe checkpointing across per-PR stages
+At a high level, this subsystem is responsible for:
 
-Operationally, this subsystem is the top-level runtime that turns a plain-language request into an ordered sequence of pull requests, while preserving Forge-wide security, validation, checkpointing, and human-in-the-loop constraints.
+- Accepting a plain-language build intent and turning it into an ordered sequence of PR-sized work units.
+- Running scope analysis and confidence gating before implementation begins.
+- Loading persistent contextual knowledge from the document store, build memory, and build rules.
+- Driving generation through parallel LLM providers with consensus/arbitration.
+- Running correction and validation stages, including lint, self-correction, and bounded fix loops.
+- Executing GitHub operations exclusively through the GitHubTool abstraction.
+- Streaming progress and gate state to the macOS frontend over XPC.
+- Persisting per-PR stage checkpoints so interrupted builds resume without re-running completed stages.
+- Preserving long-lived learning artifacts across runs.
 
-It is responsible for enforcing that:
-
-- no generated code is executed by the agent
-- all external input is treated as untrusted
-- all merge decisions remain operator-gated
-- auth/identity/crypto failures fail closed
-- completed PR stages are not re-run after crash/restart
-- persistent learning artifacts are retained across runs
+This subsystem is the execution spine of the platform. It does not merely invoke tools; it enforces workflow sequencing, gating semantics, retry limits, persistence behavior, and platform safety constraints.
 
 ## Component Boundaries
 
-FullPlatform includes orchestration logic and policy enforcement across the following components.
+FullPlatform includes orchestration logic and policy enforcement for the build pipeline, but it is not the implementation owner of every lower-level concern. Its boundaries are as follows.
 
-### Included Responsibilities
+### In Scope
 
-#### Build orchestration
-Primarily implemented in:
+- Build pipeline orchestration in `src/build_director.py`
+- Multi-model generation consensus in `src/consensus.py`
+- GitHub operation routing through `src/github_tools.py`
+- Build checkpoint and stage persistence in `src/build_ledger.py`
+- Scope confidence gating and re-scope behavior
+- DocumentStore-backed contextual retrieval for generation
+- Build memory and build rules loading/writing behavior
+- Failure handling strategy selection and bounded retry behavior
+- XPC message production/consumption for platform coordination
+- Operator gate enforcement for any blocking approval or clarification step
 
-- `src/build_director.py` — `BuildPipeline` orchestration, confidence gate, PR-type routing
-- `src/consensus.py` — consensus generation/arbitration systems and generation system prompts
-- `src/build_ledger.py` — stage/checkpoint persistence for crash recovery
+### Out of Scope
 
-This layer owns stage sequencing, gate presentation, retry boundaries, provider coordination, and progression across PRs.
+- Direct implementation of LLM provider SDK internals
+- Direct GitHub API calls outside `GitHubTool`
+- UI rendering details of `BuildStreamView`
+- Execution of generated code via dynamic evaluation mechanisms
+- Automatic policy override when safety or refusal conditions trigger
+- Non-platform-specific editor or IDE integration logic
+- Autonomous merge approval without explicit operator action
 
-#### Scope confidence gate
-FullPlatform includes the pre-implementation scoping flow:
+### Boundary Rules
 
-- `SCOPE_SYSTEM` produces:
-  - `confidence` in range `0–100`
-  - `coverage_gaps`
-- `_stage_scope` enforces `_CONFIDENCE_THRESHOLD = 85`
-
-If below threshold, the subsystem must surface gaps and offer exactly these operator paths:
-
-- proceed
-- answer
-- cancel
-
-If the operator answers coverage gaps, only a one-shot re-scope is performed. There is no unbounded re-scoping loop.
-
-#### Document/context integration
-FullPlatform is responsible for acquiring build context from the document store and injecting it into generation flows correctly.
-
-Primary usage includes:
-
-- retrieving contextual documents for generation
-- loading specific documents such as `PRODUCT_CONTEXT.md`
-- ensuring external document content is placed in the `USER` prompt, never the `SYSTEM` prompt
-
-#### Persistent learning
-FullPlatform owns integration with the persistent learning artifacts:
-
-- `workspace/{engineer_id}/build_memory.json`
-- `Mac-Docs/build_rules.md`
-
-It records successful PR outcomes to build memory after every successful PR via `build_memory.record_pr()` and consumes persistent build rules loaded automatically by the document store.
-
-This subsystem must not automatically clear either artifact.
-
-#### GitHub lifecycle operations
-FullPlatform coordinates repository operations only through:
-
-- `src/github_tools.py` — `GitHubTool`, `WebhookReceiver`
-
-All GitHub interactions for branches, PRs, comments, status inspection, and merge-related actions must route through `GitHubTool`. Direct GitHub API access is out of bounds.
-
-#### Operator gating and UI protocol emission
-FullPlatform emits protocol messages for UI/build-stream presentation and blocking gates:
-
-- `build_card` — streamed progress/status content
-- `gate_card` — operator decision points that block indefinitely until answered
-
-It also participates in startup/session protocol exchange such as:
-
-- `ready`
-- `credentials`
-- `doc_status`
-
-### Excluded Responsibilities
-
-FullPlatform does **not** own:
-
-- low-level XPC transport implementation, beyond obeying the protocol contract
-- direct secret storage implementation
-- direct execution of generated code
-- direct GitHub API usage outside `GitHubTool`
-- automatic approval or merge bypass logic
-- automatic deletion/reset of build memory or build rules
-- treating unknown XPC message types as exceptional control flow
-
-Those concerns belong to transport/security/utilities or are explicitly prohibited by system invariants.
+- All GitHub interactions must traverse `GitHubTool`; FullPlatform must not call GitHub APIs directly.
+- All file writes performed under this subsystem must be path-validated via `path_security.validate_write_path()` before execution.
+- External content consumed by the subsystem is treated as untrusted input and validated before use.
+- FullPlatform may generate code and patch files, but must never execute generated content via `eval`, `exec`, or subprocess invocation of generated artifacts.
 
 ## Data Flow
 
-### 1. Session initialization
-The subsystem starts after transport/session establishment and consumes protocol-level startup inputs such as:
+### 1. Session Initialization
 
-- `ready`:  
-  `{ agent_version, min_swift_version, capabilities[], doc_store_status }`
-- `credentials`:  
-  `{ anthropic_api_key, openai_api_key, github_token, engineer_id }`
+The subsystem initializes over XPC using line-delimited JSON messages with nonce authentication and a maximum message size of 16 MB. The platform consumes or emits:
 
-Credentials are used for provider and GitHub access, but secrets must never appear in logs, error messages, or generated code.
+- `ready`
+  - `{ agent_version, min_swift_version, capabilities[], doc_store_status }`
+- `credentials`
+  - `{ anthropic_api_key, openai_api_key, github_token, engineer_id }`
 
-### 2. Intent ingestion and scoping
-The operator supplies a plain-language build intent. FullPlatform:
+Unknown XPC message types are discarded and logged, never raised as exceptions.
 
-1. evaluates scope using the scope system
-2. receives `confidence` and `coverage_gaps`
-3. applies the threshold gate at `85`
+### 2. Intent Intake and Scoping
 
-If below threshold, a blocking `gate_card` is shown with gap details and operator options:
+A build begins from a plain-language user intent. FullPlatform performs initial decomposition and scope analysis. The scope stage uses a confidence gate:
 
-- proceed
-- answer
-- cancel
+- The scope system returns:
+  - `confidence` in `[0, 100]`
+  - `coverage_gaps`
+- `_stage_scope` gates at `_CONFIDENCE_THRESHOLD = 85`
 
-If answers are provided, the subsystem performs a single re-scope pass and then continues or exits based on the new result and operator choice.
+If confidence is below threshold:
 
-### 3. Context acquisition
-Before generation, FullPlatform loads contextual material from the document store, including project-specific sources such as `PRODUCT_CONTEXT.md` and automatically available files like `build_rules.md`.
+- The operator is shown the identified gaps.
+- Available actions are:
+  - proceed
+  - answer
+  - cancel
+- If the operator answers the gaps, the subsystem performs exactly one re-scope pass.
+- There is no unbounded clarification loop.
 
-All such external content is untrusted. It must be validated/sanitized according to the subsystem’s input-handling rules and placed only in user-context prompts.
+### 3. Context Assembly
 
-Document ingestion/status may be represented through `doc_status` messages:
+Generation context is assembled from persistent and retrieved sources:
 
-- `{ doc_id, doc_name, status, chunk_count, embedded_count }`
+- Repository and workspace state
+- DocumentStore retrieval
+- Specific loaded documents such as `PRODUCT_CONTEXT.md`
+- `workspace/{engineer_id}/build_memory.json`
+- `Mac-Docs/build_rules.md`
 
-### 4. PR decomposition and stage execution
-The build intent is decomposed into an ordered sequence of PRs. For each PR, FullPlatform executes staged work under checkpoint control.
+Context from external documents is placed in the USER prompt only, never in the SYSTEM prompt.
 
-Per-PR stage checkpoints ensure that after a crash or restart, completed work is not repeated. This is a hard recovery invariant.
+The context manager auto-trims at 30k tokens while preserving:
+
+- The spec-anchor first turn
+- The last 6 messages
+
+### 4. PR Planning and Execution
+
+The build intent is decomposed into an ordered sequence of PRs. For each PR, FullPlatform orchestrates staged execution with persisted checkpoints to prevent duplicate work after interruption.
 
 Typical stage progression includes:
 
-1. scope/context establishment
-2. implementation and test generation
-3. provider consensus/arbitration
-4. self-correction
-5. lint gate
-6. fix loop
+1. Scope / planning
+2. Code generation
+3. Consensus / arbitration
+4. Self-correction pass
+5. Lint gate
+6. Local fix loop
 7. CI execution
-8. operator gate
-9. merge or stop
+8. Operator approval gate
+9. Merge progression
 
-Progress is streamed through `build_card` messages:
+Per-PR stage checkpoints ensure a crash or restart does not re-run already completed stages.
 
-- `{ card_type, stage, content, progress }`
+### 5. Generation and Consensus
 
-### 5. Multi-provider generation and arbitration
-Generation is performed with two LLM providers in parallel, with Claude acting as arbiter per platform overview.
+Generation is executed against two LLM providers in parallel. Claude serves as arbiter in the consensus path. The consensus subsystem, defined in `src/consensus.py`, owns the generation system prompts and provider-comparison flow.
 
-`src/consensus.py` provides the consensus engine and generation system definitions, including specialized system prompts for Swift/UI generation.
+FullPlatform uses this layer to obtain implementation output, compare alternatives, and select the accepted candidate for downstream validation.
 
-FullPlatform is responsible for:
+### 6. Validation and Repair
 
-- invoking provider generation paths
-- collecting outputs
-- arbitrating/choosing results
-- preserving prompt-boundary rules
-- ensuring generated code is treated as data, never executable input to the agent runtime
+After initial generation:
 
-### 6. Correction and local quality loop
-After initial generation, the subsystem runs:
+- A self-correction pass is run.
+- Lint is executed as a gate.
+- A bounded local repair loop runs for up to 20 attempts.
 
-- a self-correction pass
-- a lint gate
-- up to a 20-pass local fix loop
-
-Failure strategy selection is driven by `failure_handler.py` semantics:
-
-- `_choose_strategy(failure_type, attempt, records)`
-- primary signal: `failure_type`
-- secondary escalation: `attempt`
-
-Required strategy rules:
+Failure strategy selection follows `failure_handler.py:_choose_strategy(failure_type, attempt, records)`:
 
 - `assertion_error` → `test_driven` immediately
 - `import_error` / `runtime_error` → `converse` first, then `test_driven`
 - `attempt >= 8` → `nuclear` every 3rd attempt
-- never retry indefinitely; max `20` local attempts, then move on
+- Never retry indefinitely; max 20 local attempts, then move on
 
-### 7. CI execution and result handling
-The subsystem runs CI and consumes CI output as untrusted external input.
+### 7. CI and Log Handling
 
-Relevant handling constraints:
+CI is executed as part of PR validation. CI output is treated as untrusted input. Log handling behavior:
 
-- CI log output truncated at `8k` chars
-- truncation preserves `70%` head / `30%` tail
-- no action required from callers; truncation is automatic
+- CI log output is truncated to 8k chars
+- Truncation preserves 70% head / 30% tail
 
-Polling and remote status handling must respect:
+Polling behavior must use:
 
-- `403` on primary endpoints → exponential backoff: `2s → 4s → 8s → 16s → 32s → 64s`
-- `429` on secondary endpoints → respect `Retry-After`
 - ETag caching on all polling endpoints
+- Exponential backoff for 403 primary:
+  - 2s → 4s → 8s → 16s → 32s → 64s
+- `Retry-After` compliance for 429 secondary responses
 
-### 8. Operator gating and merge
-The subsystem presents gate decisions through `gate_card` and waits indefinitely for operator input. There is no auto-approve path.
+### 8. Streaming and Operator Gates
 
-Only after operator approval may merge-related GitHub actions proceed, and those actions must still be executed exclusively through `GitHubTool`.
+Progress is streamed to the frontend using:
 
-### 9. Persistent learning update
-After every successful PR:
+- `build_card`
+  - `{ card_type, stage, content, progress }`
 
-- `build_memory.record_pr()` writes to `workspace/{engineer_id}/build_memory.json`
+Blocking decisions are surfaced with:
 
-After each build run, if `3+` recurring failure patterns are found:
+- `gate_card`
+  - `{ gate_type, options[], description }`
+
+Gates wait indefinitely for operator input. There is no auto-approve behavior.
+
+### 9. Persistence and Learning
+
+After each successful PR:
+
+- `build_memory.record_pr()` updates `workspace/{engineer_id}/build_memory.json`
+
+After each build run, if 3 or more recurring failure patterns are detected:
 
 - `Mac-Docs/build_rules.md` is updated
 
-Neither persistent artifact is automatically deleted on clean runs.
+These learning artifacts are persistent and must not be automatically cleared on clean runs.
 
 ## Key Invariants
 
-The following invariants are enforced by FullPlatform and are non-negotiable.
-
-### Security and trust boundaries
+The following invariants are enforced by FullPlatform and must hold across all execution paths:
 
 - Fail closed on auth, crypto, and identity errors; never degrade silently.
-- No silent failure paths; every error must surface with context.
-- Secrets never appear in logs, error messages, or generated code.
-- All external input is untrusted and validated, including:
-  - documents
-  - PR comments
-  - CI output
-- Context from external documents goes in the `USER` prompt, never the `SYSTEM` prompt.
-- `SECURITY_REFUSAL` output is never bypassed by rephrasing; stop, gate, and log.
-
-### Code generation safety
-
-- Generated code is never executed by the agent.
-- No `eval`, `exec`, or subprocess execution of generated content is permitted.
-
-### Human-in-the-loop enforcement
-
-- Gates wait indefinitely for operator input.
-- No auto-approve ever.
-- Merge progression is blocked until explicit operator action is received.
-
-### File and repository safety
-
+- No silent failure paths; every error surfaces with context.
+- Secrets must never appear in logs, error messages, prompts, or generated code.
+- All external inputs are untrusted and must be validated.
+- Generated code is never executed by the agent through `eval`, `exec`, or subprocess execution of generated content.
+- Gates wait indefinitely for explicit operator input; no auto-approve ever.
 - All file writes are path-validated via `path_security.validate_write_path()` before execution.
-- All GitHub operations go through `GitHubTool`; never use the GitHub API directly.
-
-### Transport/protocol robustness
-
-- XPC wire format is line-delimited JSON.
-- Messages are nonce-authenticated.
-- Maximum message size is `16MB`.
+- Context from external documents belongs in USER prompts only, never SYSTEM prompts.
+- `SECURITY_REFUSAL` output is terminal for the current action: stop, gate, and log; do not bypass by rephrasing.
 - Unknown XPC message types are discarded and logged, never raised as exceptions.
+- Per-PR stage checkpoints prevent replay of already completed work after crashes.
+- Build memory and build rules are persistent learning systems and are never automatically cleared.
 
-### Recovery and persistence
+Additional subsystem-specific enforcement:
 
-- Per-PR stage checkpoints prevent re-running completed work after a crash.
-- Build memory is persistent and survives fresh installs and thread-state wipes.
-- Build rules are persistent, self-improving rules derived from build history.
-- Build memory and build rules are never cleared automatically.
-
-### Context management constraints
-
-- `ContextManager` auto-trims at `30k` tokens.
-- It preserves:
-  - the spec-anchor first turn
-  - the last 6 messages
+- Scope confidence below threshold requires explicit operator involvement.
+- Clarification allows at most one re-scope pass per gating event.
+- Retry loops are bounded to 20 local attempts.
+- All GitHub operations must go through `GitHubTool`.
+- Polling and rate-limit behavior must respect cache and backoff policy.
+- Context trimming is automatic and deterministic at 30k tokens.
 
 ## Failure Modes
 
-### Low scope confidence
-Condition:
-- scope confidence `< 85`
+### Auth, Crypto, or Identity Failure
 
 Behavior:
-- block progression
-- show coverage gaps
-- require operator choice to proceed, answer, or cancel
-- if answers are provided, perform one re-scope only
 
-Failure posture:
-- no silent continuation as if confidence were sufficient
+- Immediate fail-closed behavior
+- No fallback to degraded or anonymous operation
+- Error must surface with context, excluding secrets
 
-### Auth, crypto, or identity failure
-Condition:
-- invalid or missing credentials
-- authentication failure
-- identity ambiguity
-- cryptographic validation failure
+### Low Scope Confidence
 
 Behavior:
-- fail closed
-- stop affected operation
-- surface explicit contextual error
-- do not downgrade to partial or anonymous behavior
 
-### Untrusted or malformed external input
-Condition:
-- malformed document/CI/comment input
-- prompt-injection-like content
-- invalid protocol payload
+- Build does not silently proceed as fully trusted scope
+- Operator receives coverage gaps and must choose proceed, answer, or cancel
+- At most one re-scope occurs after operator answers
 
-Behavior:
-- validate before use
-- reject or sanitize as appropriate
-- never promote external content to system-level instruction authority
+Risk controlled:
 
-### Unknown XPC message type
-Condition:
-- message type not recognized by the subsystem
+- Implementing under-specified or mis-scoped work without human review
+
+### Provider Disagreement or Weak Generation Output
 
 Behavior:
-- discard and log
-- do not throw as an exception
-- do not terminate normal processing solely due to unknown type
 
-### Write-path violation
-Condition:
-- attempted filesystem write fails `path_security.validate_write_path()`
+- Consensus/arbitration path selects between parallel provider outputs
+- Downstream self-correction and repair loop may attempt recovery
+- If unresolved within bounded attempts, stage fails and surfaces
 
-Behavior:
-- abort the write
-- surface the violation with context
-- do not attempt alternate unvalidated write paths
+Risk controlled:
 
-### GitHub API/rate-limit failures
-Condition:
-- GitHub operation failure, including rate limiting
+- Unvetted single-model output progressing unchecked
 
-Behavior:
-- all operations remain mediated by `GitHubTool`
-- `403` primary endpoints use exponential backoff up to `64s`
-- `429` secondary endpoints respect `Retry-After`
-- polling uses ETag caching
-- errors surface with context rather than being swallowed
+### Local Validation Failure
 
-### Generation/correction loop exhaustion
-Condition:
-- local fix loop reaches max attempts (`20`)
+Examples:
+
+- Lint failure
+- Assertion failure
+- Import/runtime failure
 
 Behavior:
-- do not retry indefinitely
-- advance to the next handling path or fail the PR stage explicitly
-- preserve failure context for operator visibility and learning systems
 
-### Test/runtime/import/assertion failures
-Condition:
-- build/test failures during local correction
+- Failure strategy selected by failure type
+- Escalation based on attempt count
+- Hard stop after 20 attempts
 
-Behavior:
-- strategy selection follows `failure_handler.py`
-- `assertion_error` → immediate `test_driven`
-- `import_error` / `runtime_error` → `converse`, then `test_driven`
-- after attempt `>= 8`, every 3rd attempt may escalate to `nuclear`
+Risk controlled:
 
-### Crash/restart during staged execution
-Condition:
-- process interruption after one or more completed PR stages
+- Infinite repair loops
+- Incorrect retry strategy selection
 
-Behavior:
-- resume from ledger/checkpoint state
-- do not re-run completed stages
-- continue with remaining incomplete work only
+### GitHub API / Remote Service Failure
 
-### Oversized or verbose context
-Condition:
-- prompt/context growth beyond token budget
+Examples:
+
+- 403 primary rate/permission failure
+- 429 secondary rate limit
+- Polling inconsistency
 
 Behavior:
-- `ContextManager` trims automatically at `30k` tokens
-- preserve first-turn spec anchor and last six messages
-- avoid uncontrolled context expansion
+
+- 403 primary uses exponential backoff
+- 429 honors `Retry-After`
+- Polling uses ETag caching
+- Operations remain mediated by `GitHubTool`
+
+Risk controlled:
+
+- API abuse, unstable polling, direct API misuse
+
+### Crash / Restart Mid-Build
+
+Behavior:
+
+- Resume from per-PR stage checkpoint
+- Do not repeat completed stages
+
+Risk controlled:
+
+- Duplicate commits, duplicate PR actions, inconsistent state progression
+
+### XPC Protocol Anomalies
+
+Examples:
+
+- Unknown message type
+- Oversized or malformed payload
+
+Behavior:
+
+- Unknown message types are discarded and logged
+- Message handling must remain robust and non-throwing for unknown types
+
+Risk controlled:
+
+- Frontend/backend desynchronization causing agent crash
+
+### Unsafe Write or Path Traversal Attempt
+
+Behavior:
+
+- Reject write before execution unless validated by `path_security.validate_write_path()`
+
+Risk controlled:
+
+- Repository escape, arbitrary file overwrite, unsafe filesystem mutation
+
+### Security Refusal Trigger
+
+Behavior:
+
+- Stop current action
+- Gate and log refusal outcome
+- Do not retry by paraphrasing around the refusal
+
+Risk controlled:
+
+- Policy bypass through prompt rewording
 
 ## Dependencies
 
-### Internal modules
+### Internal Components
 
 - `src/build_director.py`
-  - primary orchestration entrypoint
-  - scope gate enforcement
-  - PR routing and stage progression
-
+  - Primary orchestration entrypoint for BuildPipeline, confidence gate, and PR-type routing
 - `src/consensus.py`
-  - `ConsensusEngine`
-  - generation system prompts
-  - arbitration across provider outputs
-
+  - ConsensusEngine and generation/arbitration system prompts
 - `src/github_tools.py`
-  - `GitHubTool`
-  - `WebhookReceiver`
-  - sole allowed path for GitHub operations
-
+  - `GitHubTool`, `WebhookReceiver`
 - `src/build_ledger.py`
-  - per-PR checkpoint/state persistence
-  - crash recovery support
-
+  - Stage and checkpoint persistence
 - `failure_handler.py`
-  - failure-strategy selection for iterative correction
+  - Failure strategy selection and escalation policy
+- `path_security`
+  - Required write-path validation before filesystem mutation
+- Context/document management layer
+  - Document retrieval and prompt-context assembly
 
-- `path_security.validate_write_path()`
-  - mandatory validation for all file writes
-
-- `ContextManager`
-  - token-budget trimming and message preservation policy
-
-- `DocumentStore`
-  - retrieval of contextual documents
-  - automatic loading of `build_rules.md`
-
-- build memory subsystem
-  - persistence at `workspace/{engineer_id}/build_memory.json`
-  - successful-PR learning updates
-
-### External providers and services
-
-- LLM provider integrations:
-  - Anthropic
-  - OpenAI
-
-- GitHub
-  - accessed only through `GitHubTool`
-
-- XPC transport
-  - line-delimited JSON
-  - nonce-authenticated
-  - max `16MB` per message
-
-### Persistent artifacts
+### Persistent Data Dependencies
 
 - `workspace/{engineer_id}/build_memory.json`
-  - persistent per-engineer build learning store
-  - must survive fresh installs and thread resets
-
+  - Cross-run build memory
 - `Mac-Docs/build_rules.md`
-  - persistent learned coding-rule corpus
-  - updated when recurring failure patterns justify rule extraction
+  - Persistent self-improving rule set
+- DocumentStore-managed project and product documents
+  - Including documents such as `PRODUCT_CONTEXT.md`
 
-### Boundary note
+### External Interfaces
 
-FullPlatform depends on these components to perform orchestration, but it does not relax their contracts. In particular, any dependency failure that touches authentication, identity, cryptographic validation, path safety, or operator approval must preserve the subsystem’s fail-closed behavior.
+- XPC transport
+  - Line-delimited JSON
+  - Nonce-authenticated
+  - 16 MB max message size
+- LLM providers
+  - Two providers in parallel for generation
+  - Claude as arbitration authority in consensus flow
+- GitHub
+  - Accessed only through `GitHubTool`
+- CI systems
+  - Output treated as untrusted input
+
+### Dependency Constraints
+
+- External document context must never be elevated into SYSTEM prompts.
+- Secret-bearing dependencies must not leak values into logs or surfaced errors.
+- Generated artifacts are data for review and validation, not executable instructions for the agent runtime.
+- Persistent learning dependencies (`build_memory.json`, `build_rules.md`) are part of normal operation and must survive clean runs.
