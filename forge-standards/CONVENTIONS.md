@@ -2,8 +2,8 @@
 
 ## File and Directory Naming
 
-1. **Place Python runtime code under `src/` only.**
-   - Valid examples:
+1. Place Python backend modules under `src/` using `snake_case.py` filenames only.
+   - Required examples:
      - `src/consensus.py`
      - `src/build_director.py`
      - `src/github_tools.py`
@@ -11,8 +11,8 @@
      - `src/document_store.py`
      - `src/ci_workflow.py`
 
-2. **Use the prescribed subsystem directories exactly as named. Do not invent alternates.**
-   - Required directory names:
+2. Use the established subsystem directories exactly as named. Do not invent alternate spellings.
+   - Required directories:
      - `src/cal/`
      - `src/dtl/`
      - `src/trustflow/`
@@ -22,60 +22,50 @@
      - `src/rewind/`
      - `sdk/connector/`
 
-3. **Mirror `src/` structure under `tests/` exactly.**
-   - If implementation file is `src/trustflow/audit_stream.py`, the test file must be under `tests/trustflow/`.
-   - Example:
-     - `src/mcp/policy_engine.py`
-     - `tests/mcp/test_policy_engine.py`
+3. Mirror `src/` structure exactly under `tests/`.
+   - If implementation is `src/mcp/policy_engine.py`, the test file must be `tests/mcp/test_policy_engine.py`.
+   - Do not place subsystem tests in a shared top-level `tests/test_*.py` file when a matching subsystem directory exists.
 
-4. **Name Python files in `snake_case`.**
-   - Use lowercase letters, numbers, and underscores only.
-   - Do not use hyphens or CamelCase in Python filenames.
-   - Correct: `build_director.py`
-   - Incorrect: `BuildDirector.py`, `build-director.py`
+4. Prefix Python test files with `test_`.
+   - Valid: `tests/trustflow/test_audit_stream.py`
+   - Invalid: `tests/trustflow/audit_stream_test.py`
 
-5. **Name test files `test_<module>.py`.**
-   - Example:
-     - `src/document_store.py` → `tests/test_document_store.py`
-     - `src/cal/session_router.py` → `tests/cal/test_session_router.py`
+5. Keep CI workflow filenames fixed.
+   - Ubuntu workflow file must be `crafted-ci.yml`.
+   - macOS Swift workflow file must be `crafted-ci-macos.yml`.
+   - Do not add renamed duplicates such as `ci.yml` or `macos.yml`.
 
-6. **Use the exact CI workflow filenames below.**
-   - Ubuntu workflow: `crafted-ci.yml`
-   - macOS Swift workflow: `crafted-ci-macos.yml`
-   - Do not create alternative names such as `ci.yml`, `macos.yml`, or `github-actions.yml`.
+6. Do not manually add or remove `conftest.py` files created by CI import setup.
+   - Treat `conftest.py` under test roots as managed by `ci_workflow.ensure()` when used for `src/` imports.
 
-7. **Do not manually add or remove `conftest.py` files used for `src/` imports when they are managed by CI automation.**
-   - `conftest.py` is auto-committed by `ci_workflow.ensure()`.
-   - If import support is missing, update `src/ci_workflow.py`; do not create a one-off local convention.
+7. Name branch heads using this exact format:
+   - `forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}`
+   - Example: `forge-agent/build/e17/fullplatform/pr-042-accessibility-id-audit`
 
-8. **Use branch names in the mandatory compatibility format below.**
-   - Format:
-     - `forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}`
-   - Example:
-     - `forge-agent/build/e123/fullplatform/pr-042-add-ledger-heartbeat`
-   - Keep the literal prefix `forge-agent/build/`.
+8. Use lowercase directory and file names for all new Forge modules.
+   - Separate words with underscores in filenames and with hyphens only in branch names and workflow identifiers.
 
-9. **Keep subsystem slugs short, lowercase, and filesystem-safe.**
-   - Use lowercase letters, numbers, and hyphens only.
-   - Example:
-     - `fullplatform`
-     - `trustflow`
-     - `macos-shell`
+9. For Swift/macOS shell files, keep filenames aligned to the primary type name.
+   - If the main type is `SettingsView`, the file must be `SettingsView.swift`.
+   - Do not use abbreviated filenames like `Settings.swift` when the declared top-level type is `SettingsView`.
 
-10. **Use filename scope to reflect responsibility, not implementation detail.**
-    - Prefer:
-      - `policy_engine.py`
-      - `audit_stream.py`
-      - `replay_engine.py`
-    - Avoid:
-      - `helpers2.py`
-      - `misc.py`
-      - `new_code.py`
+10. When adding subsystem-specific code, place it in the subsystem directory rather than a generic utility file.
+    - Put Virtual Trust Zone logic in `src/vtz/`, not `src/utils.py`.
+    - Put replay logic in `src/rewind/`, not `src/helpers/`.
+
+11. Validate paths before any write using `validate_write_path`.
+    - Required pattern:
+      ```python
+      from path_security import validate_write_path
+
+      safe_path = validate_write_path(user_supplied_path)
+      ```
+    - Apply this before writing files, creating files, overwriting files, or generating workflow/config outputs from user or PR-derived paths.
 
 ## Class and Function Naming
 
-1. **Name classes in `PascalCase`.**
-   - Examples from the platform:
+1. Name Python classes in `PascalCase`.
+   - Required examples:
      - `ConsensusEngine`
      - `BuildPipeline`
      - `GitHubTool`
@@ -83,304 +73,237 @@
      - `BuildLedger`
      - `DocumentStore`
 
-2. **Name functions and methods in `snake_case`.**
-   - Examples:
-     - `claim_build()`
-     - `release_build()`
-     - `validate_write_path()`
-     - `retrieve_documents()`
+2. Name Python functions and methods in `snake_case`.
+   - Valid: `claim_build()`, `release_claim()`, `retrieve_chunks()`
+   - Invalid: `claimBuild()`, `ReleaseClaim()`
 
-3. **Name constants in `UPPER_SNAKE_CASE`.**
-   - Examples:
+3. Name module-level constants in `UPPER_SNAKE_CASE`.
+   - Required examples:
      - `GENERATION_SYSTEM`
      - `SWIFT_GENERATION_SYSTEM`
      - `UI_ADDENDUM`
 
-4. **Use nouns for service/state classes and verbs for actions.**
-   - Class examples:
-     - `DocumentStore`
-     - `BuildLedger`
-   - Function examples:
-     - `embed()`
-     - `chunk()`
-     - `retrieve()`
+4. Use noun-based names for service/coordinator classes and verb-based names for free functions.
+   - Valid class names: `BuildLedger`, `DocumentStore`
+   - Valid function names: `chunk()`, `embed()`, `retrieve()`
 
-5. **Name boolean-returning functions and flags with explicit predicates.**
-   - Prefer:
-     - `is_docs_pr`
-     - `has_active_claim`
-     - `should_route_to_swift`
-   - Avoid:
-     - `docs_pr`
-     - `active`
-     - `route_swift`
+5. Match filenames to their primary class or responsibility.
+   - `src/build_ledger.py` must contain `BuildLedger`.
+   - `src/github_tools.py` must contain `GitHubTool` and/or `WebhookReceiver`.
+   - Do not place unrelated top-level classes in these modules.
 
-6. **When implementing docs-PR detection logic, use the `_docs_keywords` identifier for the v5.0 compatibility keyword set.**
-   - Example:
-     - `_docs_keywords = {"naming convention", "glossary", "changelog"}`
-   - Use `title_lower` or similarly explicit normalized names for case-folded title comparisons.
+6. Name Boolean-returning functions and properties with explicit intent.
+   - Prefer `is_docs_pr`, `has_claim`, `can_release`
+   - Do not use ambiguous names like `docs()` or `ready()` for Boolean checks.
 
-7. **Use descriptive suffixes that encode role when multiple related symbols exist.**
-   - Approved suffixes:
-     - `_engine`
-     - `_store`
-     - `_receiver`
-     - `_ledger`
-     - `_workflow`
-     - `_director`
-   - Example:
-     - `policy_engine`
-     - `webhook_receiver`
+7. Preserve the historical docs-PR detector naming when touching v5 compatibility logic.
+   - Use `_docs_keywords` for the keyword set.
+   - Use `_is_docs_pr` for the derived Boolean.
+   - Do not rename these to `docs_terms` or `matches_docs_pr` in compatibility code.
 
-8. **For macOS UI accessibility identifiers, use the exact pattern `{module}-{component}-{role}-{context?}`.**
-   - Apply via `.accessibilityIdentifier(...)` on all interactive elements.
-   - Examples:
-     - `auth-touchid-button`
-     - `auth-passcode-button`
-     - `settings-anthropic-key-field`
-     - `settings-anthropic-key-test-button`
-     - `settings-anthropic-key-reveal-button`
-     - `navigator-project-row-{projectId}`
-     - `stream-gate-card-{gateId}`
-     - `stream-gate-yes-button-{gateId}`
-     - `stream-gate-skip-button-{gateId}`
-     - `stream-gate-stop-button-{gateId}`
+8. For accessibility identifiers, build values using this exact token order:
+   - `{module}-{component}-{role}-{context?}`
+   - Use lowercase kebab-case tokens.
 
-9. **Include stable domain IDs in dynamic accessibility identifiers.**
-   - Use `{projectId}`, `{gateId}`, or equivalent stable identifiers from the model.
-   - Do not use array indexes, random UUIDs generated in the view, or transient display text.
+9. In Swift UI code, assign `.accessibilityIdentifier()` to every interactive element.
+   - Interactive means buttons, text fields, secure fields, toggles, rows with tap actions, and actionable cards.
 
-10. **Do not abbreviate public class names unless the subsystem standard already uses the abbreviation.**
-    - Allowed because they are standard in this codebase:
-      - `MCP`
-      - `VTZ`
-    - Avoid introducing new unclear abbreviations in public APIs.
+10. Follow the approved accessibility identifier patterns exactly.
+    - Valid examples:
+      - `auth-touchid-button`
+      - `auth-passcode-button`
+      - `settings-anthropic-key-field`
+      - `settings-anthropic-key-test-button`
+      - `settings-anthropic-key-reveal-button`
+      - `navigator-project-row-{projectId}`
+      - `stream-gate-card-{gateId}`
+      - `stream-gate-yes-button-{gateId}`
+      - `stream-gate-skip-button-{gateId}`
+      - `stream-gate-stop-button-{gateId}`
+
+11. When interpolating context into an accessibility identifier, append it as the final token.
+    - Valid: `navigator-project-row-1234`
+    - Invalid: `navigator-1234-project-row`
+
+12. Do not abbreviate subsystem names in identifiers unless the directory name is already the standard abbreviation.
+    - Use `settings`, not `sett`
+    - Use `navigator`, not `nav`
+    - Keep `vtz`, `dtl`, and `mcp` only where those abbreviations are the canonical subsystem names
 
 ## Error and Exception Patterns
 
-1. **Validate every user-supplied write path before any filesystem write.**
+1. Validate the destination path before every write operation.
+   - This includes writes triggered by CLI input, PR metadata, webhook payloads, generated filenames, and test fixtures.
    - Required pattern:
      ```python
      from path_security import validate_write_path
 
-     safe_path = validate_write_path(user_supplied_path)
+     safe_path = validate_write_path(target_path)
+     with open(safe_path, "w", encoding="utf-8") as f:
+         ...
      ```
-   - Apply before:
-     - `open(..., "w")`
-     - `Path.write_text()`
-     - `Path.write_bytes()`
-     - file copy/move operations
-     - archive extraction targets
-     - generated CI/workflow file writes
 
-2. **Use the validated path for the write operation, never the original user input.**
-   - Correct:
+2. Use one validation step per write target, immediately before the write.
+   - Do not validate a parent directory once and assume all derived child paths are safe.
+   - Re-run `validate_write_path()` after any path concatenation or filename substitution.
+
+3. Raise exceptions with concrete operational context.
+   - Include the subsystem, operation, and identifier involved.
+   - Valid: `raise RuntimeError(f"build_ledger release failed for claim {claim_id}")`
+   - Invalid: `raise RuntimeError("operation failed")`
+
+4. Do not swallow exceptions from path validation, CI workflow generation, or ledger claim/release operations.
+   - Either let the exception propagate or wrap it with added context and re-raise.
+
+5. When wrapping exceptions, preserve the original exception with `from`.
+   - Required:
      ```python
-     safe_path = validate_write_path(user_supplied_path)
-     safe_path.write_text(content)
-     ```
-   - Incorrect:
-     ```python
-     safe_path = validate_write_path(user_supplied_path)
-     Path(user_supplied_path).write_text(content)
+     try:
+         workflow.ensure()
+     except Exception as exc:
+         raise RuntimeError("ci_workflow ensure failed for crafted-ci.yml") from exc
      ```
 
-3. **Perform path validation immediately before the write, not once earlier in an unrelated layer.**
-   - Do not assume an upstream layer sanitized the path.
-   - Re-validate at the write boundary.
+6. Return explicit Boolean values from classification helpers.
+   - `_is_docs_pr` must evaluate to a `bool`.
+   - Do not return keyword matches, collections, or nullable values from helpers used as gates.
 
-4. **Raise specific exceptions; do not use bare `except:`.**
-   - Catch concrete exception types only.
-   - If translation is needed, raise a domain exception with the original exception chained:
-     ```python
-     except OSError as exc:
-         raise LedgerWriteError("failed to persist build ledger") from exc
-     ```
+7. Fail closed on invalid or missing accessibility identifiers in testable interactive views.
+   - If an interactive SwiftUI element cannot be assigned a stable identifier, block the change until a stable identifier is defined.
 
-5. **Use domain-specific exception names ending in `Error`.**
-   - Examples:
-     - `LedgerWriteError`
-     - `PolicyEvaluationError`
-     - `WorkflowGenerationError`
-
-6. **Include the operation and subject in exception messages.**
-   - Prefer:
-     - `"failed to persist build ledger heartbeat for build_id={build_id}"`
-   - Avoid:
-     - `"write failed"`
-
-7. **Do not swallow failed validation or write errors in CI/workflow generation.**
-   - If `crafted-ci.yml` or `crafted-ci-macos.yml` generation fails, surface the failure as an explicit exception.
-
-8. **Return explicit safe defaults only where the security utility defines that behavior.**
-   - For path traversal handling, rely on `validate_write_path()`’s contract.
-   - Do not invent alternate fallback behavior in individual modules.
+8. Use deterministic error messages for CI-related failures.
+   - Include the exact workflow filename:
+     - `crafted-ci.yml`
+     - `crafted-ci-macos.yml`
 
 ## Import and Module Organisation
 
-1. **Group imports in this order: standard library, third-party, local application imports.**
-   - Separate each group with one blank line.
+1. Group imports in this order with one blank line between groups:
+   1. Standard library
+   2. Third-party packages
+   3. Local project imports
 
-2. **Use absolute imports from `src/` packages; do not use relative imports across subsystem boundaries.**
-   - Prefer:
+2. Import path validation directly from `path_security` at the module where the write occurs.
+   - Required:
      ```python
-     from trustflow.audit_stream import AuditStream
+     from path_security import validate_write_path
      ```
-   - Avoid:
-     ```python
-     from ..trustflow.audit_stream import AuditStream
-     ```
+   - Do not hide write-path validation only inside a distant helper if the module performs direct writes.
 
-3. **Import `validate_write_path` directly from `path_security` in every writer module that accepts external paths.**
-   - Do not wrap it in subsystem-specific aliases.
+3. Keep subsystem imports within their subsystem boundary unless the dependency is intentionally shared.
+   - Example: `src/trustflow/...` may import shared infrastructure from `src/...`, but do not import `src/rewind/...` into `src/trustlock/...` for convenience without a declared shared interface.
 
-4. **Keep one primary responsibility per module.**
-   - Examples:
-     - `src/build_ledger.py` contains ledger claim/release/heartbeat logic.
-     - `src/document_store.py` contains chunk/embed/retrieve logic.
-   - Move unrelated utilities into a dedicated module rather than accumulating mixed concerns.
+4. Prefer direct module imports that reflect file ownership.
+   - Valid: `from src.build_ledger import BuildLedger`
+   - Avoid re-export chains that hide the source module.
 
-5. **Keep CI workflow generation logic in `src/ci_workflow.py`.**
-   - Do not duplicate workflow file creation code in other modules.
+5. Keep one primary responsibility per module.
+   - `src/document_store.py` contains document storage and retrieval behavior.
+   - Do not add unrelated GitHub webhook parsing into `src/document_store.py`.
 
-6. **Place GitHub integration concerns in `src/github_tools.py`.**
-   - `GitHubTool` and `WebhookReceiver` belong there unless a new module replaces the entire integration boundary.
+6. Co-locate tests with the module shape they verify.
+   - If a module is moved from `src/github_tools.py` to `src/cal/github_tools.py`, move tests from `tests/test_github_tools.py` to `tests/cal/test_github_tools.py`.
 
-7. **When introducing a new subsystem package under `src/`, add the mirrored test package under `tests/` in the same change.**
-   - Example:
-     - `src/rewind/replay_engine.py`
-     - `tests/rewind/test_replay_engine.py`
+7. Do not create catch-all modules such as `misc.py`, `helpers.py`, or `common.py` in subsystem directories.
+   - Name the module after the concrete behavior: `policy_eval.py`, `audit_stream.py`, `replay_store.py`.
 
-8. **Do not create catch-all utility modules such as `utils.py`, `common.py`, or `helpers.py` at subsystem root.**
-   - Name the module after the concrete responsibility:
-     - `path_security.py`
-     - `policy_parser.py`
-     - `heartbeat_scheduler.py`
+8. In Swift/macOS shell code, keep view, model, and coordinator types in separate files when they are top-level reusable types.
+   - Do not define multiple unrelated top-level views in a single file solely for convenience.
 
 ## Comment and Documentation Rules
 
-1. **Document only non-obvious constraints, invariants, or compatibility requirements.**
-   - Required comment targets:
-     - security boundaries
-     - branch naming compatibility
-     - workflow filename compatibility
-     - docs-PR keyword compatibility behavior
-     - accessibility identifier structure
+1. Write comments only when they encode project-specific intent, protocol, or constraint that is not obvious from code.
+   - Valid: why `_docs_keywords` must remain for v5 compatibility
+   - Invalid: `# increment i`
 
-2. **When a convention is required for compatibility, state the exact external dependency in the comment.**
-   - Example:
-     ```python
-     # Keep prefix as forge-agent/build for downstream compatibility.
-     ```
+2. When documenting compatibility behavior, name the exact version boundary.
+   - Required example: `v5 keyword list retained for docs-PR compatibility; removed in v6 logic`
 
-3. **Do not add comments that merely restate the code.**
-   - Avoid:
-     ```python
-     # Increment counter
-     counter += 1
-     ```
+3. Keep inline comments adjacent to the constrained code path they describe.
+   - Do not place compatibility comments in module headers if they only apply to one helper.
 
-4. **When implementing legacy docs-PR behavior, label it with the version boundary.**
-   - Example:
-     ```python
-     # v5.0 compatibility: docs keyword list removed in v6.0 but retained for old PR routing.
-     ```
-
-5. **Use docstrings on public classes and public functions that form subsystem entry points.**
-   - Minimum content:
-     - purpose
-     - key inputs
-     - side effects or outputs
-   - Apply especially to:
-     - pipeline orchestration
-     - ledger persistence
-     - workflow generation
-     - policy evaluation
-     - replay/audit components
-
-6. **In Swift UI code, do not omit comments when an `accessibilityIdentifier` format is generated dynamically.**
-   - Add a short comment naming the required pattern:
+4. For accessibility identifier declarations in Swift, prefer self-explanatory literals and avoid explanatory comments unless the context token is non-obvious.
+   - Valid:
      ```swift
-     // axIdentifier: {module}-{component}-{role}-{context?}
+     .accessibilityIdentifier("settings-anthropic-key-test-button")
      ```
+   - Add a comment only if the final context token comes from a non-UI domain identifier.
 
-7. **Keep markdown documentation examples aligned to actual filenames and branch formats used by the codebase.**
-   - Use `crafted-ci.yml`, `crafted-ci-macos.yml`, and `forge-agent/build/...` in examples.
+5. Use docstrings on public classes and functions that define subsystem contracts.
+   - Include what the component owns or orchestrates.
+   - Example: `BuildLedger` docstring should state claim/release/heartbeat responsibilities.
+
+6. Do not use comments to excuse missing validation or missing identifiers.
+   - Fix the code instead of writing comments like `# trusted path` or `# identifier added later`.
+
+7. If a module writes files, include a brief comment or docstring note where appropriate stating that write targets are path-validated.
+   - This rule does not replace the required runtime call to `validate_write_path()`.
+
+8. Keep terminology aligned with Forge naming already in use.
+   - Use `FullPlatform`, `BuildPipeline`, `TrustFlow`, `Virtual Trust Zone`, and `Forge Rewind` exactly as written in project docs.
+   - Do not rename them in comments to ad hoc variants.
 
 ## FullPlatform-Specific Patterns
 
-1. **Preserve the architecture-defined filenames for core platform modules.**
-   - Use:
-     - `src/consensus.py`
-     - `src/build_director.py`
-     - `src/github_tools.py`
-     - `src/build_ledger.py`
-     - `src/document_store.py`
-     - `src/ci_workflow.py`
-   - Extend these modules only when the new code matches the module’s stated responsibility.
+1. Treat `FullPlatform` as an orchestration layer, not a dumping ground for subsystem logic.
+   - Put reusable implementation in the owning subsystem module.
+   - Keep FullPlatform code focused on wiring, routing, and coordination.
 
-2. **Implement build orchestration in `BuildPipeline` within `src/build_director.py`.**
-   - Put confidence gates and PR type routing there.
-   - Do not scatter routing logic across webhook, ledger, and workflow modules.
+2. In FullPlatform build orchestration, keep build routing logic inside the build director flow.
+   - PR-type routing belongs in `src/build_director.py`.
+   - Do not duplicate routing logic in webhook handlers or document store modules.
 
-3. **Implement claim/release/heartbeat lifecycle in `BuildLedger` within `src/build_ledger.py`.**
-   - Do not duplicate lease state handling in orchestration code.
+3. Keep confidence gate behavior in the build orchestration path, not in leaf subsystem code.
+   - Leaf modules may report signals; they must not decide platform-wide build admission.
 
-4. **Implement document chunking, embedding, and retrieval in `DocumentStore` within `src/document_store.py`.**
-   - Keep retrieval logic co-located with storage/indexing logic.
+4. Store GitHub integration behavior in `src/github_tools.py`.
+   - `GitHubTool` and `WebhookReceiver` remain the owning types for GitHub-side operations.
+   - Do not move webhook parsing into `build_director.py`.
 
-5. **Generate and maintain both workflow files through `ci_workflow.ensure()`.**
-   - Required outputs:
-     - `crafted-ci.yml`
-     - `crafted-ci-macos.yml`
-   - If `conftest.py` support for `src/` imports is required, manage it through this same path.
+5. Keep ledger ownership in `src/build_ledger.py`.
+   - Claim, release, and heartbeat operations must be implemented there or in tightly related ledger modules.
+   - Do not implement ad hoc claim files in CI or webhook code.
 
-6. **For FullPlatform code that writes generated files, always combine generation with path validation.**
-   - Example pattern:
+6. Keep document chunking, embedding, and retrieval in `src/document_store.py`.
+   - Do not duplicate chunking logic in consensus or build orchestration modules.
+
+7. When generating or ensuring CI workflows, use the canonical workflow names only.
+   - `crafted-ci.yml`
+   - `crafted-ci-macos.yml`
+
+8. Treat `ci_workflow.ensure()` as the authority for managed CI setup.
+   - If `conftest.py` is needed for `src/` imports, let `ci_workflow.ensure()` create or update it.
+   - Do not hand-maintain a conflicting version in the same path.
+
+9. For docs-PR classification in compatibility code, use the historical keyword gate only where that compatibility is required.
+   - Required pattern:
      ```python
-     from path_security import validate_write_path
-
-     workflow_path = validate_write_path(target_path)
-     workflow_path.write_text(rendered_workflow)
+     _docs_keywords = {...}
+     _is_docs_pr = any(kw in title_lower for kw in _docs_keywords)
      ```
+   - Do not spread separate, drifting docs-keyword lists across modules.
 
-7. **When handling PR classification, keep legacy docs-keyword detection isolated and clearly named.**
-   - Use `_docs_keywords` for the keyword set.
-   - Compute a boolean such as `is_docs_pr`.
-   - Do not inline repeated keyword checks across multiple methods.
+10. In macOS FullPlatform UI shell code, every interactive control must have a stable accessibility identifier before merge.
+    - Use the `{module}-{component}-{role}-{context?}` convention.
+    - Verify IDs are deterministic across launches for the same logical entity.
 
-8. **Apply accessibility identifiers to every interactive macOS shell element in the Crafted application shell.**
-   - Required element types include:
-     - buttons
-     - text fields
-     - secure fields
-     - rows/cards that receive interaction
-   - Use `.accessibilityIdentifier(...)` on the view declaration itself.
-
-9. **Keep accessibility identifier segments semantic and ordered.**
-   - Segment order is fixed:
-     - `module`
-     - `component`
-     - `role`
-     - optional `context`
-   - Do not swap role and component.
-   - Correct:
-     - `settings-anthropic-key-test-button`
-   - Incorrect:
-     - `settings-button-anthropic-key-test`
-
-10. **Use stable domain context in stream and navigator identifiers.**
-    - Examples:
+11. For row- and card-based interactive UI in FullPlatform, include the domain identifier as the final token.
+    - Required:
       - `navigator-project-row-{projectId}`
-      - `stream-gate-yes-button-{gateId}`
-    - Do not use presentation-only values such as row number or localized title.
+      - `stream-gate-card-{gateId}`
+    - Use the persisted model identifier, not a display index.
 
-11. **When extending subsystem packages such as `cal`, `dtl`, `trustflow`, `vtz`, `trustlock`, `mcp`, or `rewind`, keep package names lowercase exactly as defined.**
-    - Do not rename or alias package directories to expanded forms in the filesystem.
+12. Do not use array positions or transient UUIDs for accessibility identifier context.
+    - Invalid: `navigator-project-row-0`
+    - Invalid: `stream-gate-card-\(UUID())`
+    - Valid: `navigator-project-row-\(project.id)`
 
-12. **Do not introduce alternate CI naming, branch naming, or accessibility identifier formats inside FullPlatform code.**
-    - FullPlatform must emit and consume the canonical forms only:
-      - `forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}`
-      - `crafted-ci.yml`
-      - `crafted-ci-macos.yml`
-      - `{module}-{component}-{role}-{context?}`
+13. Before writing generated FullPlatform artifacts derived from PR metadata, validate the final path after slug construction.
+    - This applies to generated logs, workflow edits, temporary specs, and exported reports.
+
+14. When FullPlatform code touches filesystem output and CI setup in the same flow, validate each file target independently.
+    - Validate workflow file paths separately from test support file paths such as `conftest.py`.
+
+15. Keep subsystem slugs in branch names lowercase and aligned with real ownership.
+    - Use `fullplatform`, `mcp`, `trustflow`, `rewind`, `vtz`
+    - Do not use mixed-case or alternate labels like `FullPlatform` or `trust-flow`
