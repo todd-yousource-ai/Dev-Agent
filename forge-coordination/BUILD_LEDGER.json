@@ -1,0 +1,142 @@
+{
+  "build_id": "crafted-88234af3",
+  "subsystem": "Crafted",
+  "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Dev Agent called Crafted that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture.",
+  "scope_statement": "Build the Crafted Dev Agent \u2014 a native macOS two-process application consisting of a Swift/SwiftUI shell (UI, Touch ID authentication, Keychain credential storage, XPC communication, process management) and a Python 3.12 backend (consensus AI code generation via Claude + GPT-4o, build pipeline orchestration, GitHub integration, document store with FAISS embeddings, multi-agent coordination, holistic code review, TRD development workflow, cross-run learning via build memory and build rules). The system transforms plain-language build intents into tested, CI-passing GitHub pull requests through a confidence-gated scope phase, PRD decomposition, PR planning with type routing, parallel dual-model code generation with Claude arbitration, self-correction, lint gating, iterative fix loops, and operator-gated approval \u2014 all specified across 16 TRDs in forge-docs/.\n\nClarifications:\n  - review the TRDs and if the data is missing ensure they are included in the PRDs.\n  - review the TRDs and if the data is missing ensure they are included in the PRDs. Ensure we capture that it needs fixing\n  - review the TRDs and if the data is missing ensure they are included in the PRDs. Choose the best practices\n  - review the TRDs and if the data is missing ensure they are included in the PRDs. Choose the best practices\n  - review the TRDs and if the data is missing ensure they are included in the PRDs. Choose the best practices\n  - review the TRDs and if the data is missing ensure they are included in the PRDs. Choose the best practices\n  - review the TRDs and if the data is missing ensure they are included in the PRDs. Choose the best practices\n\nOperator on 'What is the build prioritization order across the 16 TRDs? S':\nSelect the best build process and order the PRDs so that the code is built the best way from start to finish\n\nOperator on 'TRD-8 v2.0 introduces Figma pipeline UI and sketch interpret':\nshould be included\n\nOperator on 'The documents reference both 'forge-agent' branch naming (ke':\ncrafted in all new identifiers, module names and file paths\n\nOperator on 'Should the build target the full CONSULTANT mode (TRD-7 \u00a721)':\nbuild target the full CONSULTANT mode (TRD-7 \u00a721) and FOUNDER mode (TRD-7 \u00a73-6) in the initial scope",
+  "created_at": 1774307695.2227788,
+  "updated_at": 1774307695.222921,
+  "updated_by": "todd-gould",
+  "prd_plan": [
+    {
+      "prd_id": "PRD-001",
+      "title": "Foundation Architecture, Naming Migration, and Repository Skeleton",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-002",
+      "title": "Security Baseline and Trust Boundary Enforcement",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-003",
+      "title": "Swift Shell Core: App Lifecycle, Auth, Keychain, and Process Management",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-004",
+      "title": "Cross-Process Transport: XPC/Unix Socket Channel and Handshake Protocol",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-005",
+      "title": "Backend Runtime Startup, Health, Version Handshake, and Graceful Shutdown",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-006",
+      "title": "Document Store, FAISS Retrieval, Injection Defense, and Build Rules Loading",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-007",
+      "title": "Consensus Engine and Language-Aware Multi-Model Code Generation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-008",
+      "title": "Core Build Pipeline: Confidence Gate, PRD Decomposition, PR Planning, and Operator-Gated Execution",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-009",
+      "title": "Pre-Test Quality Engine: Repo Context, Self-Correction, Lint Gate, and Fix Loop",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-010",
+      "title": "Recovery, Thread State, Checkpoints, Build Memory, and Build Rules Synthesis",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-011",
+      "title": "GitHub Integration, Branch/PR Lifecycle, CI Polling, and Repository Bootstrap",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-012",
+      "title": "Multi-Agent Coordination, Build Ledger, Journals, and Team Knowledge Sharing",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-013",
+      "title": "TRD Development Workflow with FOUNDER and CONSULTANT Modes",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-014",
+      "title": "Holistic Code Review Workflow and Review Fix PRs",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-015",
+      "title": "SwiftUI Product Experience: Build Stream, Navigator, Context Panel, Gates, and Operator Modes",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-016",
+      "title": "Figma Pipeline, Sketch Interpretation, and Multi-Modal Design-to-Code Input",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-017",
+      "title": "CI Infrastructure, macOS Runner, Workflow Hardening, and Release Validation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-018",
+      "title": "Comprehensive Testing, Regression Contracts, and Release Readiness Validation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    }
+  ],
+  "pr_entries": {},
+  "knowledge_notes": [],
+  "version": 1,
+  "schema_version": 3,
+  "agent_version": "38.170.0"
+}
