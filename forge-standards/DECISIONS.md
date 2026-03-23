@@ -1,81 +1,118 @@
 # DECISIONS.md
 
-## FullPlatform repository structure is fixed and documentation-first
+## Repository documentation is the source of truth
 **Status:** Accepted  
-**Context:** The subsystem operates within a repository where TRDs and PRDs are the source of truth, and implementation spans Python backend, Swift application shell, tests, and standards documents. Consistency of file placement is required so agents and developers can reliably locate architecture, runtime, and product constraints before making changes.  
-**Decision:** Preserve the established top-level repository layout and treat `forge-docs/` as the authoritative source for product and technical requirements. Keep standards in `forge-standards/`, Python backend code in `src/`, macOS shell code in `Crafted/`, Swift tests in `CraftedTests/`, Python tests in `tests/`, and failure classification in `FAILURE_TAXONOMY.md`. Require implementers to read relevant TRDs and critical files before modifying subsystem behavior.  
-**Consequences:** Implementation must not relocate core directories or duplicate source-of-truth documents elsewhere. Tooling, automation, and agent workflows must assume this layout. Cross-cutting changes must begin from documentation review, not code-first experimentation.  
+**Context:** The repository structure explicitly states that all TRDs and PRDs live in `forge-docs/` and must be read before building. The platform spans backend, CI, coordination, GitHub integration, security, and the macOS shell, so implementation must remain anchored to the authored requirements rather than inferred behavior.  
+**Decision:** Treat `forge-docs/` as the authoritative source of product and technical requirements, and require implementers to consult relevant TRDs/PRDs before changing FullPlatform behavior.  
+**Consequences:** Design and implementation choices in FullPlatform must trace back to documents in `forge-docs/`. Local code comments, incidental behavior, or ad hoc conventions must not override documented requirements. Work that conflicts with TRDs must be updated through documentation-first change management.  
 **Rejected alternatives:**  
-- Allowing teams to reorganize directories by subsystem ownership: rejected because it breaks agent assumptions and weakens discoverability of standards and requirements.  
-- Treating code comments or inline docs as the primary source of truth: rejected because TRDs/PRDs are explicitly designated authoritative.  
-- Merging Swift and Python implementations into a single app directory: rejected because platform boundaries and test/tooling needs are distinct.
+- **Use code as the sole source of truth:** Rejected because the platform is intentionally document-driven and spans multiple subsystems not fully inferable from current code.  
+- **Allow parallel undocumented conventions in subsystem folders:** Rejected because it creates drift between implementation and approved requirements.
 
-## Critical orchestration and security files are protected change surfaces
+## FullPlatform must preserve the repository boundary layout
 **Status:** Accepted  
-**Context:** Several files are identified as critical because they define the core generation loop, pipeline orchestration, GitHub I/O, write-path security boundary, and CI workflow generation. Uncontrolled modification of these files would create systemic risk across the FullPlatform subsystem.  
-**Decision:** Treat `src/consensus.py`, `src/build_director.py`, `src/github_tools.py`, `src/path_security.py`, and `src/ci_workflow.py` as protected change surfaces. Require any implementation touching these files to preserve their designated responsibilities and evaluate impact across all dependent flows before modification. Route all write-path handling through `src/path_security.py`, all GitHub interactions through `src/github_tools.py`, and all CI workflow generation through `src/ci_workflow.py`.  
-**Consequences:** Implementers may not bypass these modules with ad hoc logic elsewhere in the subsystem. Security, GitHub integration, orchestration, and CI behavior must remain centralized. Changes to protected files require broader regression validation because failures propagate platform-wide.  
+**Context:** The repository layout defines stable locations for requirements, standards, Python backend code, Swift application code, and tests. FullPlatform must interoperate across these areas without collapsing boundaries.  
+**Decision:** Preserve and rely on the established top-level repository layout: `forge-docs/`, `forge-standards/`, `src/`, `Crafted/`, `CraftedTests/`, `tests/`, and root governance files.  
+**Consequences:** FullPlatform code must not relocate or repurpose these directories. Cross-subsystem logic should reference them by their defined responsibilities. Tooling, automation, and generated artifacts must fit within this structure rather than introducing competing layouts.  
 **Rejected alternatives:**  
-- Allowing feature teams to add direct filesystem writes in local modules: rejected because it undermines the security boundary.  
-- Allowing direct GitHub API calls from arbitrary modules: rejected because rate limiting, path validation, and SHA protocol must remain centralized.  
-- Splitting orchestration responsibilities across many lightweight modules without a governing director: rejected because the build pipeline already has explicit orchestration ownership.
+- **Flatten the repository into a single app/service structure:** Rejected because it would erase the separation between standards, requirements, backend runtime, and macOS shell.  
+- **Introduce subsystem-specific parallel roots for docs/tests/builds:** Rejected because it would fragment discoverability and weaken governance.
 
-## FullPlatform build execution shall follow the staged pipeline with checkpointed state transitions
+## Critical integration files are protected change points
 **Status:** Accepted  
-**Context:** The platform’s build pipeline is defined as a sequence of stages ending in test, CI, and an operator gate. The README also specifies that every state transition is checkpointed, including per-PR stages such as `branch_opened → code_generated → tests_passed → committed → ci_passed`. Reliable recovery, auditability, and deterministic progression depend on honoring this flow.  
-**Decision:** Implement FullPlatform execution as an explicit staged pipeline with checkpointed transitions at every stage and sub-stage. Persist and recognize per-PR states including `branch_opened`, `code_generated`, `tests_passed`, `committed`, and `ci_passed`. Do not skip checkpoint creation or collapse multiple stage transitions into a single opaque step.  
-**Consequences:** The subsystem must be resumable and auditable at stage boundaries. Recovery logic, operator visibility, and diagnostics must rely on persisted stage transitions. Pipeline code must expose state progression clearly enough for checkpointing and inspection.  
+**Context:** Several files are identified as critical because they define generation, orchestration, GitHub I/O, path security, and CI workflow behavior. FullPlatform depends on these interfaces and behaviors remaining stable and intentionally modified.  
+**Decision:** Treat `src/consensus.py`, `src/build_director.py`, `src/github_tools.py`, `src/path_security.py`, and `src/ci_workflow.py` as protected integration points that require impact-aware modification.  
+**Consequences:** Changes touching these files must be made conservatively and with explicit consideration of cross-platform and cross-stage effects. FullPlatform features must integrate with these files through stable responsibilities rather than bypassing them.  
 **Rejected alternatives:**  
-- Running the pipeline as one monolithic job with only start/end status: rejected because it prevents recovery and obscures failures.  
-- Checkpointing only external milestones such as commits and CI completion: rejected because internal build progression must also be recoverable.  
-- Using inferred state from Git history alone: rejected because not all pipeline stages map cleanly to commits.
+- **Permit direct subsystem-specific rewrites of critical files without special treatment:** Rejected because changes here have system-wide blast radius.  
+- **Duplicate critical logic inside FullPlatform:** Rejected because duplication would create inconsistent security, orchestration, and CI behavior.
 
-## Cyclomatic complexity per pipeline stage shall not exceed 15
+## The build pipeline remains stage-based and checkpointed
 **Status:** Accepted  
-**Context:** The build pipeline documentation states that every stage has a maximum cyclomatic complexity of 15, and `src/build_director.py` is explicitly noted as having a strictly enforced complexity limit. This constraint exists to keep orchestration understandable, testable, and safe to modify.  
-**Decision:** Keep every FullPlatform pipeline stage at cyclomatic complexity 15 or below. Refactor branching logic into smaller helpers or stage-specific units rather than increasing complexity within a stage implementation. Enforce this limit as a design constraint, especially in orchestration code.  
-**Consequences:** New features must fit within decomposed control flow rather than accumulating conditionals in central orchestrators. Reviewers should reject changes that increase stage complexity past the limit, even if behavior is functionally correct. This encourages smaller, testable stage components.  
+**Context:** The build pipeline is defined as a sequence of stages, including parse/lint/import validation, a bounded fix loop, CI execution, and an operator gate. State transitions are checkpointed, including per-PR states such as `branch_opened`, `code_generated`, `tests_passed`, `committed`, and `ci_passed`.  
+**Decision:** Implement and extend FullPlatform only through the existing stage-based pipeline model, and checkpoint every stage transition and per-PR state transition.  
+**Consequences:** FullPlatform cannot introduce opaque long-running workflows that skip stage transitions or suppress state persistence. Recovery, auditability, and restart behavior must rely on explicit checkpoints.  
 **Rejected alternatives:**  
-- Allowing exceptions for “core” orchestration paths: rejected because those are the highest-risk areas and most need the constraint.  
-- Raising the limit to accommodate feature growth: rejected because it trades short-term convenience for long-term fragility.  
-- Measuring complexity only at module level instead of per stage: rejected because the documented requirement is stage-specific.
+- **Use an event-only or fire-and-forget orchestration model:** Rejected because it weakens restartability and traceability.  
+- **Collapse multiple stages into a single execution step for simplicity:** Rejected because it removes observability and narrows operator control.
 
-## FullPlatform shall use failure-aware validation and bounded fix loops
+## Every pipeline stage must respect a cyclomatic complexity ceiling of 15
 **Status:** Accepted  
-**Context:** The documented pipeline includes syntax and lint validation (`ast.parse → ruff → import check`) followed by a fix loop using `pytest` for up to 20 attempts with failure-type-aware strategy. This structure constrains how the platform identifies and remedies generated-code defects.  
-**Decision:** Apply validation in the defined order: parse, lint, then import checks before entering test-driven repair. Limit automated fix attempts to 20 and select remediation behavior based on failure type rather than blind retries. Do not implement unbounded repair loops or reorder early validation steps.  
-**Consequences:** The subsystem must classify failures sufficiently to support targeted repair behavior. Fast-fail validation must catch basic structural issues before expensive test execution. Repair workflows must terminate predictably instead of looping indefinitely.  
+**Context:** The build pipeline requirements explicitly state that every stage has a maximum cyclomatic complexity of 15, and `src/build_director.py` is highlighted as strictly enforcing this limit. FullPlatform orchestration must not erode this maintainability constraint.  
+**Decision:** Keep each FullPlatform pipeline stage and stage-level control unit at cyclomatic complexity 15 or below.  
+**Consequences:** Complex behavior must be decomposed into helper functions, smaller strategies, or explicit state handlers rather than accumulating branching in a single stage function. Review and testing should treat complexity growth as a design failure, not a cleanup item.  
 **Rejected alternatives:**  
-- Running tests before syntax/lint/import validation: rejected because it wastes time on failures detectable earlier.  
-- Using unlimited retries until success: rejected because it risks runaway execution and non-deterministic behavior.  
-- Applying the same repair strategy to all failures: rejected because the documented approach is failure-type-aware.
+- **Allow higher complexity in orchestration code because it is central infrastructure:** Rejected because orchestration complexity is exactly where maintainability and correctness risks compound.  
+- **Enforce complexity only at file level:** Rejected because the stated requirement applies per stage, not just per module.
 
-## CI generation shall target both Linux and macOS according to workload
+## The fix loop is bounded and failure-type-aware
 **Status:** Accepted  
-**Context:** The build pipeline defines CI execution on `ubuntu-latest` through `crafted-ci.yml`, with `crafted-ci-macos.yml` used for Swift-related workflows. The FullPlatform subsystem spans Python backend and macOS Swift shell, so CI targeting must reflect platform-specific execution needs.  
-**Decision:** Generate and maintain separate CI workflows for Linux and macOS responsibilities. Use `crafted-ci.yml` on `ubuntu-latest` for general backend and cross-platform validation, and use `crafted-ci-macos.yml` for Swift/macOS-specific validation. Do not collapse all CI onto a single runner class.  
-**Consequences:** CI logic must remain platform-aware. Swift validation must assume macOS execution, while general backend checks should prefer Linux where appropriate. Workflow generation and gating must account for multiple CI results.  
+**Context:** The pipeline defines a fix loop that runs `pytest` for up to 20 attempts and uses a failure-type-aware strategy. FullPlatform must preserve bounded automated remediation rather than allowing unbounded retries or generic patch churn.  
+**Decision:** Limit automated test-fix iteration to 20 attempts and select remediation strategy based on failure type.  
+**Consequences:** FullPlatform must classify failures sufficiently to drive targeted fixes and must stop after the defined retry budget. Operators receive a deterministic escalation point instead of endless automation.  
 **Rejected alternatives:**  
-- Running all jobs only on Linux: rejected because Swift/macOS shell validation requires macOS support.  
-- Running everything only on macOS: rejected because it increases cost and conflates platform-specific and general-purpose validation.  
-- Generating CI workflows ad hoc per feature: rejected because the repository already defines named workflow artifacts and responsibilities.
+- **Retry until green:** Rejected because it can loop indefinitely, waste CI resources, and hide systemic defects.  
+- **Use a fixed remediation strategy for all failures:** Rejected because syntax, import, test, and environment failures require different corrective actions.
 
-## Operator approval is a mandatory gate before merge
+## CI execution must remain platform-specific where required
 **Status:** Accepted  
-**Context:** The build pipeline includes a final gate where an operator approves or corrects before merge, and every gate decision is checkpointed. This establishes that autonomous progression is intentionally bounded by human review at merge time.  
-**Decision:** Require explicit operator approval or operator correction before merge. Persist gate outcomes as checkpointed decisions and do not permit FullPlatform to auto-merge solely on the basis of generated code, passing tests, or passing CI.  
-**Consequences:** The subsystem must expose enough information for operator review and must support paused execution awaiting a human decision. Merge automation must remain subordinate to the operator gate. Audit records must include the gate decision.  
+**Context:** The pipeline defines `crafted-ci.yml` on `ubuntu-latest` and `crafted-ci-macos.yml` for Swift. FullPlatform spans Python backend and Swift/macOS application concerns, so CI must preserve environment fidelity rather than forcing a single runner model.  
+**Decision:** Maintain separate CI workflows for Linux-compatible backend validation and macOS-specific Swift validation.  
+**Consequences:** FullPlatform changes affecting Python and Swift may require validation in different environments. CI generation and orchestration must route work to the appropriate workflow instead of assuming cross-platform equivalence.  
 **Rejected alternatives:**  
-- Fully automatic merge after CI passes: rejected because the documented process requires operator approval.  
-- Optional operator review only for high-risk changes: rejected because the gate is defined as a universal pipeline stage.  
-- Recording gate outcomes only in logs: rejected because gate decisions must be checkpointed state.
+- **Run all CI on Ubuntu only:** Rejected because Swift/macOS shell validation requires macOS-specific execution.  
+- **Run all CI on macOS only:** Rejected because it increases cost and latency for backend work without adding value to Linux-compatible checks.
 
-## Root application routing in FullPlatform macOS shell shall follow onboarding-first branching
+## Operator approval remains a mandatory gate before merge
 **Status:** Accepted  
-**Context:** The macOS application shell defines a root view decision tree where `RootView` routes to `OnboardingContainerView` whenever onboarding is not complete, with subroutes for specific onboarding states such as welcome, API keys, and GitHub auth. The FullPlatform subsystem must respect this routing contract when integrating shell behavior.  
-**Decision:** Implement root application routing so that incomplete onboarding always takes precedence over the main application experience. Route from `RootView` to `OnboardingContainerView` whenever onboarding state is not complete, and preserve explicit substate-driven onboarding views rather than replacing them with a single generic setup screen.  
-**Consequences:** Application-shell changes must remain compatible with the onboarding state machine. Main platform functionality cannot assume availability before onboarding completion. UI integration work must preserve state-specific onboarding routes.  
+**Context:** The pipeline includes a gate where the operator approves or corrects before merge, and every gate decision is checkpointed. FullPlatform is not authorized to autonomously merge changes solely on passing automation.  
+**Decision:** Require an explicit operator gate before merge, and persist every gate decision as part of the checkpointed workflow state.  
+**Consequences:** FullPlatform must surface sufficient context for human approval and cannot silently bypass review after tests or CI pass. Audit trails must include approvals, corrections, and gate outcomes.  
 **Rejected alternatives:**  
-- Sending users directly to the main app and surfacing setup tasks later: rejected because the decision tree makes onboarding completion a root-level prerequisite.  
-- Replacing multiple onboarding views with one combined form: rejected because the shell defines explicit state-based routing.  
-- Letting backend readiness determine root routing independently of onboarding state: rejected because the root decision tree is driven by onboarding completion.
+- **Auto-merge after CI passes:** Rejected because the workflow explicitly preserves human control at the final gate.  
+- **Record gate outcomes only in ephemeral logs:** Rejected because checkpointed decisions are required for auditability and recovery.
+
+## All GitHub I/O must flow through the GitHub tools boundary
+**Status:** Accepted  
+**Context:** `src/github_tools.py` is designated as the location for all GitHub I/O, including path validation, rate limiting, and SHA protocol handling. FullPlatform must not bypass this boundary when interacting with repositories or pull requests.  
+**Decision:** Route all FullPlatform GitHub interactions exclusively through `src/github_tools.py` or approved abstractions built directly on it.  
+**Consequences:** FullPlatform cannot make ad hoc GitHub API calls that skip rate limiting, SHA discipline, or repository safety checks. GitHub behavior remains centralized and auditable.  
+**Rejected alternatives:**  
+- **Allow direct API calls from feature modules for convenience:** Rejected because it bypasses safety and consistency mechanisms.  
+- **Reimplement GitHub access inside FullPlatform:** Rejected because it duplicates protocol logic and increases defect risk.
+
+## Every write path must pass through the path security boundary
+**Status:** Accepted  
+**Context:** `src/path_security.py` is identified as the security boundary, and every write path must pass through it. FullPlatform manipulates repository content and generated artifacts, so write safety is a non-negotiable constraint.  
+**Decision:** Require every filesystem write initiated by FullPlatform to be validated through `src/path_security.py` before execution.  
+**Consequences:** FullPlatform must not perform raw writes, temp-file promotions, generated artifact output, or patch application outside the path security boundary. Security review can therefore focus on a single enforcement point.  
+**Rejected alternatives:**  
+- **Validate paths at the caller only:** Rejected because distributed validation is easy to miss and hard to audit.  
+- **Rely on repository-relative path construction without centralized checks:** Rejected because relative path logic alone does not provide an adequate security boundary.
+
+## CI workflow generation must remain centralized
+**Status:** Accepted  
+**Context:** `src/ci_workflow.py` generates the CI workflows. FullPlatform depends on coherent workflow generation across backend and Swift validation and should not fork workflow creation logic.  
+**Decision:** Centralize CI workflow generation in `src/ci_workflow.py` and prohibit subsystem-specific workflow generation code paths that bypass it.  
+**Consequences:** FullPlatform features that affect CI must be expressed through the existing generator boundary. This keeps workflow naming, structure, and policy consistent across the repository.  
+**Rejected alternatives:**  
+- **Generate workflows independently in each subsystem:** Rejected because it creates policy drift and inconsistent CI semantics.  
+- **Hand-maintain workflow YAML outside the generator:** Rejected because the repository explicitly identifies a generating authority for CI workflows.
+
+## FullPlatform must preserve backend–macOS shell separation
+**Status:** Accepted  
+**Context:** The repository layout separates Python backend implementation in `src/` from the Swift/SwiftUI application shell in `Crafted/` and `CraftedTests/`. TRD-1 defines app-shell behavior such as the root view decision tree, while backend responsibilities live elsewhere.  
+**Decision:** Keep FullPlatform responsibilities split between backend runtime/orchestration and macOS shell presentation, with interfaces between them instead of direct responsibility overlap.  
+**Consequences:** Backend code must not absorb SwiftUI view logic, and the macOS shell must not reimplement backend orchestration or policy. Tests should validate each side in its native test stack.  
+**Rejected alternatives:**  
+- **Embed orchestration logic directly into the macOS app:** Rejected because it couples UI concerns to backend workflow control.  
+- **Move shell decision logic into Python-rendered views or generic templates:** Rejected because the application shell is explicitly Swift/SwiftUI-based.
+
+## The macOS shell root view must follow onboarding-first routing
+**Status:** Accepted  
+**Context:** TRD-1 defines a root view decision tree in which incomplete onboarding routes to `OnboardingContainerView`, which then selects onboarding steps such as `WelcomeView`, `APIKeysView`, and `GitHubAuthView`. FullPlatform must not undermine this user-state-driven shell flow.  
+**Decision:** Preserve onboarding-state-driven root routing in the macOS shell, with onboarding screens taking precedence until onboarding is complete.  
+**Consequences:** FullPlatform features exposed through the shell must respect onboarding prerequisites and cannot route users directly into post-onboarding views before required setup is complete.  
+**Rejected alternatives:**  
+- **Use a single root dashboard and present onboarding modally as needed:** Rejected because the TRD specifies a root-level decision tree keyed by onboarding state.  
+- **Allow deep links to bypass onboarding steps:** Rejected because it would violate required setup sequencing and state guarantees.
