@@ -1,0 +1,170 @@
+{
+  "build_id": "fullplatform-83575b11",
+  "subsystem": "FullPlatform",
+  "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture.",
+  "scope_statement": "Build the complete Crafted Dev Agent \u2014 a native macOS two-process application (Swift shell + Python backend) that uses consensus AI (Claude + GPT-4o in parallel, Claude arbitrating) to autonomously develop high-quality software from TRD/PRD specifications. The system encompasses all 16 TRD-specified subsystems: macOS Application Shell with Touch ID/Keychain/XPC (TRD-1), Consensus Engine with dual-provider parallel generation and comparative evaluation (TRD-2), Build Pipeline with confidence-gated scope, interleaved PRD-then-PR execution, self-correction, lint gate, and 20-pass fix loop (TRD-3), Multi-Agent Coordination via GitHub-stored Build Ledger with optimistic locking (TRD-4), GitHub Integration Layer with PAT auth, rate limiting, and CI workflow management (TRD-5), Holistic Code Review with 5 lenses (TRD-6), TRD Development Workflow with FOUNDER/ENGINEER/CONSULTANT adaptive modes (TRD-7), SwiftUI Design System with Figma pipeline (TRD-8), Mac CI Runner infrastructure (TRD-9), Document Store with FAISS vector index and injection defense (TRD-10), Security Threat Model enforcement across all components (TRD-11), Backend Runtime Startup and Version Handshake (TRD-12), Recovery and State Management with three-layer persistence, build memory, and self-improving build rules (TRD-13), Code Quality and CI Pipeline with seven false-positive fixes (TRD-14), Operational Runbook procedures (TRD-15), and Testing/Validation with FM taxonomy and 35 regression tests (TRD-16). Per operator gap answers, the PRD decomposition phase will also resolve specifications for: CommandRouter (REPL command dispatch), EmailNotifier (SMTP notification delivery), WebhookReceiver (inbound GitHub event handling), PRDPlanner decomposition algorithm (SCOPE_SYSTEM/PRD_PLAN_SYSTEM prompt schemas), and scripts/build_python_bundle.sh (Python bundling for CI).\n\nClarifications:\n  - leverage the prd process to resolve this issue\n  - leverage the prd process to resolve this issue\n  - not sandboxed for now\n  - leverage the prd process to resolve this issue\n  - leverage the prd process to resolve this issue\n  - leverage the prd process to resolve this issue\n  - crafted-agent",
+  "created_at": 1774294842.584346,
+  "updated_at": 1774294842.584565,
+  "updated_by": "todd-gould",
+  "prd_plan": [
+    {
+      "prd_id": "PRD-001",
+      "title": "macOS Shell Foundation and Application Lifecycle",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-002",
+      "title": "Authentication, Session Management, and Keychain Security",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-003",
+      "title": "Secure XPC Bridge, Nonce Handshake, and Backend Process Management",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-004",
+      "title": "Backend Runtime Startup, Version Handshake, and CommandRouter",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-005",
+      "title": "SwiftUI Design System, Build Stream UI, and Operator Experience",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-006",
+      "title": "Consensus Engine and Provider Abstraction",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-007",
+      "title": "Document Store, Retrieval, and Context Integrity",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-008",
+      "title": "GitHub Integration Core, Repository Bootstrap, and Webhook Receiver",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-009",
+      "title": "Multi-Agent Coordination and Build Ledger",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-010",
+      "title": "Scope Confidence Gate and PRD Planning System",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-011",
+      "title": "PR Planning, PRSpec Routing, and Build Interface Mapping",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-012",
+      "title": "Build Execution Pipeline and Stage Orchestration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-013",
+      "title": "Self-Correction Loop, Lint Gate, Native Output Gate, and Fix Loop",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-014",
+      "title": "CI Integration, Workflow Generation, and Python Bundle Build Script",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-015",
+      "title": "Recovery, Thread State Persistence, Build Memory, and Build Rules",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-016",
+      "title": "Holistic Code Review Workflow",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-017",
+      "title": "TRD Development Workflow and Adaptive Operator Modes",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-018",
+      "title": "Notifications, Email Delivery, and Operator Alerting",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-019",
+      "title": "Security Threat Model Enforcement and Cross-Cutting Controls",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-020",
+      "title": "Mac CI Runner Infrastructure and Release Packaging",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-021",
+      "title": "Operational Runbook, Recovery UX, and Admin Tooling",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-022",
+      "title": "Testing, Validation, and Regression Taxonomy Enforcement",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    }
+  ],
+  "pr_entries": {},
+  "knowledge_notes": [],
+  "version": 1,
+  "schema_version": 3,
+  "agent_version": "38.156.0"
+}
