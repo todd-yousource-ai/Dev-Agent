@@ -1,201 +1,101 @@
 # DECISIONS.md
 
-## Native macOS shell with bundled Python backend
+## Repository layout is a hard contract
 **Status:** Accepted  
-**Context:** Crafted is specified as a native macOS AI coding agent, not a web app or editor plugin. The product must provide macOS-native installation, UI, auth, Keychain integration, and local orchestration while also running a sophisticated generation and GitHub automation backend. The repository guidance and TRDs define a two-process architecture with Swift owning UI and secrets, and Python owning intelligence and repository automation.  
-**Decision:** Forge adopts a two-process local architecture: a native Swift/SwiftUI macOS shell and a bundled Python 3.12 backend. The Swift shell owns installation, updates, UI, authentication, Keychain, lifecycle, and privileged local integrations. The Python backend owns planning, consensus, generation, validation loops, and GitHub operations.  
-**Consequences:** The platform is macOS-specific by design. UI and security-sensitive logic must remain in Swift. AI orchestration and repository automation must remain in Python. Packaging, upgrades, process supervision, and cross-process contracts become first-class engineering concerns.  
+**Context:** The FullPlatform subsystem spans documentation, backend runtime, CI generation, and the macOS application shell. The TRDs define a fixed repository structure and identify source-of-truth locations for standards, implementation, and product documents. Drift in layout would break agent assumptions, file discovery, and automation.  
+**Decision:** Preserve the repository layout exactly as defined: `forge-docs/` for TRDs and PRDs, `forge-standards/` for architecture and conventions, `src/` for Python backend code, `Crafted/` for the Swift/SwiftUI shell, `CraftedTests/` for XCTest, `tests/` for pytest, and root-level operational documents such as `FAILURE_TAXONOMY.md`. Treat `forge-docs/` as required pre-implementation input and `forge-standards/` as implementation constraints.  
+**Consequences:** Implementations must not relocate subsystem boundaries, duplicate standards into code directories, or invent alternate source-of-truth paths. Build tooling, agent workflows, and documentation readers must resolve files from these fixed locations. New FullPlatform features must fit within this structure rather than redefining it.  
 **Rejected alternatives:**  
-- Single-process Swift-only application — rejected because the intelligence pipeline, provider integrations, and repository automation are better served by Python ecosystem capabilities.  
-- Electron or web container — rejected because the shell must provide native macOS security, Keychain, biometrics, and system integration.  
-- Pure Python desktop app — rejected because secrets, auth UX, and native system behavior belong in a native shell.
+- Allowing teams to reorganize directories by feature area: rejected because agent workflows and TRD references assume stable paths.  
+- Co-locating docs with implementation folders: rejected because the standards/docs split is explicit and supports governance.  
+- Treating repository structure as advisory: rejected because path-sensitive tooling and security checks depend on consistency.
 
-## Strict TRD-driven architecture
+## Critical files require constrained modification
 **Status:** Accepted  
-**Context:** The product is fully specified by 16 TRDs and agent guidance explicitly states that the TRDs are the source of truth. Multiple subsystems interact across security, UI, orchestration, and GitHub automation; uncontrolled local conventions would cause drift and unsafe behavior.  
-**Decision:** All significant subsystem behavior, interfaces, error contracts, and testing expectations are derived from the TRDs. Implementation decisions that are not spelled out in code comments or local docs must align with the applicable TRD owner document.  
-**Consequences:** Engineers must trace changes to the owning TRD before implementation. Cross-cutting changes require checking dependent TRDs, especially security requirements in TRD-11. Local convenience behavior cannot override documented contracts.  
+**Context:** Several files are explicitly identified as high-impact control points: `src/consensus.py`, `src/build_director.py`, `src/github_tools.py`, `src/path_security.py`, and `src/ci_workflow.py`. Changes to these files affect generation, orchestration, GitHub I/O, security boundaries, and CI synthesis across the FullPlatform subsystem.  
+**Decision:** Treat the listed critical files as controlled interfaces. Modify them only when the change is necessary for subsystem behavior, keep responsibilities aligned with their documented purpose, and do not bypass them with parallel implementations. In particular, all GitHub I/O must remain centralized in `src/github_tools.py`, all write-path validation must continue through `src/path_security.py`, and pipeline orchestration must continue through `src/build_director.py`.  
+**Consequences:** New code must integrate with, not route around, these files. Security, GitHub access, and orchestration logic must not be duplicated elsewhere. Reviews for these files must assume subsystem-wide blast radius. Refactors must preserve their role as chokepoints.  
 **Rejected alternatives:**  
-- Team conventions as primary authority — rejected because they create ambiguity and drift.  
-- Code-as-spec only — rejected because the platform spans two languages and many boundaries requiring explicit contracts.  
-- Ad hoc feature interpretation — rejected because safety and consistency depend on deterministic requirements.
+- Splitting equivalent logic into multiple helper modules without a single chokepoint: rejected because it weakens auditability and enforcement.  
+- Directly performing GitHub operations from feature modules: rejected because it bypasses path validation, rate limiting, and SHA protocol controls.  
+- Writing files without `src/path_security.py`: rejected because it violates the defined security boundary.
 
-## Authenticated local IPC over Unix domain socket with line-delimited JSON
+## Pipeline stages and transitions must remain explicit and checkpointed
 **Status:** Accepted  
-**Context:** The shell and backend must communicate locally, reliably, and with a clear boundary between trusted secret-handling code and untrusted external-content-processing code. The repository guidance explicitly defines an authenticated Unix socket and line-delimited JSON transport.  
-**Decision:** Inter-process communication uses an authenticated Unix domain socket and line-delimited JSON messages. The shell supervises connection establishment and message framing. The protocol is explicit, typed by message kind, and treated as a stable internal contract.  
-**Consequences:** Both processes must implement schema validation, framing discipline, and authentication for every session. IPC messages must remain compact, explicit, and version-tolerant. Debugging and observability can rely on structured message flows.  
+**Context:** The build pipeline is defined as a staged process with explicit transitions and checkpoints, including per-PR states such as `branch_opened`, `code_generated`, `tests_passed`, `committed`, and `ci_passed`. The system depends on resumability, traceability, and operator visibility across long-running automation.  
+**Decision:** Implement and preserve the pipeline as explicit stages with durable checkpointed state transitions. Record every transition, including per-PR stage progression, and require downstream actions to read prior checkpoint state rather than infer progress implicitly.  
+**Consequences:** Stateless or ad hoc orchestration is disallowed. Recovery, retry, and audit flows must use persisted checkpoints. New stages or transition names must be added deliberately and integrated into the state model rather than hidden in logs or temporary memory.  
 **Rejected alternatives:**  
-- In-process FFI bridge — rejected because it weakens isolation between secret-owning shell code and AI/backend logic.  
-- HTTP localhost API — rejected because it introduces unnecessary network semantics and attack surface for a local-only boundary.  
-- XPC for everything — rejected because Python interoperability and backend portability are simpler with a Unix socket contract.
+- Using only in-memory orchestration state: rejected because it breaks resumability and observability.  
+- Checkpointing only major milestones: rejected because the TRD requires every state transition to be checkpointed.  
+- Inferring state from Git history or CI status alone: rejected because those sources are incomplete for internal generation stages.
 
-## Swift shell is the sole owner of secrets and identity
+## Cyclomatic complexity per stage is capped at 15
 **Status:** Accepted  
-**Context:** The platform handles provider credentials, GitHub credentials, and user authentication. Security guidance states that the Swift process owns authentication and secrets. The backend processes external content and generated code artifacts, so secret exposure must be minimized.  
-**Decision:** All credentials, tokens, and secret persistence are owned by the Swift shell using macOS Keychain and native authentication controls. The Python backend never stores long-lived secrets and receives only the minimum scoped material required for a task, when permitted by the security model.  
-**Consequences:** Any feature requiring credentials must be brokered through shell-managed flows. Backend code must be designed to function with delegated capability tokens or ephemeral inputs instead of direct secret ownership. Security review is mandatory for any exception.  
+**Context:** The build pipeline explicitly requires every stage to maintain a maximum cyclomatic complexity of 15. This is a design constraint intended to keep orchestration understandable, testable, and reviewable.  
+**Decision:** Enforce a hard maximum cyclomatic complexity of 15 for every pipeline stage implementation, especially within orchestration code such as `src/build_director.py`. Decompose behavior into helper functions or smaller stage units rather than exceeding the cap.  
+**Consequences:** Stage implementations must be factored for clarity, and feature additions that would push a stage past the limit must be split structurally. Review and tooling must treat complexity growth as a design failure, not a cleanup task for later.  
 **Rejected alternatives:**  
-- Duplicate secret storage in Python — rejected because it expands exposure and bypasses native security controls.  
-- Environment variable based long-lived secret handling — rejected because it is brittle and less secure on end-user systems.  
-- Shared config-file secret storage — rejected because Keychain is the correct macOS-native control plane.
+- Allowing exceptions for “core orchestration” files: rejected because `src/build_director.py` is explicitly called out as constrained.  
+- Measuring complexity only at module level: rejected because the requirement applies per stage.  
+- Deferring complexity cleanup until after feature delivery: rejected because the limit is preventive, not aspirational.
 
-## Biometric and session-gated access to privileged actions
+## Static validation and fix loop are mandatory pipeline behaviors
 **Status:** Accepted  
-**Context:** The shell owns user identity and session lifecycle. The application performs sensitive operations such as revealing account state, using credentials, and authorizing repository actions. Native desktop UX should leverage OS-level authentication where appropriate.  
-**Decision:** Privileged actions are gated by shell-managed session controls, with biometric or equivalent OS-backed authentication used where required by policy. Session state is explicit and expires according to shell lifecycle rules.  
-**Consequences:** Sensitive features must be invocable only through session-aware shell pathways. UX flows must account for unlock, re-authentication, failure, and timeout states. The backend cannot silently escalate access.  
+**Context:** The pipeline definition includes static validation steps (`ast.parse`, `ruff`, import check) followed by a fix loop using `pytest` with up to 20 attempts and failure-type-aware strategy. These are not optional optimizations; they are part of the expected generation lifecycle.  
+**Decision:** Run static validation before test-driven repair, and implement the fix loop with a maximum of 20 pytest-based attempts using failure-type-aware remediation. Do not skip static checks, collapse them into a single opaque command, or run unbounded retries.  
+**Consequences:** Generated changes must pass syntax, lint, and import validation before entering iterative repair. Retry logic must be bounded and classified by failure type. The subsystem must expose failure when the retry budget is exhausted rather than looping indefinitely.  
 **Rejected alternatives:**  
-- Always-unlocked local app model — rejected because it is incompatible with local secret custody.  
-- Backend-managed auth state — rejected because auth ownership belongs in the shell.  
-- Custom credential prompts in place of OS facilities — rejected because native security UX is safer and more consistent.
+- Running tests before static validation: rejected because cheaper deterministic failures should be caught first.  
+- Using unlimited repair retries: rejected because it hides non-converging failures and wastes resources.  
+- Treating all test failures identically: rejected because the pipeline specifies failure-type-aware strategy.
 
-## No execution of generated code by the platform
+## CI generation must target both Linux and macOS execution contexts
 **Status:** Accepted  
-**Context:** The repository guidance explicitly states that neither process ever executes generated code. The product produces implementation, tests, and pull requests, but generated code is external content until validated through repository tooling and CI boundaries. This is a core safety property.  
-**Decision:** Forge never directly executes generated application code as part of agent operation. Validation is limited to approved repository tooling, static analysis, linting, tests, and CI invocation under the defined security model rather than arbitrary runtime execution of generated artifacts.  
-**Consequences:** Product features must avoid “run this generated app locally” or autonomous runtime probing of generated binaries. Validation design favors deterministic toolchain invocations and CI-mediated checks. Some classes of dynamic verification are intentionally out of scope.  
+**Context:** The repository uses distinct generated workflows: `crafted-ci.yml` on `ubuntu-latest` and `crafted-ci-macos.yml` for Swift/macOS concerns. The FullPlatform subsystem spans Python backend and Swift shell components, so CI must reflect both environments.  
+**Decision:** Generate and maintain separate CI workflows for Linux and macOS responsibilities. Use Ubuntu for general backend validation and a dedicated macOS workflow for Swift or platform-specific validation. Do not collapse all checks into a single runner type.  
+**Consequences:** CI logic must remain environment-aware. Swift and macOS application shell changes must be validated in macOS CI, while backend checks continue to run in Ubuntu where appropriate. Workflow generation in `src/ci_workflow.py` must preserve this split.  
 **Rejected alternatives:**  
-- Sandboxed execution of generated code — rejected because it still meaningfully expands risk and violates stated platform constraints.  
-- Local autonomous app launching for QA — rejected for the same safety reason.  
-- Unrestricted tool use by the backend — rejected because the platform is a directed build agent, not a general-purpose autonomous executor.
+- Running everything on Ubuntu only: rejected because Swift/macOS validation requires macOS-specific execution.  
+- Running everything on macOS only: rejected because it is costlier and unnecessary for all backend checks.  
+- Maintaining one monolithic workflow file with conditional branching: rejected because the defined output names and responsibilities are already split.
 
-## Directed build agent, not chat or autocomplete
+## Operator gate is required before merge
 **Status:** Accepted  
-**Context:** README explicitly defines the product as neither a chat interface nor code autocomplete. The user supplies repository context, TRDs, and intent; the system plans, generates, validates, and opens pull requests. Product design must stay optimized for deterministic delivery rather than conversational breadth.  
-**Decision:** Forge is designed as a directed software build agent with intent intake, confidence assessment, plan decomposition, PR sequencing, implementation generation, validation, and PR creation. Conversational UX is subordinate to workflow execution and review gating.  
-**Consequences:** UI, state models, telemetry, and testing focus on task progression, artifacts, and approvals rather than open-ended dialogue. Feature requests that turn the product into a chatbot or IDE copilot should be rejected unless they directly support the build workflow.  
+**Context:** The pipeline includes a gate where the operator approves or corrects before merge. The FullPlatform subsystem combines autonomous generation with human oversight, and gate decisions are part of the controlled flow.  
+**Decision:** Require an explicit operator approval or correction step before merge. Treat the gate as a first-class state in the pipeline and record the decision rather than assuming CI success is sufficient for merge authority.  
+**Consequences:** Fully automatic merge-on-green is not permitted for this subsystem. Tooling must support pause, review, correction, and resume behavior. Audit trails must include gate outcomes as part of the checkpointed state model.  
 **Rejected alternatives:**  
-- General chat assistant UX — rejected because it dilutes the core workflow.  
-- Inline code completion product — rejected because it is a different product category.  
-- Fully autonomous merge-and-deploy agent — rejected because human review gates are central to trust and control.
+- Auto-merging after CI passes: rejected because the pipeline explicitly requires operator approval or correction.  
+- Informal manual review outside the pipeline state model: rejected because gate decisions must be trackable.  
+- Optional gating only for risky changes: rejected because the stage is defined as part of the standard flow.
 
-## Consensus generation using multiple providers with arbitration
+## Path security is the mandatory write boundary
 **Status:** Accepted  
-**Context:** The product description specifies a two-model consensus engine using Claude and GPT-4o in parallel with Claude arbitrating every result. The platform must increase quality and confidence for repository changes while reducing single-model failure modes.  
-**Decision:** Implementation generation uses multiple LLM providers in parallel for substantive coding tasks, with an explicit arbitration stage producing the accepted result. Consensus and arbitration are treated as first-class pipeline stages, not incidental prompt patterns.  
-**Consequences:** Provider abstractions, prompt contracts, latency budgets, and result comparison become core backend design elements. Failures must be attributable by provider and stage. The pipeline must tolerate provider degradation and partial availability.  
+**Context:** `src/path_security.py` is identified as the security boundary, and every write path must pass through it. For the FullPlatform subsystem, generated code, workflow files, and document updates create broad write surfaces that must be constrained.  
+**Decision:** Route every filesystem write through the path security boundary in `src/path_security.py`. Forbid direct writes that bypass validation, normalization, or repository-boundary checks.  
+**Consequences:** Any feature that emits files must integrate with the existing path security API. Utility shortcuts such as direct `open(..., "w")` in feature modules are not acceptable unless wrapped by the security boundary. Security review can assume a single enforcement point for write-path controls.  
 **Rejected alternatives:**  
-- Single-model generation — rejected because it increases correlated failure risk and weakens confidence.  
-- Majority voting without arbitration — rejected because code synthesis requires qualitative reconciliation, not just counting outputs.  
-- Provider-specific bespoke flows everywhere — rejected because it would fragment the orchestration model.
+- Allowing trusted modules to bypass path security: rejected because trust-based exceptions erode the boundary.  
+- Validating only external user-supplied paths: rejected because internal generation can also produce unsafe paths.  
+- Relying on code review instead of technical enforcement: rejected because the file is defined as the enforcement boundary.
 
-## Confidence assessment before committing to work
+## GitHub interactions must be centralized and protocol-aware
 **Status:** Accepted  
-**Context:** The product description states that the agent assesses confidence in the scope before committing to it. This protects users from low-confidence, poorly bounded automation and improves planning quality.  
-**Decision:** Before a build begins, the backend must evaluate scope clarity, repository readiness, and specification sufficiency, and surface a confidence determination that influences whether planning proceeds, blocks, or requests clarification.  
-**Consequences:** Intake is not a blind “always start” action. UX and APIs must support clarification loops and blocked states. Confidence logic becomes part of acceptance criteria for orchestration changes.  
+**Context:** `src/github_tools.py` owns all GitHub I/O, including path validation, rate limiting, and SHA protocol handling. The FullPlatform subsystem depends on deterministic repository interaction and must avoid inconsistent GitHub semantics across modules.  
+**Decision:** Centralize all GitHub reads and writes in `src/github_tools.py` and preserve enforcement of path validation, rate limiting, and SHA-aware update protocols. Do not implement direct GitHub API calls elsewhere in the subsystem.  
+**Consequences:** Feature modules must call shared GitHub utilities rather than embedding API clients. Retry behavior, content updates, and concurrency semantics remain consistent across the platform. Security and correctness fixes in GitHub handling can be made once at the chokepoint.  
 **Rejected alternatives:**  
-- Immediate execution on every request — rejected because it leads to unsafe or low-value work.  
-- Purely user-declared confidence — rejected because the system must independently assess readiness.  
-- Hidden internal confidence only — rejected because users need actionable gating feedback.
+- Per-feature GitHub clients: rejected because they duplicate protocol handling and invite inconsistency.  
+- Using git CLI for some operations and API calls for others without central mediation: rejected because it fragments behavior and auditability.  
+- Ignoring SHA protocol on updates: rejected because it risks overwrites and race conditions.
 
-## Hierarchical decomposition from intent to PRD plan to typed pull requests
+## The macOS shell must preserve the root view decision tree
 **Status:** Accepted  
-**Context:** The README specifies a decomposition path from intent to ordered PRD plan to a sequence of typed pull requests. Large software changes require structure, dependency ordering, and reviewable units.  
-**Decision:** Forge decomposes work hierarchically: user intent becomes a PRD-level execution plan, and each PRD is further decomposed into ordered, typed PRs representing logical implementation units. PRs are the principal delivery artifact.  
-**Consequences:** Planning data models must represent hierarchy, dependencies, ordering, and PR typing. Review UX must display progression across plan and PR levels. Pipeline execution must optimize for small, coherent, independently reviewable changes.  
+**Context:** TRD-1 defines a root view decision tree in which onboarding state controls whether the user sees onboarding flows or the main application hierarchy. This is a foundational navigation contract for the FullPlatform user-facing shell.  
+**Decision:** Preserve onboarding-driven root navigation as the top-level routing rule in the SwiftUI shell. `RootView` must branch first on onboarding completion state and present the onboarding container when onboarding is incomplete. New top-level UI states must extend this decision model rather than bypass it.  
+**Consequences:** Features cannot attach themselves as alternate root flows that skip onboarding prerequisites. Authentication, API key collection, GitHub authorization, and related setup states must remain upstream of the main application experience. UI refactors must keep root-state logic explicit.  
 **Rejected alternatives:**  
-- One large PR per request — rejected because it reduces reviewability and increases failure blast radius.  
-- Flat task list without hierarchy — rejected because it weakens planning discipline.  
-- File-by-file autonomous commits — rejected because PRs should map to logical units, not incidental edit batches.
-
-## Draft pull request as the default unit of delivery
-**Status:** Accepted  
-**Context:** The product creates pull requests for review, and the user gates, reviews, and merges. Trust in autonomous coding depends on preserving human control before merge.  
-**Decision:** The default output of a completed implementation cycle is a draft pull request containing code, tests, and machine-generated rationale/metadata as defined by subsystem specs. Human approval remains the release gate for merge.  
-**Consequences:** Backend logic must integrate tightly with GitHub branch and PR workflows. UI must support review status visibility and next-step guidance. Merge authority remains outside autonomous completion.  
-**Rejected alternatives:**  
-- Direct commit to main — rejected because it violates review and safety expectations.  
-- Local patch export only — rejected because the product is intended to open GitHub PRs autonomously.  
-- Automatic merge after CI — rejected because the user remains the gate.
-
-## GitHub-centered repository workflow
-**Status:** Accepted  
-**Context:** The README and architecture describe opening GitHub pull requests and advancing work after approval. Repository automation, CI checks, branches, and PR metadata revolve around GitHub.  
-**Decision:** Forge standardizes on GitHub as the initial source-control and PR orchestration platform. Branch creation, push, PR creation, status tracking, and merge-adjacent workflows are implemented against GitHub contracts first.  
-**Consequences:** Backend abstractions should isolate provider-specific Git operations, but GitHub is the normative implementation target. Future SCM support must not compromise GitHub quality or expand scope prematurely.  
-**Rejected alternatives:**  
-- Multi-SCM support from day one — rejected because it increases complexity without matching the product spec.  
-- Local Git-only workflow with no hosted provider integration — rejected because draft PRs are central to the product value.  
-- GitHub Actions-only tight coupling with no abstraction — rejected because some portability is still desirable at the adapter boundary.
-
-## Iterative validation pipeline with self-correction and fix loops
-**Status:** Accepted  
-**Context:** The README specifies generation followed by self-correction, lint gate, iterative fix loop, CI execution, and PR creation. Generated code quality requires explicit repair cycles, not a single-shot output model.  
-**Decision:** The backend pipeline is multi-stage: generate, review/self-correct, run lint/static checks, apply iterative fixes, execute CI-oriented validation, and only then create or update a draft PR. Each stage produces structured outcomes that can trigger retries or blocking failure.  
-**Consequences:** Orchestration must model stage state, retries, and stop conditions. Logs and telemetry must preserve stage-level evidence. UX must communicate whether the system is generating, correcting, blocked on validation, or ready for review.  
-**Rejected alternatives:**  
-- One-pass generation with no feedback loop — rejected because code quality would be too inconsistent.  
-- Human-only repair after generation — rejected because the product’s value includes autonomous correction.  
-- Unlimited retry loops — rejected because bounded iteration and explicit failure states are necessary.
-
-## Typed subsystem boundaries and modular ownership
-**Status:** Accepted  
-**Context:** The shell and backend have distinct responsibilities, and the TRDs define subsystem ownership across shell, provider adapters, consensus engine, UI, and security. Clear boundaries reduce accidental coupling and security regressions.  
-**Decision:** Forge uses explicit subsystem boundaries with strong ownership rules: shell modules own UI/platform concerns; backend modules own planning, provider integration, consensus, and repository automation; shared contracts are limited to versioned schemas and narrow service interfaces.  
-**Consequences:** Cross-cutting shortcuts are discouraged. New features must be placed in the owning subsystem rather than whichever layer is easiest to modify. Testing and code review should align with subsystem responsibility.  
-**Rejected alternatives:**  
-- Broad utility layers shared across everything — rejected because they blur ownership.  
-- Feature duplication in both processes — rejected because it creates drift and inconsistent behavior.  
-- Informal message payloads without schemas — rejected because cross-process contracts need rigor.
-
-## Native SwiftUI interface for workflow visualization and control
-**Status:** Accepted  
-**Context:** TRD-1 establishes a Swift/SwiftUI shell, and repository guidance references SwiftUI views, cards, and panels. The product needs rich stateful views for authentication, plans, PRs, validation progress, and review handoff.  
-**Decision:** The user interface is implemented natively in SwiftUI with a view architecture aligned to shell-owned state and workflow models. UI components present structured build progress rather than free-form conversational windows.  
-**Consequences:** UI state must be synchronized with backend pipeline state through typed shell models. macOS-native patterns and accessibility expectations apply. Web-rendered UI surfaces should remain exceptional, not primary.  
-**Rejected alternatives:**  
-- Web UI embedded in a native wrapper — rejected because a native app is part of the product definition.  
-- CLI-first product with optional UI — rejected because the shell is foundational, not ancillary.  
-- Chat transcript as primary UX — rejected because it does not fit the workflow-centered product.
-
-## Sparkle-based application update strategy
-**Status:** Accepted  
-**Context:** TRD-1 lists Sparkle auto-update as part of shell responsibilities. Desktop distribution requires secure update delivery and a standard user experience for native macOS software.  
-**Decision:** The macOS shell uses Sparkle for application update distribution and installation. Update behavior is implemented as a shell concern and integrated with app lifecycle and release signing requirements.  
-**Consequences:** Release engineering must support Sparkle-compatible packaging and signing. Update UX and rollback expectations must fit Sparkle’s operating model. Backend version compatibility with shell releases must be managed carefully.  
-**Rejected alternatives:**  
-- App Store distribution only — rejected because the specified installation model is direct app distribution.  
-- Custom updater — rejected because Sparkle is mature and already specified.  
-- Manual-only updates — rejected because it degrades security and user experience.
-
-## Local-first orchestration with remote providers as dependencies
-**Status:** Accepted  
-**Context:** Crafted is a native app that operates on a local repository while calling external model providers and GitHub. User trust and security depend on local control over orchestration state and artifact handling.  
-**Decision:** Core workflow state, orchestration control, session state, and local repository interactions are managed on-device. External services are used for model inference and hosted repository workflows, but control flow remains local to the app.  
-**Consequences:** The app must handle degraded connectivity and remote service failures gracefully. Local persistence, resumability, and recovery matter. The architecture avoids turning the product into a thin client for a hosted agent service.  
-**Rejected alternatives:**  
-- Cloud-orchestrated agent with local UI client — rejected because it would centralize secrets and reduce local control.  
-- Browser-only SaaS implementation — rejected because it conflicts with the native shell and security model.  
-- Purely offline system with no provider dependency — rejected because model and GitHub integrations are essential.
-
-## Structured error contracts across subsystems
-**Status:** Accepted  
-**Context:** The TRDs emphasize interfaces and error contracts. In a two-process architecture with security-sensitive operations and multi-stage orchestration, ambiguous failures create unsafe retries and poor UX.  
-**Decision:** Errors are modeled as structured contracts at subsystem boundaries, especially across IPC, provider adapters, auth flows, repository operations, and validation stages. Error classes must distinguish user-actionable issues, transient failures, security denials, and internal faults.  
-**Consequences:** Logs, telemetry, and UI can present deterministic recovery paths. Retry logic can be policy-driven. New APIs must define explicit failure modes rather than rely on opaque strings or generic exceptions.  
-**Rejected alternatives:**  
-- Stringly-typed errors — rejected because they are hard to reason about across process boundaries.  
-- Catch-all internal failures surfaced to users — rejected because they do not support recovery.  
-- Silent fallback behavior — rejected because it obscures risk and system state.
-
-## Security requirements are centralized and mandatory across all components
-**Status:** Accepted  
-**Context:** Repository guidance states that TRD-11 governs all components and must be consulted for any change touching credentials, external content, generated code, or CI. Security is not a feature slice; it is a cross-cutting control framework.  
-**Decision:** Security policy is treated as a platform-wide controlling concern. Any subsystem decision involving secrets, content ingestion, code generation, CI, or external integrations must conform to the centralized security requirements before implementation.  
-**Consequences:** Security review is required for many ordinary-seeming changes. Performance or convenience optimizations cannot bypass central controls. Documentation and tests must trace relevant security requirements where applicable.  
-**Rejected alternatives:**  
-- Per-team security interpretation — rejected because it causes inconsistent controls.  
-- Security as a later hardening pass — rejected because the architecture itself encodes trust boundaries.  
-- Best-effort security guidance — rejected because the product handles code, credentials, and repository automation.
-
-## Human-in-the-loop progression between pull requests
-**Status:** Accepted  
-**Context:** The product description states that the agent builds the next PR while the user reads the last one, and that user approval is the gate for progression. This creates a supervised conveyor rather than uncontrolled autonomy.  
-**Decision:** Forge supports sequential or overlapping PR production within a user-supervised plan, but progression through the plan remains subject to review and approval semantics. The system may prepare subsequent work, yet merge and acceptance remain human-controlled checkpoints.  
-**Consequences:** Planning and execution state must represent approved, in-review, blocked, and ready-next statuses. The agent should optimize for reviewer throughput without assuming merge authority. Dependency handling between PRs must remain explicit.  
-**Rejected alternatives:**  
-- Fully serialized workflow with no lookahead — rejected because it wastes time and reduces throughput.  
-- Fully autonomous multi-PR merge train — rejected because it weakens human oversight.  
-- Single long-running branch instead of staged PRs — rejected because it harms reviewability and control.
+- Allowing feature modules to present independently at app launch: rejected because it undermines onboarding completeness guarantees.  
+- Replacing state-driven root routing with ad hoc modal presentation: rejected because it weakens determinism and testability.  
+- Treating onboarding as optional decoration: rejected because TRD-1 defines it as the initial decision boundary.
