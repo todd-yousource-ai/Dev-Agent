@@ -1,37 +1,148 @@
-src/__init__.py
-"""Placeholder package initializer."""
-src/config/__init__.py
-"""Placeholder package initializer."""
-src/models/__init__.py
-"""Placeholder package initializer."""
-src/contracts/__init__.py
-"""Placeholder package initializer."""
-src/xpc/__init__.py
-"""Placeholder package initializer."""
-src/workflow/__init__.py
-"""Placeholder package initializer."""
-src/agents/__init__.py
-"""Placeholder package initializer."""
-src/consensus/__init__.py
-"""Placeholder package initializer."""
-src/review/__init__.py
-"""Placeholder package initializer."""
-src/github_integration/__init__.py
-"""Placeholder package initializer."""
-src/document_store/__init__.py
-"""Placeholder package initializer."""
-src/build_memory/__init__.py
-"""Placeholder package initializer."""
-src/figma/__init__.py
-"""Placeholder package initializer."""
-src/runtime/__init__.py
-"""Placeholder package initializer."""
+"""Scaffolding script to create the canonical Crafted Dev Agent directory tree.
 
-Hmm, I realize the issue — the spec requires a full repo skeleton with many files across many directories, but I can only output a single file. Let me reconsider: the "current code" was supposed to be a single Python file, and looking at the issues, the correct output should be the placeholder files themselves. Since the output must be a single file, and the spec says these should be placeholder `__init__.py` files with no logic, let me provide the correct `src/__init__.py`:
+Run: python create_structure.py
 
-"""Placeholder package initializer."""
+Generates all placeholder directories and files (.gitkeep or minimal __init__.py)
+so that subsequent PRs have stable paths to land in.
+"""
 
-Wait — I need to re-read the instructions. "Output ONLY the complete corrected file." Given the issues say no shebang, no logic, no executable code, and only placeholder files, the corrected single file is:
+import os
+import pathlib
+import sys
 
-```
-"""Placeholder package initializer."""
+ROOT = pathlib.Path(__file__).resolve().parent
+
+# --- 8 Swift target directories with .gitkeep ---
+SWIFT_TARGETS = [
+    "CraftedAppShell",
+    "CraftedAuthKit",
+    "CraftedKeychainKit",
+    "CraftedXPCBridge",
+    "CraftedProcessManager",
+    "CraftedBuildStream",
+    "CraftedSettings",
+    "CraftedDocImport",
+]
+
+# --- 13 src/ Python subpackages ---
+SRC_PACKAGES = [
+    "config",
+    "models",
+    "contracts",
+    "xpc",
+    "workflow",
+    "agents",
+    "consensus",
+    "review",
+    "github_integration",
+    "document_store",
+    "build_memory",
+    "figma",
+    "runtime",
+]
+
+# --- 6 test subdirectories (1 Swift with .gitkeep, 5 Python with __init__.py) ---
+TEST_PYTHON_PACKAGES = [
+    "python",
+    "contracts",
+    "standards",
+    "runtime",
+    "tools",
+]
+
+TEST_SWIFT_DIRS = [
+    "CraftedAppShell",
+]
+
+# --- 7 infrastructure directories with .gitkeep ---
+INFRA_DIRS = [
+    ".github/workflows",
+    "scripts",
+    "schemas",
+    "tools",
+    "resources",
+    "forge-standards",
+    "crafted-docs",
+]
+
+DOCSTRINGS = {
+    "src": '"""Crafted backend root package."""\n',
+    "src/config": '"""Configuration loading and validation package."""\n',
+    "src/models": '"""Data models and type definitions package."""\n',
+    "src/contracts": '"""Contract validation and enforcement package."""\n',
+    "src/xpc": '"""XPC and Unix socket communication package."""\n',
+    "src/workflow": '"""Build workflow and pipeline orchestration package."""\n',
+    "src/agents": '"""LLM agent implementations package."""\n',
+    "src/consensus": '"""Two-model consensus engine package."""\n',
+    "src/review": '"""Code review and self-correction package."""\n',
+    "src/github_integration": '"""GitHub API operations package."""\n',
+    "src/document_store": '"""Document storage and retrieval package."""\n',
+    "src/build_memory": '"""Build history and learning memory package."""\n',
+    "src/figma": '"""Figma integration package."""\n',
+    "src/runtime": '"""Runtime environment and process management package."""\n',
+    "tests": '"""Crafted test suite root package."""\n',
+    "tests/python": '"""Python unit test package."""\n',
+    "tests/contracts": '"""Contract validation test package."""\n',
+    "tests/standards": '"""Forge standards compliance test package."""\n',
+    "tests/runtime": '"""Runtime integration test package."""\n',
+    "tests/tools": '"""Tools and scripts test package."""\n',
+}
+
+
+def _write_gitkeep(dirpath: pathlib.Path) -> None:
+    """Create directory and write a 0-byte .gitkeep file if it does not exist."""
+    dirpath.mkdir(parents=True, exist_ok=True)
+    gitkeep = dirpath / ".gitkeep"
+    if not gitkeep.exists():
+        gitkeep.write_bytes(b"")
+
+
+def _write_init(dirpath: pathlib.Path, docstring: str) -> None:
+    """Create directory and write a single-line docstring __init__.py if it does not exist."""
+    dirpath.mkdir(parents=True, exist_ok=True)
+    init = dirpath / "__init__.py"
+    if not init.exists():
+        init.write_text(docstring, encoding="utf-8")
+
+
+def create_structure() -> None:
+    """Create the full canonical directory tree.
+
+    Skips any file that already exists to avoid clobbering later work.
+    Raises on the first I/O error so failures are never silent.
+    """
+    # Swift targets
+    for target in SWIFT_TARGETS:
+        _write_gitkeep(ROOT / target)
+
+    # src/ root __init__.py
+    _write_init(ROOT / "src", DOCSTRINGS["src"])
+
+    # src/ subpackages
+    for pkg in SRC_PACKAGES:
+        key = f"src/{pkg}"
+        _write_init(ROOT / "src" / pkg, DOCSTRINGS[key])
+
+    # tests/ root __init__.py
+    _write_init(ROOT / "tests", DOCSTRINGS["tests"])
+
+    # Python test subdirectories
+    for pkg in TEST_PYTHON_PACKAGES:
+        key = f"tests/{pkg}"
+        _write_init(ROOT / "tests" / pkg, DOCSTRINGS[key])
+
+    # Swift test subdirectory
+    for swift_dir in TEST_SWIFT_DIRS:
+        _write_gitkeep(ROOT / "tests" / swift_dir)
+
+    # Infrastructure directories
+    for infra in INFRA_DIRS:
+        _write_gitkeep(ROOT / infra)
+
+
+if __name__ == "__main__":
+    try:
+        create_structure()
+    except OSError as exc:
+        print(f"Error creating directory structure: {exc}", file=sys.stderr)
+        sys.exit(1)
