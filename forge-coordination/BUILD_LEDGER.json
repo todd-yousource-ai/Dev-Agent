@@ -4,7 +4,7 @@
   "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Dev Agent called Crafted that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture.",
   "scope_statement": "Build the Crafted Dev Agent \u2014 a native macOS two-process application consisting of a Swift/SwiftUI shell (UI, Touch ID authentication, Keychain credential storage, XPC communication, process management) and a Python 3.12 backend (consensus AI code generation via Claude + GPT-4o, build pipeline orchestration, GitHub integration, document store with FAISS embeddings, multi-agent coordination, holistic code review, TRD development workflow, cross-run learning via build memory and build rules). The system transforms plain-language build intents into tested, CI-passing GitHub pull requests through a confidence-gated scope phase, PRD decomposition, PR planning with type routing, parallel dual-model code generation with Claude arbitration, self-correction, lint gating, iterative fix loops, and operator-gated approval \u2014 all specified across 16 TRDs in forge-docs/.\n\nClarifications:\n  - review the TRDs and if the data is missing ensure they are included in the PRDs.\n  - review the TRDs and if the data is missing ensure they are included in the PRDs. Ensure we capture that it needs fixing\n  - review the TRDs and if the data is missing ensure they are included in the PRDs. Choose the best practices\n  - review the TRDs and if the data is missing ensure they are included in the PRDs. Choose the best practices\n  - review the TRDs and if the data is missing ensure they are included in the PRDs. Choose the best practices\n  - review the TRDs and if the data is missing ensure they are included in the PRDs. Choose the best practices\n  - review the TRDs and if the data is missing ensure they are included in the PRDs. Choose the best practices\n\nOperator on 'What is the build prioritization order across the 16 TRDs? S':\nSelect the best build process and order the PRDs so that the code is built the best way from start to finish\n\nOperator on 'TRD-8 v2.0 introduces Figma pipeline UI and sketch interpret':\nshould be included\n\nOperator on 'The documents reference both 'forge-agent' branch naming (ke':\ncrafted in all new identifiers, module names and file paths\n\nOperator on 'Should the build target the full CONSULTANT mode (TRD-7 \u00a721)':\nbuild target the full CONSULTANT mode (TRD-7 \u00a721) and FOUNDER mode (TRD-7 \u00a73-6) in the initial scope",
   "created_at": 1774307695.2227788,
-  "updated_at": 1774315377.663709,
+  "updated_at": 1774315697.1807098,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -250,18 +250,18 @@
       "pr_num": 3,
       "title": "TRD build prioritization order and gap analysis document",
       "branch": "",
-      "status": "blocked",
+      "status": "done",
       "engineer_id": "",
-      "pr_url": null,
+      "pr_url": "https://github.com/todd-yousource-ai/Dev-Agent/pull/119",
       "claimed_at": null,
       "started_at": null,
-      "completed_at": null,
+      "completed_at": 1774315697.180674,
       "depends_on_prs": [
         1
       ],
       "retry_count": 0,
       "failure_summary": "",
-      "journal_path": "",
+      "journal_path": "forge-coordination/impl-journal/PR-003.md",
       "summary": "Creates forge-standards/BUILD_ORDER.md documenting the canonical build prioritization order across all 16 TRDs, resolving inter-TRD dependencies, documenting any TRD gaps found (missing data, naming collisions, path placement ambiguities), and recording best-practice decisions to fix those gaps. Covers FOUNDER mode (TRD-7 \u00a73-6) and CONSULTANT mode (TRD-7 \u00a721) scoping, Figma pipeline inclusion (TRD-8 v2.0), and cross-TRD dependency graph. This is the authoritative sequencing reference for all subsequent PRDs.",
       "impl_files": [
         "forge-standards/BUILD_ORDER.md"
@@ -815,7 +815,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 3,
+  "version": 4,
   "schema_version": 3,
   "agent_version": "38.170.0"
 }
