@@ -1,120 +1,141 @@
 # DECISIONS.md
 
-## Native macOS shell with bundled Python backend
-**Status:** Accepted  
-**Context:** The product is specified as a native macOS AI coding agent, not a web or cross-platform application. The TRDs define a two-process architecture with Swift responsible for UI, authentication, secure storage, packaging, and orchestration, and Python responsible for intelligence, generation, consensus, and GitHub operations. TRD-1 is foundational and all other major subsystems depend on it.  
-**Decision:** Build Crafted as a native macOS application shell in Swift 5.9+ and SwiftUI, bundling a Python 3.12 backend as a separate process. The shell owns installation, distribution, authentication, Keychain access, session lifecycle, and process orchestration. The backend owns model orchestration, planning, code generation, validation, and repository automation.  
-**Consequences:** The product is intentionally macOS-specific with a minimum version of macOS 13.0. UI and system integrations must be implemented in Swift/SwiftUI. Backend intelligence must be isolated in Python. Interfaces between the two processes become critical contracts and must be stable, authenticated, and versioned by TRD-defined behavior.  
-**Rejected alternatives:** A single-process architecture was rejected because the TRDs separate system-trusted responsibilities from intelligence and generation responsibilities. A web app or Electron-style shell was rejected because the TRDs require a native macOS shell with platform security integrations. A pure Python app was rejected because authentication, Keychain, UI, and native app lifecycle are assigned to the Swift shell.
+## [Use the documented repository layout as a hard architectural boundary]
+**Status:** Accepted
 
-## Two-process trust boundary
-**Status:** Accepted  
-**Context:** Both AGENTS.md and CLAUDE.md define the architecture as two processes with explicit ownership boundaries. The shell is trusted for identity and secrets; the backend is responsible for intelligence and GitHub workflows. The TRDs make this split foundational to security and subsystem ownership.  
-**Decision:** Enforce a strict two-process architecture with the Swift shell and Python backend as separate runtime processes with a clear trust boundary. Secrets, auth state, and OS-integrated capabilities remain in the shell. Model execution, planning, and code-generation workflows remain in the backend.  
-**Consequences:** Cross-process communication must be explicit and authenticated. Backend code cannot directly access Keychain or shell-owned state. Shell code must not absorb generation logic. The architecture favors least privilege and containment but increases integration complexity and IPC contract management.  
-**Rejected alternatives:** Sharing all responsibilities in one process was rejected because it would collapse the security boundary defined by the TRDs. Allowing the backend direct access to secrets was rejected because secret handling belongs to the shell. Moving intelligence into Swift was rejected because the TRDs assign that responsibility to Python.
+**Context:** The Crafted subsystem exists within a larger monorepo whose structure is explicitly defined in the TRDs and README. The repository layout separates source-of-truth documents, implementation code, standards, tests, and the macOS application shell. This layout is part of the operating model for all agents and build stages.
 
-## Authenticated Unix socket with line-delimited JSON for IPC
-**Status:** Accepted  
-**Context:** CLAUDE.md explicitly states that the two processes communicate via an authenticated Unix socket with line-delimited JSON. This is a core interface decision implied by the architecture and needed for process isolation while preserving structured communication.  
-**Decision:** Use an authenticated Unix domain socket as the sole shell-backend IPC mechanism, with line-delimited JSON messages as the framing and payload format.  
-**Consequences:** All inter-process interfaces must be representable as JSON message contracts. Transport security and peer authentication are mandatory. Message framing, schema evolution, error reporting, and request/response semantics must be designed around newline-delimited JSON. This limits transport choices but simplifies debugging, logging, and deterministic parsing.  
-**Rejected alternatives:** XPC-only integration was rejected because the TRDs and agent guidance explicitly define authenticated Unix sockets for shell-backend communication. HTTP or gRPC was rejected as unnecessary complexity and a poorer fit for local private IPC. Binary custom protocols were rejected in favor of line-delimited JSON for transparency and simpler contract handling.
+**Decision:** Preserve the repository layout exactly as documented. Implement the macOS application shell under `Crafted/`, Swift tests under `CraftedTests/`, Python backend code under `src/`, Python tests under `tests/`, standards under `forge-standards/`, and requirements artifacts under `forge-docs/`. Do not relocate Crafted code into `src/` or mix Swift and Python concerns in the same top-level directory.
 
-## Swift shell owns UI, authentication, Keychain, and orchestration
-**Status:** Accepted  
-**Context:** TRD-1 assigns the shell ownership of installation, updates, identity, biometric gate, Keychain secret storage, session lifecycle, module architecture, and orchestration. Repository guidance repeats that the Swift process owns UI, authentication, and secrets.  
-**Decision:** Centralize all user interface, app lifecycle, authentication flow, Keychain access, and backend orchestration in the Swift shell. The shell is the only component allowed to present native UI and interact with Apple security primitives.  
-**Consequences:** Swift modules become the authoritative implementation point for user-facing state and protected credentials. Backend features must request shell mediation for any secret- or identity-related operation. This preserves native UX and security guarantees but requires careful shell APIs for backend-triggered flows.  
-**Rejected alternatives:** Putting authentication into the backend was rejected because backend code is outside the trusted shell domain. Duplicating UI or session logic across both processes was rejected because it would fragment ownership and create inconsistent lifecycle behavior.
+**Consequences:** Crafted implementation must assume clear subsystem boundaries. Shared logic between Crafted and backend must cross explicit interfaces rather than filesystem co-location. Build tooling, CI, documentation references, and agent automation may rely on these paths. Refactors that change top-level placement are out of bounds unless the governing TRDs are changed first.
 
-## Python backend owns intelligence, generation, consensus, and GitHub operations
-**Status:** Accepted  
-**Context:** The repository identity and product description assign consensus, generation pipeline, and GitHub operations to the Python backend. The README describes a workflow where the agent plans work, generates code using multiple models, validates outputs, runs CI, and opens draft PRs.  
-**Decision:** Place all non-UI agent intelligence in the Python backend, including intent assessment, PRD planning, typed pull-request decomposition, provider orchestration, consensus, self-correction, lint/fix loops, CI workflow coordination, and GitHub pull-request operations.  
-**Consequences:** The backend becomes the implementation center for agent behavior and repository automation. Python interfaces must expose deterministic contracts to the shell for status, errors, progress, review gates, and results. Operational failures in provider calls, repository state, and CI must be normalized in backend error contracts rather than leaking ad hoc provider details into the shell.  
-**Rejected alternatives:** Implementing generation logic in the shell was rejected because the TRDs place intelligence in Python. Delegating GitHub operations to the shell was rejected because repository automation is part of the backend pipeline responsibility.
+**Rejected alternatives:**  
+- **Flatten the repo into a single app directory:** Rejected because it breaks the documented source-of-truth structure and weakens separation between app shell, backend, and standards.  
+- **Move Crafted under `src/` as another runtime module:** Rejected because `src/` is reserved for Python backend implementation, while Crafted is a Swift/SwiftUI subsystem.  
+- **Create a new top-level macOS directory and deprecate `Crafted/`:** Rejected because it diverges from the prescribed repository layout and would create tooling/documentation drift.
 
-## Neither process executes generated code
-**Status:** Accepted  
-**Context:** CLAUDE.md explicitly states that neither process ever executes generated code. The security model in the repository also directs all components to comply with TRD-11 for generated code and external content handling.  
-**Decision:** Prohibit execution of generated code by both the Swift shell and the Python backend. Generated artifacts may be written, linted, tested, and validated only through TRD-governed controlled workflows, but not executed as arbitrary code by the application itself outside those defined gates.  
-**Consequences:** The system must treat generated output as untrusted content. Features that would run scripts, evaluate generated snippets, or dynamically load generated modules are out of scope. Validation pipelines must rely on repository tooling and controlled CI/test mechanisms rather than in-process execution of arbitrary generated output.  
-**Rejected alternatives:** Running generated code locally for faster iteration was rejected because it violates the explicit repository rule and weakens the security model. Dynamic plugin-style loading of generated artifacts was rejected for the same reason.
+## [Treat forge-docs and forge-standards as normative inputs before implementation]
+**Status:** Accepted
 
-## TRDs are the sole source of truth for implementation
-**Status:** Accepted  
-**Context:** AGENTS.md and CLAUDE.md state that the 16 TRDs in `forge-docs/` fully specify the product and that code must match them. Contributors are instructed not to invent requirements and to read the owning TRD before making changes.  
-**Decision:** Treat the TRDs as the authoritative specification for architecture, interfaces, state machines, security controls, error contracts, testing requirements, and performance expectations across all subsystems. Implementation decisions must be derived from the relevant TRD rather than inferred from convenience or undocumented precedent.  
-**Consequences:** Engineering changes require mapping work to the owning TRD. Local optimizations that contradict the TRDs are not allowed. Documentation, tests, and code must stay aligned with TRD-defined contracts. Ambiguity resolution requires consulting the relevant TRD hierarchy rather than inventing behavior.  
-**Rejected alternatives:** Using code as the primary source of truth was rejected because the repository explicitly states the TRDs govern implementation. Ad hoc feature interpretation by individual contributors was rejected because it would undermine consistency across subsystems.
+**Context:** The TRDs explicitly state that all TRDs and PRDs live in `forge-docs/` and must be read before building. The standards directory contains architecture and interface constraints that govern implementation. Crafted must therefore be implemented as a downstream consumer of those artifacts, not as an independent source of truth.
 
-## Security governance centralized under TRD-11
-**Status:** Accepted  
-**Context:** AGENTS.md explicitly states that TRD-11 governs all components for security-relevant work and must be read before touching credentials, external content, generated code, or CI. This establishes a cross-cutting security authority over subsystem-specific TRDs.  
-**Decision:** Apply TRD-11 as the mandatory security overlay for every subsystem, with special precedence for credentials, external content ingestion, generated artifacts, and CI-related behavior. Component TRDs define local behavior, but security-sensitive implementation must conform to TRD-11.  
-**Consequences:** Security decisions cannot be made solely inside subsystem boundaries. Changes touching secrets, content trust, code generation, or automation pipelines require review against the security TRD. This may constrain implementation freedom in otherwise unrelated modules, but it enforces a single consistent security model across the product.  
-**Rejected alternatives:** Letting each subsystem define its own independent security rules was rejected because the repository explicitly centralizes security governance in TRD-11. Deferring security decisions to implementation time was rejected because the TRDs require predefined controls.
+**Decision:** Read and conform to requirements in `forge-docs/` and `forge-standards/` before changing Crafted code. Treat these documents as authoritative constraints on subsystem design, interfaces, and workflow behavior. Do not introduce implementation behavior in Crafted that conflicts with these artifacts.
 
-## Distribution as a macOS app bundle with drag-to-Applications install and Sparkle updates
-**Status:** Accepted  
-**Context:** TRD-1 assigns installation and distribution responsibilities to the shell and explicitly lists `.app` bundle packaging, drag-to-Applications installation, and Sparkle auto-update.  
-**Decision:** Ship Crafted as a native `.app` bundle for macOS, installed via standard drag-to-Applications flow and updated using Sparkle.  
-**Consequences:** Release engineering must produce signed, distributable macOS bundles compatible with Sparkle update mechanics. The shell must support app lifecycle requirements associated with native installation and update behavior. Packaging and update infrastructure are constrained to macOS-native distribution patterns rather than browser delivery or package-manager-first distribution.  
-**Rejected alternatives:** Browser-hosted delivery was rejected because the shell is a native macOS application. Homebrew-only or Python-package distribution was rejected because TRD-1 specifies an app bundle and Sparkle-based updates.
+**Consequences:** Crafted design and code changes must be traceable back to documented requirements. If implementation pressure suggests a conflicting change, the correct remedy is to update the governing document first rather than silently diverge in code. This also constrains code review: undocumented behavior is suspect even if technically feasible.
 
-## Biometric gate and Keychain-backed secret storage
-**Status:** Accepted  
-**Context:** TRD-1 explicitly assigns biometric gate, Keychain secret storage, and session lifecycle to the shell under identity and authentication responsibilities.  
-**Decision:** Use macOS biometric authentication and Keychain-backed secure storage for identity gating and secret persistence, with the shell owning the session lifecycle.  
-**Consequences:** Secret management must use platform-native secure storage rather than custom encryption stores managed by the backend. Session restoration, unlock flows, and authentication prompts must be integrated into shell state management. Backend operations that require credentials must obtain them indirectly through shell-approved mechanisms.  
-**Rejected alternatives:** Storing secrets in files or environment variables was rejected because secure storage is explicitly assigned to Keychain. Backend-managed credential stores were rejected because secret ownership belongs to the shell. Password-only gating without native biometric support was rejected because the TRD specifies a biometric gate.
+**Rejected alternatives:**  
+- **Allow code to become the source of truth when documents lag:** Rejected because the repository model explicitly makes TRDs/PRDs and standards normative.  
+- **Use docs as advisory only for the Crafted app shell:** Rejected because Crafted is part of the same governed system and cannot opt out of repository-wide design authority.  
+- **Capture local Crafted-only decisions in code comments instead of standards/docs:** Rejected because it fragments decision authority and reduces discoverability for agents and reviewers.
 
-## Directed build agent, not chat or autocomplete
-**Status:** Accepted  
-**Context:** The README explicitly states that Crafted is not a chat interface, not code autocomplete, and not a copilot. It is a directed build agent that consumes specifications and intent, plans work, produces PRs, and advances iteratively through user-gated review.  
-**Decision:** Design the product around goal-directed software delivery workflows rather than open-ended conversation or inline suggestion UX. The primary user flow is repository + TRD loading, intent submission, confidence assessment, structured planning, PR generation, review gating, and iterative continuation.  
-**Consequences:** UI, APIs, and system behavior must optimize for planning, status visibility, review, and PR lifecycle management instead of chat transcript management or editor-inline interactions. Feature proposals that reframe the product as a conversational assistant are misaligned unless explicitly specified by a TRD.  
-**Rejected alternatives:** Building a generic chatbot interface was rejected because the README explicitly says the product is not a chat interface. Building editor autocomplete was rejected because the product is not a copilot and the TRDs define a PR-oriented autonomous workflow.
+## [Implement the Crafted shell as a SwiftUI state-driven root flow]
+**Status:** Accepted
 
-## Two-model consensus with Claude and GPT-4o, with Claude arbitration
-**Status:** Accepted  
-**Context:** The README defines the generation model as a two-model consensus engine using Claude and GPT-4o in parallel, with Claude arbitrating every result. The architecture also identifies consensus as a backend responsibility.  
-**Decision:** Implement code generation and related intelligence tasks using parallel outputs from Claude and GPT-4o, with Claude serving as the arbitration authority for final result selection or judgment within the consensus engine.  
-**Consequences:** Provider abstraction, prompt routing, result normalization, and arbitration logic must support at least these two providers and preserve the arbitration role of Claude. The backend must handle disagreement, failure, and comparison workflows as first-class concerns. Single-provider shortcuts are inconsistent with the defined product behavior unless specifically permitted by a TRD.  
-**Rejected alternatives:** Single-model generation was rejected because the product description explicitly defines a two-model consensus engine. Non-Claude arbitration was rejected because the README states Claude arbitrates every result.
+**Context:** TRD-1 defines a root view decision tree keyed off onboarding state, beginning with `RootView` and routing to onboarding content until onboarding is complete. This implies a state-driven composition model rather than ad hoc navigation.
 
-## Planning pipeline from intent to PRD to typed pull requests
-**Status:** Accepted  
-**Context:** The README describes a structured workflow: the user provides TRDs and plain-language intent; the agent assesses confidence in scope, decomposes the intent into an ordered PRD plan, then decomposes each PRD into a sequence of typed pull requests.  
-**Decision:** Implement a staged planning pipeline in the backend: intent intake, scope-confidence assessment, ordered PRD planning, and typed pull-request decomposition before implementation generation begins.  
-**Consequences:** Planning is a first-class subsystem rather than an informal precursor to generation. The system must preserve intermediate planning artifacts and expose them to the shell as meaningful states. Downstream generation depends on typed PR outputs, so ad hoc direct-to-code behavior is constrained.  
-**Rejected alternatives:** Immediate code generation from user intent was rejected because the product workflow requires confidence assessment and structured decomposition. A single undifferentiated task queue was rejected because the README specifies ordered PRD and typed PR stages.
+**Decision:** Implement Crafted’s root shell around a single state-driven `RootView` that branches on `OnboardingState`. Route incomplete onboarding states to `OnboardingContainerView`, and represent substeps such as `.notStarted`, `.apiKeys`, `.githubAuth`, and related onboarding stages as explicit state cases rather than implicit navigation side effects.
 
-## Draft-PR-based delivery with human review gating
-**Status:** Accepted  
-**Context:** The README specifies that the agent executes CI, opens a draft PR for review, and that the user approves and merges while the agent prepares the next PR. This establishes a human-gated autonomous delivery model.  
-**Decision:** Deliver implementation units as draft GitHub pull requests, one per logical unit, with human review and approval as the control point before merge and continuation.  
-**Consequences:** GitHub PR creation, branch management, CI attachment, review state tracking, and sequencing across logical units are mandatory backend capabilities. The shell must expose review-oriented progress and status rather than only raw generation logs. Full autonomous merge without human gate is out of scope unless another TRD explicitly authorizes it.  
-**Rejected alternatives:** Direct commits to main were rejected because the product is PR-driven and human-gated. Bundling all work into one monolithic PR was rejected because the README calls for one PR per logical unit.
+**Consequences:** Root-level navigation logic must remain centralized and deterministic. Onboarding progression must be modeled as application state, not inferred from scattered view-local flags. Future additions to onboarding must extend the decision tree in a controlled way. This also constrains testing: root navigation should be verifiable through state transitions.
 
-## Validation pipeline includes self-correction, lint gate, iterative fix loop, and CI
-**Status:** Accepted  
-**Context:** The README describes a fixed downstream validation process after generation: self-correction pass, lint gate, iterative fix loop, CI execution, and then PR opening. This is part of the promised product behavior.  
-**Decision:** Require generated work to pass through a backend validation pipeline consisting of self-correction, linting, iterative remediation, and CI execution before a draft PR is opened.  
-**Consequences:** Generation completion does not imply deliverability. The backend must model and report validation stages, retry behavior, and failure modes. Tooling integration for lint/test/CI becomes part of the core system rather than optional enhancement. This may increase execution time but improves PR quality and aligns with the specified workflow.  
-**Rejected alternatives:** Opening PRs immediately after first-pass generation was rejected because the product explicitly includes correction and validation stages. Manual-only validation was rejected because the README specifies automated gates before PR creation.
+**Rejected alternatives:**  
+- **Use a NavigationStack-first design with no explicit root decision tree:** Rejected because the TRD specifies root branching by onboarding state, not free-form navigation.  
+- **Drive onboarding through persistent modal presentation from the main app:** Rejected because it obscures root state and weakens determinism of the shell flow.  
+- **Encode onboarding completion using multiple unrelated booleans in different views:** Rejected because it increases inconsistency risk and conflicts with the explicit state-machine style implied by the TRD.
 
-## One pull request per logical unit of work
-**Status:** Accepted  
-**Context:** The README states that the agent opens GitHub pull requests “one per logical unit.” This is a delivery granularity decision that shapes planning and sequencing.  
-**Decision:** Decompose implementation into logically scoped pull requests and deliver them individually rather than aggregating unrelated work into larger batches.  
-**Consequences:** Planning logic must produce coherent units with bounded scope and dependency ordering. GitHub workflows, branch naming, review state, and progress tracking must all operate at the logical-unit level. This improves reviewability and incremental merge safety but requires more sophisticated decomposition logic.  
-**Rejected alternatives:** A single all-encompassing PR per user intent was rejected because the product specifies one PR per logical unit. Extremely fine-grained commit-level PR fragmentation was also rejected implicitly because the unit is logical work, not arbitrary atomic changes.
+## [Model onboarding as a finite, explicit state machine]
+**Status:** Accepted
 
-## SwiftUI as the shell UI technology
-**Status:** Accepted  
-**Context:** TRD-1 specifies Swift 5.9+ and SwiftUI for the macOS application shell. The repository guidance also maps SwiftUI views, cards, and panels to a dedicated TRD, reinforcing the UI technology direction.  
-**Decision:** Implement the shell user interface using SwiftUI within the native Swift macOS application.  
-**Consequences:** UI architecture, state propagation, navigation, and component composition must align with SwiftUI patterns. AppKit may still be used only where necessary for macOS integration, but SwiftUI is the primary UI framework. This narrows UI implementation choices but aligns with the TRD-defined native architecture.  
-**Rejected alternatives:** AppKit-first UI was rejected because TRD-1 specifies SwiftUI. Cross-platform UI frameworks were rejected because the product is a native macOS shell defined in Swift and SwiftUI.
+**Context:** The documented root decision tree enumerates distinct onboarding stages. A discrete sequence of stages is better represented as an explicit state machine than as inferred combinations of persisted values.
+
+**Decision:** Represent onboarding in Crafted with a closed set of explicit states, including at minimum the documented cases such as `.notStarted`, `.apiKeys`, `.githubAuth`, and `.complete`, plus any additional TRD-defined stages. Require transitions between these states to occur through controlled application logic.
+
+**Consequences:** State handling becomes testable, serializable, and auditable. Illegal transitions can be prevented in one place. View rendering can remain declarative and deterministic. Persistence must store and restore recognized states rather than arbitrary partial progress fragments.
+
+**Rejected alternatives:**  
+- **Infer onboarding progress from presence of API keys and auth tokens only:** Rejected because missing or stale data would blur whether the user has completed a step, is mid-step, or needs remediation.  
+- **Use a loosely typed string or dictionary for onboarding progress:** Rejected because it weakens exhaustiveness, validation, and compile-time safety.  
+- **Let each onboarding screen decide the next screen independently:** Rejected because it scatters transition logic and undermines the root decision tree.
+
+## [Keep GitHub integration behind the backend boundary]
+**Status:** Accepted
+
+**Context:** The repository identifies `src/github_tools.py` as the critical file for all GitHub I/O, including path validation, rate limiting, and SHA protocol. That establishes a backend-owned integration boundary for GitHub operations. Crafted must not bypass this control plane.
+
+**Decision:** Route GitHub operations for Crafted through the backend/runtime interfaces that are backed by `src/github_tools.py`. Do not implement direct, parallel GitHub repository mutation logic in the Crafted Swift layer when equivalent backend-governed operations exist or are required by workflow.
+
+**Consequences:** Crafted remains a client of the system’s controlled GitHub integration rather than an alternate executor. Security, validation, rate limiting, and protocol correctness remain centralized. Swift-side code should focus on user intent capture, display, and orchestration, not repository write semantics.
+
+**Rejected alternatives:**  
+- **Use direct GitHub API calls from Swift for convenience:** Rejected because it bypasses centralized path validation, SHA handling, and rate limiting controls.  
+- **Duplicate GitHub mutation logic in both Swift and Python:** Rejected because it creates protocol drift and inconsistent security behavior.  
+- **Allow direct local git operations from Crafted as the primary integration path:** Rejected because the documented system centers on governed GitHub I/O and checkpointed PR lifecycle management.
+
+## [Honor checkpointed pipeline state as the source of progress truth]
+**Status:** Accepted
+
+**Context:** The README states that every state transition is checkpointed, including per-PR stages such as `branch_opened → code_generated → tests_passed → committed → ci_passed`. The Crafted subsystem may surface or react to progress, but it must not invent an independent lifecycle model.
+
+**Decision:** When Crafted displays build, generation, review, or PR progress, use the checkpointed pipeline states as the canonical lifecycle. Do not create a separate app-only progression model that cannot be mapped directly to the documented system states.
+
+**Consequences:** UI status indicators, progress views, and action availability must align to real pipeline checkpoints. This reduces ambiguity for operators and keeps frontend and backend behavior synchronized. Any new user-visible stage must correspond to a documented or implemented checkpoint, not an informal UI abstraction.
+
+**Rejected alternatives:**  
+- **Use simplified user-friendly stages unrelated to backend checkpoints:** Rejected because it introduces ambiguity and makes debugging/operator intervention harder.  
+- **Track only coarse states like idle/running/done in the app:** Rejected because it loses required fidelity for the documented multi-stage workflow.  
+- **Let each screen derive its own local understanding of progress:** Rejected because it fragments lifecycle semantics and risks contradictory status displays.
+
+## [Preserve operator gate semantics in the Crafted experience]
+**Status:** Accepted
+
+**Context:** The documented pipeline includes a gate where the operator approves or corrects before merge, and every gate decision is material to the workflow. Crafted is part of the operator-facing shell and must therefore preserve, not hide, this control point.
+
+**Decision:** Design Crafted flows so that operator approval/correction remains an explicit gate before merge-related completion. Do not automate through this gate by default, and do not present merge completion as automatic if operator action is still required.
+
+**Consequences:** Crafted UI must expose pending approval states and operator actions clearly. Any automation affordance must stop short of bypassing the required gate unless the governing documents are changed. This constrains completion UX, notifications, and status labeling.
+
+**Rejected alternatives:**  
+- **Auto-approve successful pipeline runs in the app:** Rejected because it removes the documented operator gate.  
+- **Hide gate details behind a generic “completed” label:** Rejected because it misrepresents actual workflow state.  
+- **Treat operator correction as an exceptional side path rather than a first-class gate outcome:** Rejected because the workflow explicitly allows approval or correction before merge.
+
+## [Design Crafted to coexist with dual CI targets rather than collapsing them]
+**Status:** Accepted
+
+**Context:** The build pipeline defines `crafted-ci.yml` on `ubuntu-latest` and `crafted-ci-macos.yml` for Swift. This establishes a dual-CI model where platform-specific concerns are separated rather than unified under one runner.
+
+**Decision:** Implement Crafted so that Swift/macOS validation remains compatible with the dedicated macOS CI workflow, while broader system checks remain compatible with the ubuntu-based workflow. Do not assume a single CI environment can validate all subsystem behavior.
+
+**Consequences:** Crafted-specific build/test expectations must stay explicit and platform-aware. Changes to app shell code should anticipate macOS runner validation. Cross-subsystem changes should not couple Swift checks to Linux-only assumptions. Documentation and developer workflows must reflect that passing one CI lane does not replace the other where both apply.
+
+**Rejected alternatives:**  
+- **Collapse all validation into a single ubuntu workflow:** Rejected because Swift/macOS application shell behavior requires a macOS-specific lane.  
+- **Run only macOS CI for all subsystem checks:** Rejected because the documented pipeline already separates broader and Swift-specific concerns.  
+- **Treat Crafted as exempt from repository-wide CI orchestration:** Rejected because it is an integrated subsystem and must participate in the defined workflows.
+
+## [Keep subsystem orchestration simple enough to satisfy complexity limits]
+**Status:** Accepted
+
+**Context:** The README states that every stage has a maximum cyclomatic complexity of 15, and critical orchestration files enforce this discipline. While this limit is documented for pipeline stages, the same architectural pressure applies to subsystem orchestration code that interacts with those stages.
+
+**Decision:** Structure Crafted coordinators, view models, reducers, and root flow logic so that no single orchestration unit grows into a high-complexity decision hub. Split logic by stage, feature, or state boundary before complexity becomes concentrated.
+
+**Consequences:** Crafted implementation should favor composable, narrowly scoped units over monolithic app controllers. Root flow, onboarding transitions, pipeline-state rendering, and operator actions should be decomposed into testable pieces. This improves maintainability and keeps the subsystem aligned with repository-wide complexity discipline.
+
+**Rejected alternatives:**  
+- **Centralize all app state and navigation in one large coordinator:** Rejected because it tends to accumulate branching complexity quickly and becomes hard to reason about.  
+- **Allow complexity to grow in frontend code because the formal cap is documented for backend stages:** Rejected because the same maintainability rationale applies, and Crafted participates in those stage-driven workflows.  
+- **Rely on stylistic review only instead of structural decomposition:** Rejected because complexity problems are easier to prevent via architecture than through subjective review comments.
+
+## [Do not bypass documented security boundaries for file or repository writes]
+**Status:** Accepted
+
+**Context:** The repository marks `src/path_security.py` as the security boundary and states that every write path must pass through it. Crafted may initiate actions that cause writes, but must not create alternate write channels that escape the governed path-validation model.
+
+**Decision:** Ensure any Crafted-initiated file or repository write operation is executed through backend paths that enforce the documented security boundary. Do not add direct Swift-side filesystem or repository mutation paths that circumvent centralized path validation when operating on governed project content.
+
+**Consequences:** Crafted remains a requester of privileged mutations, not an ungoverned executor. Security-sensitive write validation stays centralized. Features that appear simple in the UI may require backend endpoints or commands rather than direct local implementation. This may increase integration work but preserves the documented trust boundary.
+
+**Rejected alternatives:**  
+- **Write directly to project files from the app shell for speed:** Rejected because it bypasses the mandated path security boundary.  
+- **Maintain a separate Swift validation layer equivalent to `path_security.py`:** Rejected because duplicated security logic drifts and weakens assurance.  
+- **Permit temporary bypasses for local-only operations:** Rejected because the requirement is framed as an every-write-path rule, not a production-only guideline.
