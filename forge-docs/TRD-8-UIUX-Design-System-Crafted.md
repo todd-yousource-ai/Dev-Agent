@@ -1,56 +1,139 @@
 # TRD-8-UIUX-Design-System-Crafted
 
-_Source: `TRD-8-UIUX-Design-System-Crafted.docx` — extracted 2026-03-23 22:49 UTC_
+_Source: `TRD-8-UIUX-Design-System-Crafted.docx` — extracted 2026-03-24 15:25 UTC_
 
 ---
 
 TRD-8: UI/UX Design System
 
-Technical Requirements Document — v2.0
+Technical Requirements Document — v3.0 (Consolidated)
 
 Field | Value
 Product | Crafted
 Document | TRD-8: UI/UX Design System
-Version | 2.0
-Status | Updated — Figma Pipeline and Multi-Modal Input (March 2026)
+Version | 3.0 (Consolidated — v1.0 + v2.0 + v3.0)
+Status | Active — Health Dashboard, Remediation, Figma Pipeline, Multi-Modal Input
 Author | YouSource.ai
-Previous Version | v1.0 (2026-03-19)
-Depends on | TRD-1, TRD-3, TRD-6, TRD-7 v2, TRD-5 (GitHub)
-New dependency | Figma REST API, Figma MCP Server
+Previous | v2.0 (Figma Pipeline); v3.0 (Health Dashboard) — both delta documents
+Depends on | TRD-1 (macOS Shell), TRD-3 (Build Pipeline), TRD-5 (GitHub), TRD-6 (Holistic Review), TRD-7 v2, TRD-11 (Security), TRD-17 (Self-Healing), TRD-18 (Crafted Connect)
+New deps | Figma REST API, Figma MCP Server, TRD-17, TRD-18
 
-# What Changed from v1.0
+# Consolidated Version Summary
 
-v1.0 specified the complete macOS SwiftUI UI for the build pipeline and TRD workflow. This version adds three new input pathways that change how users enter the design-to-code pipeline:
+This document merges the three TRD-8 versions into a single complete specification. Prior documents were delta-only — this version is self-contained.
 
-Major additions in v2.0:
+Version | Date | What Was Added
+1.0 | 2026-03-19 | Complete macOS SwiftUI UI: build stream, approval gates, REPL, context panel, cost tracking, full design system (typography, color tokens, component library)
+2.0 | 2026-03-20 | Figma pipeline UI (§24), sketch/image input (§6.4–6.5), drag-and-drop, three TRD session modes — FOUNDER/ENGINEER/CONSULTANT (§17), compliance indicators, deployment target selector, client summary preview (§25)
+3.0 | 2026-03 | Health Dashboard (§6), Issue Reporting flow (§7), Diagnosis View (§8), Fix Review and Approval (§9), Remediation stream (§10), In-app health component spec (§11). Design philosophy extended to Builder + Maintainer profiles.
 
-Sketch and image input — napkin drawings, whiteboard photos, rough wireframes interpreted by vision model and converted to Figma designs (§6.5 — updated)
+# §1  Purpose and Design Philosophy
 
-Figma pipeline UI — the full design-to-code flow with Figma as source of truth for all UI decisions (§24 — new)
+Crafted's UI serves two distinct user profiles with different mental models:
 
-TRD Session UI updated for three operator modes — FOUNDER, ENGINEER, CONSULTANT (§17 — updated)
+Profile | Mental model | Primary surface
+Builder | I am constructing something. I need precise control over what gets built and when. | Build stream, PRD/PR approval gates, REPL
+Maintainer | Something is wrong with what I built. I need to describe it and get it fixed without becoming a developer. | Health dashboard, issue report, diagnosis view, one-tap fix
 
-CONSULTANT mode meeting UI — client summary preview, compliance capture indicators, deployment target selector (§25 — new)
+The Maintainer profile is the Everyman creator — someone who built an app or agent with Crafted and is now using it. They should never need to read a log, find a PR number, or understand a stack trace to get a fix.
 
-Sections 1–16, 18–23 are unchanged from v1.0. Only the sections below are new or updated.
+Both profiles coexist in the same app. The Health Dashboard is always visible. The Build Stream activates when a build is running. Neither interrupts the other.
 
-# 6.4 Build Intent Bar — Updated (v2.0)
+# §2  Application Shell
+
+Three top-level panels, always accessible from the sidebar:
+
+Panel | Icon | Always visible | Activates when
+Health | Heart with pulse | Yes — primary home screen | Always. Shows current status of all registered apps/agents.
+Build | Hammer | Yes | A build is running or available to start
+Notepad | Document | Yes | Always. Persistent scratch pad.
+
+Health is the default panel when Crafted opens — not Build. A creator who has already built something should land in the health view, not the build view.
+
+# §3  Design System
+
+Typography, color, spacing, and component library.
+
+## §3.1  Typography
+
+Primary: SF Pro Display, SF Pro Text
+
+Code / monospace: SF Mono
+
+Base size: 17pt body, 11pt labels, 13pt secondary
+
+## §3.2  Color tokens
+
+Accent (Crafted blue): #2E5B9A
+
+Sage (success actions): #3D7A5C
+
+Success: #34C759 (system green)
+
+Warning: #FF9500 (system orange)
+
+Destructive: #FF3B30 (system red)
+
+Background: adaptive (light/dark system)
+
+surface-raised, code-bg, border, border-subtle, text-primary, text-secondary, text-tertiary — all adaptive
+
+## §3.3  Spacing
+
+Base unit: 4pt. Padding: 8, 12, 16, 24. Card padding: 16pt. Section gaps: 24pt.
+
+## §3.4  Component library
+
+CardContainer — all build/health cards use this wrapper
+
+PrimaryActionButtonStyle, SecondaryActionButtonStyle
+
+ModeBadge (§17.1)
+
+All interactive elements: minimum 44pt touch target, accessibilityLabel(), accessibilityIdentifier()
+
+# §4  Build Stream Panel
+
+The build stream panel activates when a /prd start command runs. It shows the pipeline output, PR approval gates, and operator commands.
+
+Key invariants:
+
+Gates never auto-approve — operator input always required
+
+SECURITY_REFUSAL stops the build and gates — never bypassed
+
+Build cards are append-only — never edited after display
+
+Ledger, Active PRD, Notepad, Journal tabs preserved in context panel
+
+Build Intent Bar updated in v2.0 — see §6.4
+
+# §5  Operator Modes
+
+FOUNDER, ENGINEER, and CONSULTANT modes apply to both Build and Health panels. Mode selection persists across sessions. FOUNDER is the default for all new users.
+
+Mode | Health panel behavior | Fix approval behavior
+FOUNDER | Plain English health summaries. No technical detail unless requested. | One-tap approve. Minimal diff shown. Plain English impact summary.
+ENGINEER | Full telemetry detail available on expand. Raw logs accessible. | Full PR diff shown. Test results visible. Standard approval flow.
+CONSULTANT | Client-facing summary view. Compliance indicators visible. | Client-safe approval flow. No internal implementation detail exposed.
+
+# §6  Build Intent Bar (Updated in v2.0)
 
 The Build Intent Bar gains two new input modes alongside the existing text field: image upload and Figma import.
 
-## 6.4.1 Updated Input Bar Structure
+## §6.1  Input bar structure
 
-┌────────────────────────────────────────────────────────────────┐
+┌────────────────────────────────────────────────────────────┐
 
-│  [📎] [🎨]  Describe what to build...                    [↑]  │
+│  [📎] [🎨]  Describe what to build...              [↑]  │
 
-└────────────────────────────────────────────────────────────────┘
-
-The two new icons:
+└────────────────────────────────────────────────────────────┘
 
 📎 — Upload image (napkin sketch, whiteboard photo, wireframe screenshot)
 
 🎨 — Import from Figma (paste Figma file URL or connect via OAuth)
+
+## §6.2  SwiftUI: BuildIntentBar
 
 struct BuildIntentBar: View {
 
@@ -74,15 +157,7 @@ AttachedImagePreview(image: image) { attachedImage = nil }
 
 }
 
-if let url = figmaURL {
-
-FigmaURLPreview(url: url) { figmaURL = nil }
-
-}
-
 HStack(spacing: 12) {
-
-// Image upload button
 
 Button(action: { showImagePicker = true }) {
 
@@ -94,10 +169,6 @@ Image(systemName: "paperclip")
 
 .accessibilityIdentifier("attach-image-button")
 
-.help("Upload sketch, wireframe, or design image")
-
-// Figma import button
-
 Button(action: { showFigmaImport = true }) {
 
 Image(systemName: "paintpalette")
@@ -107,8 +178,6 @@ Image(systemName: "paintpalette")
 }
 
 .accessibilityIdentifier("figma-import-button")
-
-.help("Import design from Figma")
 
 TextField("Describe what to build...", text: $intent, axis: .vertical)
 
@@ -120,21 +189,11 @@ Button(action: startBuild) {
 
 Image(systemName: "arrow.up.circle.fill").font(.system(size: 24))
 
-.foregroundColor(
-
-(intent.isEmpty && attachedImage == nil && figmaURL == nil)
-
-? Color("text-tertiary") : Color("sage")
-
-)
-
 }
 
 .disabled(intent.isEmpty && attachedImage == nil && figmaURL == nil)
 
 .keyboardShortcut(.return, modifiers: .command)
-
-.accessibilityIdentifier("build-start-button")
 
 }
 
@@ -146,51 +205,9 @@ Image(systemName: "arrow.up.circle.fill").font(.system(size: 24))
 
 }
 
-## 6.4.2 Attached Image Preview
+## §6.3  Drag-and-drop onto Build Stream
 
-struct AttachedImagePreview: View {
-
-let image: NSImage
-
-let onRemove: () -> Void
-
-var body: some View {
-
-HStack(spacing: 8) {
-
-Image(nsImage: image)
-
-.resizable().aspectRatio(contentMode: .fit)
-
-.frame(maxHeight: 120).cornerRadius(6)
-
-VStack(alignment: .leading, spacing: 4) {
-
-Text("Design attached").fontWeight(.medium)
-
-Text("We'll read this and turn it into code")
-
-.foregroundColor(Color("text-secondary"))
-
-Button("Remove", action: onRemove)
-
-.foregroundColor(Color("danger")).buttonStyle(.plain)
-
-}
-
-Spacer()
-
-}
-
-.padding(12).background(Color("surface-raised")).cornerRadius(8)
-
-}
-
-}
-
-## 6.4.3 Drag-and-Drop onto Build Stream
-
-Images can be dragged directly onto the BuildStreamView when idle. The drop target activates with a sage green overlay:
+Images can be dragged directly onto BuildStreamView when idle. Drop target activates with a sage green overlay:
 
 .onDrop(of: [.image, .fileURL], isTargeted: $isDragTarget) { providers in
 
@@ -202,123 +219,256 @@ return true
 
 .overlay(isDragTarget ? DropTargetOverlay() : nil)
 
-struct DropTargetOverlay: View {
+## §6.4  Sketch Interpretation Card
+
+When an image is submitted, a SketchInterpretationCard appears in the build stream showing interpretation in progress, then the result with two actions: "Generate Figma Design" and "That's not quite right".
+
+After interpretation the card shows: layout type, detected components (e.g. NavigationSidebar, DataCard × 3, HeaderBar), and action buttons.
+
+# §7  Health Dashboard Panel (New in v3.0)
+
+The health dashboard is the first thing a creator sees when they open Crafted. It answers: are the things I built working right now?
+
+## §7.1  Layout — three zones
+
+Zone | Content | Size
+Status bar | Overall health: All Good / Issues Found / Critical. Tap to expand. | Full width, 44pt height
+Target cards | One card per registered app/agent. Scrollable list. | Full width, variable height
+Active issues | Expandable list of open issues across all targets. Empty = All Good. | Full width, collapsible
+
+## §7.2  Target card
+
+Each registered app or agent has a card showing:
+
+App/agent name and icon
+
+Health indicator: green dot (healthy), orange dot (warning), red dot (issue detected)
+
+Last checked timestamp
+
+One-line plain English summary of most recent issue (if any): e.g. "PDF export failing since yesterday"
+
+Two actions: "Something's wrong" (creator report) and "View details"
+
+## §7.3  Target detail view
+
+Current health status with last-updated timestamp
+
+Recent issues: category (bug/security/performance), plain English description, status (investigating/fixing/resolved), age
+
+Recent builds: last 5 PRs with CI status
+
+"Something's wrong" button — always visible, prominent
+
+Telemetry summary (ENGINEER mode): error rate, p95 latency, last exception
+
+## §7.4  Health indicators
+
+Indicator | Color | Condition
+Healthy | Green | No open issues. CI passing. No telemetry alerts.
+Warning | Orange | Open issue being investigated. CI passing. No user impact confirmed.
+Issue | Red | CI failing on main OR confirmed user-impacting bug OR security finding.
+Unknown | Grey | Crafted Connect not reporting. Last contact > 24 hours.
+
+# §8  Issue Reporting Flow (New in v3.0)
+
+Two entry points, one flow: creator taps "Something's wrong" whether they're in Crafted or in the app itself.
+
+## §8.1  Entry points
+
+From Crafted health dashboard: tap "Something's wrong" on a target card
+
+From inside the app/agent itself: tap the "Something's wrong" component (TRD-18, generated into every app)
+
+From Crafted via natural language: type "my invoicing app's export is broken" in the Crafted input field
+
+## §8.2  Report sheet
+
+A modal sheet with a single focused question:
+
+Header: "What's happening?" in large text
+
+Subhead: "Describe what's wrong in your own words"
+
+Text input: large, prominent, no character limit
+
+Voice button: tap to dictate (transcribed inline)
+
+Target selector: pre-filled if entered from a target card, otherwise a picker
+
+Submit button: "Let Crafted investigate"
+
+The sheet does NOT ask: which file, which function, which error, which PR. The creator describes what they observed as a user, not as a developer.
+
+## §8.3  Post-submit state
+
+Status changes to orange "Investigating"
+
+Progress indicator: Gathering context → Diagnosing → Ready
+
+Estimated time: "Usually under 30 seconds"
+
+Creator can dismiss and return — investigation continues in background
+
+# §9  Diagnosis View (New in v3.0)
+
+When Crafted completes its diagnosis, a notification appears and the target card updates. Tapping opens the diagnosis view.
+
+## §9.1  Diagnosis card structure
+
+Plain English summary at top: "Crafted found the likely cause"
+
+What you described: creator's original report shown back to them
+
+What Crafted found: 1–3 sentences in plain English
+
+Confidence indicator: High / Medium / Low with brief explanation
+
+Technical detail (collapsed by default, ENGINEER mode expanded): affected files, PR number, error type, stack hash
+
+Two primary actions: "Fix it" and "Not quite right" (to refine the description)
+
+## §9.2  Confidence levels
+
+Confidence | Shown as | Meaning | Default action
+High | Green — "Crafted is confident" | Telemetry + recent PR diff clearly correlate with the description | "Fix it" auto-progresses to fix review
+Medium | Orange — "Good lead found" | Correlation found but not definitive | "Fix it" progresses with a note that this is the best diagnosis available
+Low | Grey — "Needs more context" | No clear correlation found | "Describe more" offered alongside "Try fixing anyway"
+
+## §9.3  Security findings
+
+Red banner: "Security issue found"
+
+Plain English impact shown
+
+NO auto-fix offered — creator must explicitly tap "Review and fix"
+
+Security fixes always show plain English impact summary before approval
+
+Merge requires explicit creator approval — never auto-merged
+
+# §10  Fix Review and Approval (New in v3.0)
+
+The creator approves a fix the same way they'd approve something a colleague sent them — read the summary, understand the impact, say yes or no.
+
+## §10.1  Fix review card — FOUNDER / default mode
+
+What will change: 2–3 bullet points in plain English
+
+Risk level: Low / Medium / High with one-line explanation
+
+CI status: "Tests passed" or "Tests running..."
+
+Two actions: "Approve fix" (green) and "Not right" (outline)
+
+## §10.2  Fix review card — ENGINEER mode
+
+All of the above plus:
+
+Compact diff view: changed lines highlighted, file name shown
+
+New tests added: shown explicitly
+
+PR link: opens in GitHub
+
+CI detail: individual check results
+
+## §10.3  Approval states
+
+State | UI | What happens
+Pending CI | Spinner + "Running tests..." | Approval button disabled until CI passes
+CI passed | Green checkmark + "Approve fix" enabled | Creator can approve
+CI failed | Red + "Tests failed — Crafted is retrying" | Fix loop runs up to 3 CI cycles; creator informed of progress
+Approved | Green confirmation + "Fix merged" | PR merged, target health rechecked in 60 seconds
+Rejected | Creator taps "Not right" | Crafted asks for more context and re-diagnoses
+
+# §11  Remediation Stream (New in v3.0)
+
+The remediation stream runs continuously alongside and independently of the build stream. It shows all active remediation activity across all registered targets.
+
+## §11.1  Stream events
+
+Event type | Icon | Example message
+Issue detected | Red circle | "Crafted detected a CI failure on My Invoice App"
+Report received | Speech bubble | "You reported: PDF export isn't working"
+Investigating | Magnifying glass | "Crafted is correlating telemetry with recent changes"
+Diagnosis ready | Lightbulb | "Cause identified: PR #47 changed the file save method"
+Fix generated | Wrench | "Fix PR opened: Update PDF export to current save API"
+Awaiting approval | Checkmark circle | "Waiting for your approval to merge the fix"
+Fix merged | Green checkmark | "Fix deployed. Monitoring for recurrence."
+Security gate | Lock | "Security fix requires your review before merging"
+
+## §11.2  Parallel operation
+
+The remediation stream and build stream are independent. A build can be running while remediations are in progress on previously built apps. Neither blocks the other. Both are visible in their respective panels simultaneously.
+
+# §12  In-App "Something's Wrong" Component (New in v3.0)
+
+Auto-generated into every app and agent the Crafted pipeline produces. It is the in-app entry point to the remediation flow.
+
+## §12.1  Visual design
+
+Small, unobtrusive floating button — bottom-right corner by default, configurable
+
+Icon: waveform or pulse icon (health metaphor, not a bug/error metaphor)
+
+Always visible when the app is running, never hidden
+
+In ENGINEER mode: long-press to expose quick telemetry summary
+
+## §12.2  Tap behavior
+
+Single tap: opens the report sheet (§8.2) as a modal over the current app
+
+Report sheet pre-populated with current screen name and last 3 actions
+
+Submit routes the report via CraftedConnect SDK (TRD-18) to Crafted Dev Agent
+
+App returns to normal state immediately — no interruption to workflow
+
+## §12.3  SwiftUI implementation contract
+
+// Auto-generated into every Crafted-built app
+
+struct CraftedHealthButton: View {
+
+@StateObject private var connect = CraftedConnect.shared
+
+@State private var showingReport = false
 
 var body: some View {
 
-RoundedRectangle(cornerRadius: 12)
+VStack {
 
-.stroke(Color("sage"), lineWidth: 2)
+Spacer()
 
-.background(Color("sage-dim").cornerRadius(12).opacity(0.3))
+HStack {
 
-.overlay(
+Spacer()
 
-VStack(spacing: 8) {
+Button(action: { showingReport = true }) {
 
-Image(systemName: "photo.badge.plus").font(.system(size: 32))
+Image(systemName: "waveform.path.ecg")
 
-.foregroundColor(Color("sage"))
+.padding(12)
 
-Text("Drop a sketch or photo to get started")
+.background(Color(.systemBackground))
 
-.foregroundColor(Color("sage-text"))
+.clipShape(Circle())
 
-}
-
-)
+.shadow(radius: 4)
 
 }
 
-}
-
-# 6.5 Sketch Interpretation Card (New in v2.0)
-
-When an image is submitted, a new card type appears in the build stream showing the interpretation in progress, then the result.
-
-During interpretation:
-
-┌─────────────────────────────────────────────────────────────────┐
-
-│  Reading your design                              12:34:05      │
-
-│  ─────────────────────────────────────────────────────────────  │
-
-│  [thumbnail]  Interpreting your design...                       │
-
-│               ████████████░░░░░░░░  Analyzing your design       │
-
-└─────────────────────────────────────────────────────────────────┘
-
-After interpretation:
-
-┌─────────────────────────────────────────────────────────────────┐
-
-│  Reading your design                              12:34:12      │
-
-│  ─────────────────────────────────────────────────────────────  │
-
-│  [thumbnail]  Layout identified: Dashboard with sidebar nav,    │
-
-│               main content area, 3 data cards, header bar       │
-
-│                                                                  │
-
-│  Components detected:                                           │
-
-│  NavigationSidebar · DataCard × 3 · HeaderBar                  │
-
-│  UserAvatar · SearchField · ActionButton × 2                   │
-
-│                                                                  │
-
-│  [ Generate Figma Design ]   [ Correct interpretation ]         │
-
-└─────────────────────────────────────────────────────────────────┘
-
-struct SketchInterpretationCard: View {
-
-let card: SketchInterpretationCardModel
-
-var body: some View {
-
-CardContainer(cardType: "SKETCH INTERPRETATION",
-
-timestamp: card.timestamp) {
-
-VStack(alignment: .leading, spacing: 12) {
-
-HStack(alignment: .top, spacing: 12) {
-
-Image(nsImage: card.image)
-
-.resizable().aspectRatio(contentMode: .fit)
-
-.frame(width: 80, height: 60).cornerRadius(4)
-
-if card.isInterpreting {
-
-InterpretationProgress(stage: card.progressStage)
-
-} else {
-
-InterpretationResult(result: card.result)
+.padding()
 
 }
 
 }
 
-if !card.isInterpreting, let result = card.result {
+.sheet(isPresented: $showingReport) {
 
-HStack(spacing: 8) {
-
-Button("Generate Figma Design") { generateFigmaDesign(from: result) }
-
-.buttonStyle(PrimaryActionButtonStyle())
-
-Button("That's not quite right") { showCorrectionSheet = true }
-
-.buttonStyle(SecondaryActionButtonStyle())
+IssueReportSheet(connect: connect)
 
 }
 
@@ -326,35 +476,31 @@ Button("That's not quite right") { showCorrectionSheet = true }
 
 }
 
-}
+The component is overlaid on the app's root view via a ZStack. It does not modify the app's existing view hierarchy.
 
-}
+# §13  TRD Session UI (Updated in v2.0)
 
-}
+v1.0 specified a single TRD session UI. v2.0 adds mode-specific visual treatments for FOUNDER, ENGINEER, and CONSULTANT modes. FOUNDER is the default for all new users.
 
-# 17. TRD Session UI — Updated (v2.0)
-
-v1.0 specified a single TRD session UI. v2.0 adds mode-specific visual treatments for FOUNDER, ENGINEER, and CONSULTANT modes defined in TRD-7 v2. FOUNDER is the default mode for all new users — it is the primary Crafted experience. ENGINEER mode is an opt-in advanced view, surfaced via a toggle in Settings. CONSULTANT mode is for client-facing sessions and must be explicitly activated.
-
-## 17.1 Mode Indicator
+## §13.1  Mode indicator badge
 
 All three modes show a persistent mode badge in the TRD session stage header:
 
-┌─────────────────────────────────────────────────────────────────┐
+┌────────────────────────────────────────────────────────────────┐
 
-│  ● TRD SESSION · Phase 2: Architecture Discovery    [FOUNDER]  │
+│  ● TRD SESSION · Phase 2: Architecture Discovery  [FOUNDER]   │
 
-│  ████████░░░░░░░░  3 of 7 domains covered  Est. $4.20 total    │
+│  ████████░░░░░░░░  3 of 7 domains covered   Est. $4.20 total  │
 
-└─────────────────────────────────────────────────────────────────┘
-
-Mode badge colors:
+└────────────────────────────────────────────────────────────────┘
 
 [FOUNDER] — sage green accent (#3D7A5C), white text
 
 [ENGINEER] — surface-raised background, text-secondary text
 
 [CONSULTANT] — #F59E0B (warning color) background, dark text — signals live meeting context
+
+## §13.2  SwiftUI: ModeBadge
 
 struct ModeBadge: View {
 
@@ -378,173 +524,29 @@ Text(mode.displayLabel)
 
 }
 
-extension OperatorMode {
+## §13.3  FOUNDER mode question display
 
-var displayLabel: String {
+In FOUNDER mode, questions are displayed conversationally. Domain progress shown in plain language, not domain IDs:
 
-switch self {
+"Understanding your data" (not "D3: Data Model")
 
-case .founder:    return "FOUNDER"
+"How people log in" (not "D4: Authentication")
 
-case .engineer:   return "ENGINEER"
+"What happens when things go wrong" (not "D5: Error Handling")
 
-case .consultant: return "CONSULTANT"
+## §13.4  CONSULTANT mode UI additions
 
-case .unknown:    return "DETECTING"
+Three elements not present in other modes:
 
-}
+Meeting timer in stage header bar with Pause button that calls /trd pause
 
-}
+Compliance indicator in Context Panel (HIPAA, SOC 2 etc.) with warning-color treatment
 
-var badgeColor: Color {
+Deployment target selector: Windows App / Mac App / Linux Service / Cloud Service / Hybrid
 
-switch self {
+# §14  Figma Design Pipeline UI (New in v2.0)
 
-case .founder:    return Color("sage")
-
-case .engineer:   return Color("surface-raised")
-
-case .consultant: return Color("warning")
-
-case .unknown:    return Color("border")
-
-}
-
-}
-
-}
-
-## 17.2 FOUNDER Mode Question Display
-
-In FOUNDER mode, questions are displayed with a conversational visual treatment — not the dense technical format used in ENGINEER mode. Domain progress shown in plain language, not domain IDs.
-
-┌─────────────────────────────────────────────────────────────────┐
-
-│  TRD SESSION QUESTION                             12:41:03      │
-
-│  ─────────────────────────────────────────────────────────────  │
-
-│                                                                  │
-
-│  When someone uses your product for the first time,             │
-
-│  what information do they give you?                             │
-
-│                                                                  │
-
-│  Domain: Understanding your data  [2 of 7 covered]             │
-
-└─────────────────────────────────────────────────────────────────┘
-
-Domain labels in FOUNDER mode: "Understanding your data" (not "D3: Data Model"), "How people log in" (not "D4: Authentication"), "What happens when things go wrong" (not "D5: Error Handling").
-
-## 17.3 CONSULTANT Mode UI
-
-CONSULTANT mode adds three UI elements not present in other modes:
-
-1. Meeting timer — shown in the stage header bar:
-
-┌─────────────────────────────────────────────────────────────────┐
-
-│  ● TRD SESSION · Phase 3: Component Boundaries  [CONSULTANT]   │
-
-│  ████████████░░░░░░░  52 of 90 min elapsed   ⏸ Pause meeting   │
-
-└─────────────────────────────────────────────────────────────────┘
-
-The pause button calls /trd pause — saves state immediately and shows a "Meeting paused" card.
-
-2. Compliance indicator — shown in Context Panel when compliance requirements are detected:
-
-struct ComplianceIndicatorView: View {
-
-let frameworks: [String]  // ["HIPAA", "SOC 2"]
-
-var body: some View {
-
-if !frameworks.isEmpty {
-
-VStack(alignment: .leading, spacing: 6) {
-
-Text("COMPLIANCE REQUIREMENTS")
-
-.font(.custom("SF Pro Text", size: 11)).fontWeight(.medium)
-
-.foregroundColor(Color("text-tertiary")).kerning(0.5)
-
-ForEach(frameworks, id: \.self) { framework in
-
-HStack(spacing: 6) {
-
-Image(systemName: "checkmark.shield.fill")
-
-.foregroundColor(Color("warning"))
-
-Text(framework).foregroundColor(Color("text-primary"))
-
-Text("controls applied").foregroundColor(Color("text-secondary"))
-
-}
-
-}
-
-}
-
-.padding(12).background(Color("warning-bg")).cornerRadius(8)
-
-.overlay(RoundedRectangle(cornerRadius: 8)
-
-.stroke(Color("warning").opacity(0.3), lineWidth: 1))
-
-}
-
-}
-
-}
-
-3. Deployment target selector — shown in Context Panel after deployment target is determined:
-
-struct DeploymentTargetView: View {
-
-@Binding var target: DeploymentTarget
-
-var body: some View {
-
-VStack(alignment: .leading, spacing: 6) {
-
-Text("DEPLOYMENT TARGET")
-
-.font(.custom("SF Pro Text", size: 11)).fontWeight(.medium)
-
-.foregroundColor(Color("text-tertiary")).kerning(0.5)
-
-Picker("", selection: $target) {
-
-Label("Windows App",  systemImage: "pc")          .tag(DeploymentTarget.windowsApp)
-
-Label("Mac App",      systemImage: "laptopcomputer").tag(DeploymentTarget.macApp)
-
-Label("Linux Service",systemImage: "server.rack")  .tag(DeploymentTarget.linuxService)
-
-Label("Cloud Service",systemImage: "cloud")        .tag(DeploymentTarget.cloudService)
-
-Label("Hybrid",       systemImage: "square.stack.3d.up").tag(DeploymentTarget.hybrid)
-
-}
-
-.pickerStyle(.menu)
-
-}
-
-}
-
-}
-
-# 24. Figma Design Pipeline UI (New in v2.0)
-
-## 24.1 Overview
-
-The Figma pipeline is a new execution path that sits between design and code generation. It activates when:
+## §14.1  Overview — activation triggers
 
 A Figma file URL is submitted via the Build Intent Bar
 
@@ -552,7 +554,7 @@ The sketch interpretation card's "Generate Figma Design" button is pressed
 
 A completed Figma design is detected in a connected Figma account
 
-## 24.2 Figma Import Sheet
+## §14.2  Figma Import Sheet
 
 struct FigmaImportSheet: View {
 
@@ -572,25 +574,11 @@ Text("Import from Figma")
 
 FigmaConnectionStatusView(status: connectionStatus)
 
-VStack(alignment: .leading, spacing: 6) {
-
-Text("Figma file URL").foregroundColor(Color("text-secondary"))
-
 TextField("https://www.figma.com/design/...", text: $figmaURL)
 
 .font(.custom("SF Mono", size: 13))
 
 .padding(10).background(Color("code-bg")).cornerRadius(6)
-
-.overlay(RoundedRectangle(cornerRadius: 6)
-
-.stroke(figmaURL.isEmpty ? Color("border") : Color("sage"), lineWidth: 1))
-
-}
-
-Text("The agent will read your Figma design and generate code that matches it exactly.")
-
-.foregroundColor(Color("text-secondary"))
 
 HStack {
 
@@ -600,9 +588,7 @@ Button("Cancel") { dismiss() }.buttonStyle(SecondaryActionButtonStyle())
 
 Button("Import Design") { onImport(figmaURL) }
 
-.buttonStyle(PrimaryActionButtonStyle())
-
-.disabled(figmaURL.isEmpty)
+.buttonStyle(PrimaryActionButtonStyle()).disabled(figmaURL.isEmpty)
 
 }
 
@@ -614,314 +600,146 @@ Button("Import Design") { onImport(figmaURL) }
 
 }
 
-## 24.3 Figma Pipeline Card Sequence
+## §14.3  Card sequence in build stream
 
-When a Figma URL is submitted, a sequence of cards appears in the build stream:
+Card 1 — Figma Reading: shows file name, frame count, component count, parsing progress bar.
 
-Card 1: Figma Reading
+Card 2 — Design Summary (gate card): screens, components, color tokens, typography, breakpoints. Actions: "Build from this design" / "Update design first".
 
-┌─────────────────────────────────────────────────────────────────┐
+Card 3 — Code Generation Progress: per-component generation status with ✓ / ● / ○ indicators.
 
-│  Connecting to Figma                              12:45:01      │
+## §14.4  Context Panel — Design tab
 
-│  ─────────────────────────────────────────────────────────────  │
+When a Figma design is active, the Context Panel's fifth tab switches from "Settings" to "Design", showing file name, last modified date, component list, and "Open in Figma" button.
 
-│  🎨 Reading design from Figma...                                │
+## §14.5  Sketch-to-Figma progress card
 
-│     payment-dashboard.fig · 12 frames · 47 components          │
+When a napkin sketch triggers Figma generation: step-by-step progress (Layout structure → Navigation components → Data display cards → Typography → Color tokens → Component library). "Open Figma to review" button activates when generation is complete.
 
-│     ████████████░░░░░░░  Parsing component tree                 │
+# §15  Client Summary Preview UI — CONSULTANT Mode (New in v2.0)
 
-└─────────────────────────────────────────────────────────────────┘
-
-Card 2: Design Summary (gate card)
-
-┌─────────────────────────────────────────────────────────────────┐
-
-│  Review your design                               12:45:08      │
-
-│  ─────────────────────────────────────────────────────────────  │
-
-│  Design read successfully.                                       │
-
-│                                                                  │
-
-│  Screens: 12  Components: 47  Color tokens: 18                  │
-
-│  Typography: 6 styles  Breakpoints: Desktop, Tablet, Mobile     │
-
-│                                                                  │
-
-│  Components to generate:                                        │
-
-│  DashboardLayout · SidebarNav · DataCard × 4                   │
-
-│  TransactionTable · UserAvatar · SearchBar                     │
-
-│  NotificationBadge · StatusChip · ActionMenu                   │
-
-│                                                                  │
-
-│  [ Build from this design ]   [ Update design first ]           │
-
-└─────────────────────────────────────────────────────────────────┘
-
-Card 3: Code Generation Progress
-
-┌─────────────────────────────────────────────────────────────────┐
-
-│  Building your app                                12:45:22      │
-
-│  ─────────────────────────────────────────────────────────────  │
-
-│  Generating components from design...                           │
-
-│                                                                  │
-
-│  ✓ DashboardLayout.tsx                                          │
-
-│  ✓ SidebarNav.tsx                                               │
-
-│  ● DataCard.tsx  (generating...)                                │
-
-│  ○ TransactionTable.tsx                                         │
-
-│  ○ UserAvatar.tsx                                               │
-
-└─────────────────────────────────────────────────────────────────┘
-
-## 24.4 Figma Design Preview in Context Panel
-
-When a Figma design is active, the Context Panel's fifth tab switches from "Settings" to "Design":
-
-enum ContextTab: String {
-
-case prd      = "PRD"
-
-case pr       = "PR"
-
-case ci       = "CI"
-
-case cost     = "Cost"
-
-case design   = "Design"    // New — replaces Settings when Figma active
-
-case settings = "Settings"
-
-}
-
-struct FigmaDesignTab: View {
-
-let figmaFile: FigmaFileModel
-
-var body: some View {
-
-ScrollView {
-
-VStack(alignment: .leading, spacing: 16) {
-
-HStack {
-
-Image(systemName: "paintpalette.fill").foregroundColor(Color("sage"))
-
-VStack(alignment: .leading, spacing: 2) {
-
-Text(figmaFile.name).fontWeight(.medium)
-
-Text("Last updated \(figmaFile.lastModified)")
-
-.foregroundColor(Color("text-secondary"))
-
-}
-
-Spacer()
-
-Button("Open in Figma") { NSWorkspace.shared.open(figmaFile.url) }
-
-.buttonStyle(.plain).foregroundColor(Color("sage-text"))
-
-}
-
-Divider().background(Color("border-subtle"))
-
-Text("COMPONENTS").fontWeight(.medium)
-
-.foregroundColor(Color("text-tertiary")).kerning(0.5)
-
-ForEach(figmaFile.components) { FigmaComponentRow(component: $0) }
-
-}
-
-.padding(16)
-
-}
-
-}
-
-}
-
-## 24.5 Sketch-to-Figma Progress Card
-
-When a napkin sketch triggers Figma design generation:
-
-┌─────────────────────────────────────────────────────────────────┐
-
-│  Creating your design                             12:52:14      │
-
-│  ─────────────────────────────────────────────────────────────  │
-
-│  Creating your design in Figma from sketch...                   │
-
-│                                                                  │
-
-│  ✓ Layout structure created                                     │
-
-│  ✓ Navigation components placed                                 │
-
-│  ● Data display cards  (placing...)                             │
-
-│  ○ Typography styles                                            │
-
-│  ○ Color tokens applied                                         │
-
-│  ○ Component library attached                                   │
-
-│                                                                  │
-
-│  [ Open Figma to review ]  (available after generation)         │
-
-└─────────────────────────────────────────────────────────────────┘
-
-The "Open Figma to review" button becomes active when generation is complete. It opens the generated Figma file directly in the Figma desktop app or browser via the file URL returned by the API.
-
-# 25. Client Summary Preview UI — CONSULTANT Mode (New in v2.0)
-
-## 25.1 Overview
+## §15.1  Overview
 
 At the end of a CONSULTANT mode TRD session, the client summary document is generated and previewed inside the agent before export. This gives the consultant a final review step before sharing with the client.
 
-## 25.2 Client Summary Review Card
+## §15.2  Client Summary Review Card
 
-┌─────────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────┐
 
-│  Your summary is ready                            14:32:01      │
+│  Your summary is ready                           14:32:01   │
 
-│  ─────────────────────────────────────────────────────────────  │
+│  ─────────────────────────────────────────────────────────  │
 
-│  Payment Automation Platform                                     │
+│  Payment Automation Platform                                │
 
-│  ─────────────────────────────────────────────────────────────  │
+│  ─────────────────────────────────────────────────────────  │
 
-│  What We're Building                                             │
+│  What We're Building                                        │
 
-│  A platform that automatically matches incoming payments to      │
+│  A platform that automatically matches incoming payments... │
 
-│  open invoices, reducing manual reconciliation from 4 hours     │
+│                                                             │
 
-│  to under 15 minutes per day.                                   │
+│  Who It's For                                               │
 
-│                                                                  │
+│  Accounts payable teams at mid-sized manufacturing cos.    │
 
-│  Who It's For                                                    │
+│  ★ SOC 2 controls applied · Windows deployment             │
 
-│  Accounts payable teams at mid-sized manufacturing companies     │
+│  ─────────────────────────────────────────────────────────  │
 
-│                                                                  │
+│  [ Export .docx ]  [ Email to client ]  [ Start building ] │
 
-│  ★ SOC 2 controls applied · Windows deployment                  │
+└──────────────────────────────────────────────────────────────┘
 
-│  ─────────────────────────────────────────────────────────────  │
+## §15.3  Sign-off state
 
-│  [ Export .docx ]   [ Email to client ]   [ Start building ]    │
+After the consultant sends the summary and the client approves, the card updates: "✓ [Product] — Client approved · Ready to build" with a single "Begin build pipeline" action.
 
-└─────────────────────────────────────────────────────────────────┘
+# §16  Accessibility
 
-struct ClientSummaryCard: View {
+All surfaces meet WCAG 2.1 AA and Apple HIG accessibility requirements:
 
-let summary: ClientSummaryModel
+Every interactive element has accessibilityLabel() and accessibilityIdentifier()
 
-var body: some View {
+Health status indicators use both color and shape — never color alone
 
-CardContainer(cardType: "CLIENT SUMMARY READY",
+Issue report input supports dictation and VoiceOver
 
-timestamp: summary.timestamp) {
+Approval buttons have minimum 44pt touch target
 
-VStack(alignment: .leading, spacing: 12) {
+Diagnosis text meets 4.5:1 contrast ratio in both light and dark mode
 
-Text(summary.productName).fontWeight(.semibold)
+Plain English summaries written at Flesch-Kincaid grade 8 or below
 
-Divider().background(Color("border-subtle"))
+# §17  Acceptance Criteria
 
-SummarySection(title: "What We're Building",
+## §17.1  Health dashboard
 
-content: summary.whatWeAreBuilding)
+All registered targets visible with correct health status within 5 seconds of app open
 
-SummarySection(title: "Who It's For",
+Health status updates within 60 seconds of a CI failure on main
 
-content: summary.whoItsFor)
+Target cards show plain English issue summary without requiring expansion
 
-HStack(spacing: 8) {
+Unknown status shown correctly when Crafted Connect has not reported in > 24 hours
 
-ForEach(summary.complianceFrameworks, id: \.self) {
+## §17.2  Issue reporting
 
-ComplianceBadge(framework: $0)
+Report sheet opens within 200ms of tapping "Something's wrong"
 
-}
+Voice input transcribed and visible within 2 seconds
 
-DeploymentBadge(target: summary.deploymentTarget)
+Post-submit status visible within 500ms of submission
 
-}
+Diagnosis available in Crafted UI within 30 seconds of report submission
 
-Divider().background(Color("border-subtle"))
+## §17.3  Diagnosis and fix
 
-HStack(spacing: 8) {
+Diagnosis shown in plain English at Flesch-Kincaid grade 8 or below
 
-Button("Export .docx") { exportClientSummary() }
+Technical detail available on expand in ENGINEER mode
 
-.buttonStyle(SecondaryActionButtonStyle())
+Security fixes never show Approve button until creator reads plain English impact summary
 
-Button("Email to client") { emailClientSummary() }
+Fix merged within 60 seconds of approval (CI already passed)
 
-.buttonStyle(SecondaryActionButtonStyle())
+Target health rechecked and card updated within 60 seconds of merge
 
-Spacer()
+## §17.4  In-app component
 
-Button("Start building") { startBuildPipeline() }
+CraftedHealthButton present in every Crafted-built app at build time
 
-.buttonStyle(PrimaryActionButtonStyle())
+Component visible in all app states including error states
 
-}
+Report submitted successfully from inside the app without requiring Crafted to be open
 
-}
+No interference with app's existing view hierarchy or gesture recognizers
 
-}
+## §17.5  Figma pipeline
 
-}
+Figma file URL accepted and parsed within 5 seconds
 
-}
+Design Summary gate card shown before code generation begins
 
-## 25.3 Sign-Off State
+Per-component generation progress visible in real time
 
-After the consultant sends the summary and the client approves, the card updates to show sign-off state:
+Sketch-to-Figma generation completes within 60 seconds for typical wireframes
 
-┌─────────────────────────────────────────────────────────────────┐
+## §17.6  TRD session modes
 
-│  Summary approved — ready to build                14:47:22      │
+Mode badge visible in all TRD session phase headers
 
-│  ─────────────────────────────────────────────────────────────  │
+FOUNDER mode domain labels use plain English (never domain IDs)
 
-│  ✓ Payment Automation Platform                                   │
+CONSULTANT mode meeting timer visible and pauses correctly
 
-│    Client approved · Ready to build                             │
-
-│                                                                  │
-
-│  [ Begin build pipeline ]                                       │
-
-└─────────────────────────────────────────────────────────────────┘
+Compliance indicators appear automatically when compliance requirements detected
 
 # Appendix: Document Change Log
 
 Version | Date | Author | Changes
-1.0 | 2026-03-19 | YouSource.ai | Complete macOS SwiftUI UI specification
+1.0 | 2026-03-19 | YouSource.ai | Complete macOS SwiftUI UI: build stream, approval gates, REPL, context panel, cost tracking, full design system
 2.0 | 2026-03-20 | YouSource.ai | Figma pipeline UI, sketch/image input, drag-and-drop, three TRD session modes (FOUNDER/ENGINEER/CONSULTANT), compliance indicators, deployment target selector, client summary preview card
+3.0 | 2026-03 | YouSource.ai | Health Dashboard, Issue Reporting flow, Diagnosis View, Fix Review and Approval, Remediation stream, In-app health component. Design philosophy extended to Builder + Maintainer profiles.
+3.0 (consol.) | 2026-03-24 | YouSource.ai | Consolidated: merged all three delta documents into one complete self-contained specification.
