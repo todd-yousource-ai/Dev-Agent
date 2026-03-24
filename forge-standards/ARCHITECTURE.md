@@ -1,489 +1,412 @@
-# Architecture
+# Architecture - ForgeAgent
 
-## System Overview
+## What This Subsystem Does
 
-**Product:** Crafted Dev Agent / Crafted  
-**Platform:** Native macOS application  
-**Minimum macOS:** 13.0 (Ventura)  
-**Implementation languages called out in the loaded documents:** Swift 5.9+, SwiftUI, Python 3.12
+ForgeAgent is the native macOS AI coding agent subsystem that executes the build workflow from plain-language build intent through pull-request-based implementation and gated merge.
 
-Crafted is a **two-process macOS AI coding agent**. The architecture is explicitly split into:
+At a system level, ForgeAgent:
 
-1. **Swift shell**
-2. **Python backend**
+- decomposes a build intent into an ordered sequence of pull requests
+- generates implementation and tests for each PR using two LLM providers in parallel
+- uses Claude as the arbitrator in consensus generation
+- runs a self-correction pass
+- runs a lint gate
+- runs a 20-pass local fix loop
+- executes CI
+- blocks on operator approval before merge
+- persists cross-run learning in build memory and build rules
 
-The loaded documents define this split consistently:
+The subsystem also owns the operator-facing gating behavior for uncertain scope and approval-required transitions. In particular, the scope-confidence flow is explicitly staged:
 
-- **Swift shell** owns:
-  - UI
-  - authentication
-  - Keychain secret storage
-  - installation/distribution concerns
-  - session lifecycle
-  - orchestration
-  - XPC-related shell responsibilities
-- **Python backend** owns:
-  - consensus
-  - generation/intelligence
-  - pipeline execution
-  - GitHub operations
-  - document ingestion/retrieval
+- `SCOPE_SYSTEM` returns `confidence` in the range `0–100` and `coverage_gaps`
+- `_stage_scope` gates at `_CONFIDENCE_THRESHOLD = 85`
+- below threshold, the operator is shown gaps and offered `proceed`, `answer`, or `cancel`
+- if the operator answers the gaps, ForgeAgent performs a one-shot re-scope only; it does not loop indefinitely
 
-The two processes communicate using an **authenticated Unix socket with line-delimited JSON**.
+ForgeAgent is responsible for ensuring that generated code is produced, corrected, validated, and proposed as PRs, but not executed as arbitrary generated content.
 
-A core product constraint stated in the source documents is:
+Relevant implementation ownership called out in the source material:
 
-- **Neither process ever executes generated code.**
-
-Operationally, the product takes a repository, technical specifications (TRDs), and user intent; it assesses confidence, derives an ordered plan, decomposes work into typed pull requests, generates implementation and tests using multiple LLM providers in parallel, performs self-correction, lint/fix loops, executes CI, and opens draft pull requests for review.
-
-The TRDs are the source of truth for all interfaces, error contracts, state machines, security controls, and performance requirements. The loaded documents explicitly identify **TRD-11** as governing all security-relevant components.
-
----
-
-## Subsystem Map
-
-This section lists each subsystem explicitly found in the loaded documents only.
-
-### 1. macOS Application Shell
-**Source:** TRD-1  
-**Type:** Swift/SwiftUI native shell
-
-**Purpose in the docs:**
-The native Swift/SwiftUI container that packages, installs, authenticates, and orchestrates all subsystems of Crafted.
-
-**Responsibilities explicitly listed:**
-- Installation and distribution
-  - `.app` bundle
-  - drag-to-Applications
-  - Sparkle auto-update
-- Identity and authentication
-  - biometric gate
-  - Keychain secret storage
-  - session lifecycle
-- Swift module architecture
-  - module boundaries
-  - concurrency model
-  - state ownership
-- SwiftUI view hierarchy
-
-**Declared dependency position:**
-- Foundational TRD
-- Required by TRD-2, TRD-3, TRD-4, TRD-5, TRD-8
-
----
-
-### 2. Python Backend
-**Source:** AGENTS.md, CLAUDE.md, README  
-**Type:** Python 3.12 backend process
-
-**Responsibilities explicitly listed across loaded docs:**
-- consensus
-- intelligence
-- generation
-- pipeline
-- GitHub operations
-
-**Communication model:**
-- Authenticated Unix socket
-- Line-delimited JSON
-
-**Key behavioral constraints:**
-- Must not execute generated code
-
----
-
-### 3. Consensus Engine
-**Source:** README, TRD-10 dependency references, CLAUDE excerpt  
-**Type:** Python backend subsystem
-
-**Purpose in the docs:**
-- Uses two-model consensus
-- Claude + GPT-4o run in parallel
-- Claude arbitrates every result
-
-**Known integrations from loaded docs:**
-- Consumes document retrieval context from TRD-10 via `auto_context()`
-- Referenced together with `ProviderAdapter`
-
-**Functional position in product flow:**
-- Participates in implementation/test generation and arbitration before downstream correction/gating stages
-
----
-
-### 4. Provider Adapter
-**Source:** CLAUDE excerpt  
-**Type:** Python backend subsystem
-
-**Only directly supported statement from loaded docs:**
-- It is named as an implementation area alongside `ConsensusEngine`
-
-No further behavior should be inferred beyond its existence as a distinct component area in the backend.
-
----
-
-### 5. Pipeline
-**Source:** AGENTS.md, README  
-**Type:** Python backend subsystem
-
-**Responsibilities explicitly stated:**
-- Owns pipeline behavior
-- Performs staged autonomous build flow including:
-  - scope/confidence assessment
-  - decomposition into ordered PRD plan
-  - decomposition into typed pull requests
-  - generation of implementation and tests
-  - self-correction pass
-  - lint gate
-  - iterative fix loop
-  - CI execution
-  - draft PR opening
-
----
-
-### 6. GitHub Operations
-**Source:** AGENTS.md, CLAUDE.md, README, loaded heading fragments  
-**Type:** Python backend subsystem
-
-**Responsibilities explicitly stated or directly evidenced:**
-- Owns GitHub operations
-- Opens pull requests
-- Fetches `/user` endpoint on first auth
-- Reads current file content from GitHub and obtains content + SHA
-- Pushes to main branch is listed as a heading fragment in the loaded content
-- Uses GitHub App authentication flow indicated by:
-  - generate JWT using App private key from Keychain
-
-Because the shell owns Keychain, any use of key material must respect that boundary.
-
----
-
-### 7. Document Store and Retrieval Engine
-**Source:** TRD-10  
-**Type:** Python backend subsystem
-
-**Purpose in the docs:**
-A subsystem that ingests documents and supports retrieval for generation/review context.
-
-**Language:** Python 3.12  
-**Storage location:** `~/Library/Application Support/Crafted/cache/{project_id}/`
-
-**Declared dependencies:**
-- TRD-1 for:
-  - file layout
-  - project schema
-  - XPC progress messages
-- TRD-2 for:
-  - context injection consumer
-
-**Required by:**
-- TRD-2: `auto_context()` called per generation
-- TRD-3: `doc_filter` in Stage 1/5
-- TRD-6: review context
-- TRD-7: `PRODUCT_CONTEXT` auto-load
-
-**Lifecycle/storage facts explicitly given:**
-- Project created: empty index created in `cache/{project_id}/`
-- “no explicit unload — FAISS index is small enough to keep all loaded”
-- “10 projects = ~3MB total — negligible”
-
----
-
-### 8. SwiftUI View System
-**Source:** TRD-1, AGENTS.md, CLAUDE excerpt  
-**Type:** Swift shell subsystem
-
-**Responsibilities explicitly stated:**
-- SwiftUI view hierarchy
-- UI panels/cards
-- Root UI ownership resides in the shell
-
-This subsystem is part of the shell and not a separate process.
-
----
-
-### 9. Authentication and Identity
-**Source:** TRD-1, AGENTS.md, CLAUDE.md, loaded heading fragments  
-**Type:** Swift shell subsystem
-
-**Responsibilities explicitly stated:**
-- biometric gate
-- Keychain secret storage
-- session lifecycle
-- authentication
-
-**Specific identity/secret facts present in loaded content:**
-- `display_name`: stored in UserDefaults
-- `engineer_id`: stored as `SecretKey.engineerId` in Keychain
-- `github_username`: fetched from GitHub `/user` endpoint on first auth
-
----
-
-### 10. Secrets and Keychain Management
-**Source:** TRD-1, CLAUDE.md, loaded heading fragments  
-**Type:** Swift shell subsystem
-
-**Responsibilities explicitly stated:**
-- Swift process owns secrets
-- Keychain secret storage
-- GitHub App private key is in Keychain
-
-This is a distinct boundary-critical responsibility within the shell.
-
----
-
-### 11. XPC / Bridge / Interprocess Transport Layer
-**Source:** AGENTS.md, TRD-1, TRD-10 dependency notes, loaded heading fragments  
-**Type:** Cross-process interface area
-
-**Direct evidence in loaded docs:**
-- Swift shell architecture includes XPC responsibilities
-- `Crafted/XPCBridge.swift` (Swift)
-- `src/xpc_server.py` (Python)
-- TRD-10 depends on XPC progress messages from TRD-1
-- Possible failure conditions listed:
-  - deadlock in credential delivery path
-  - Swift shell crashed before sending credentials
-  - XPC connection failed to establish
-
-**Transport fact that is explicit in CLAUDE.md:**
-- Processes communicate via an authenticated Unix socket with line-delimited JSON
-
-Because both XPC artifacts and Unix-socket transport are present in the loaded material, the safe architectural statement is that cross-process coordination/bridging exists and is security-sensitive; exact layering beyond that should remain TRD-defined.
-
----
-
-### 12. Installation, Packaging, and Update System
-**Source:** TRD-1, loaded heading fragments  
-**Type:** Swift shell subsystem
-
-**Responsibilities explicitly stated:**
-- `.app` bundle packaging
-- drag-to-Applications install
-- Sparkle auto-update
-- Developer ID signing context is evidenced by:
-  - `Developer ID Application: YouSource.ai ({TEAM_ID})`
-
----
-
-### 13. CI Integration
-**Source:** README, loaded heading fragments  
-**Type:** Product workflow/integration subsystem
-
-**Explicitly referenced jobs/workflows:**
-- `Forge CI — Python / test`
-- `Forge CI — macOS / unit-test`
-- `Forge CI — macOS / xpc-integration-test`
-- `Crafted CI (ubuntu) — main Python test job`
-- `Crafted CI — macOS (Swift) — only triggers for Swift files`
-
-**Functional role from README:**
-- CI is executed as part of the autonomous pipeline before a draft PR is opened.
-
----
+- `src/build_director.py` — `BuildPipeline` orchestration, confidence gate, `pr_type` routing
+- `src/consensus.py` — `ConsensusEngine`, `GENERATION_SYSTEM`, `SWIFT_GENERATION_SYSTEM+UI_ADDENDUM`
+- `src/github_tools.py` — `GitHubTool`, `WebhookReceiver`
+- `src/build_ledger.py` — named in architecture context as part of the backend file set
 
 ## Component Boundaries
 
-This section states what each subsystem must never do, using only boundaries explicitly supported by the loaded documents.
+ForgeAgent’s boundaries are defined by the orchestration, generation, gating, persistence, and GitHub-operation rules in the TRD material.
 
-### macOS Application Shell must never
-- Implement backend intelligence, consensus, generation, or GitHub operations that the documents assign to the Python backend
-- Execute generated code
-- Infer trust implicitly where it can be asserted and verified explicitly
+### Inside this subsystem
 
-### Python Backend must never
-- Own UI
-- Own authentication
-- Own Keychain secret storage
-- Execute generated code
-- Bypass the authenticated interprocess communication contract
+ForgeAgent includes:
 
-### SwiftUI View System must never
-- Become the source of truth for backend pipeline, consensus, or GitHub behavior
-- Handle secrets outside the shell’s explicit authentication/Keychain ownership model
+- build pipeline orchestration
+- PR sequencing and stage management
+- scope confidence evaluation and operator gating
+- multi-provider generation consensus
+- self-correction, lint, and local fix-loop orchestration
+- CI execution handling
+- operator gate presentation and blocking behavior
+- persistent build-learning state management
+- document-context loading for generation
+- GitHub operations through the approved tool abstraction
 
-### Authentication and Identity subsystem must never
-- Store Keychain-owned secrets outside the shell-controlled secret storage model
-- Collapse session, identity, and secret responsibilities into backend-owned logic
-- Weaken the biometric gate/session lifecycle controls defined by TRD-1 and TRD-11
+Concrete owned concepts include:
 
-### Secrets and Keychain Management must never
-- Transfer secret ownership to the Python backend
-- Assume shell/backend trust without explicit authenticated exchange
-- Allow generated code execution as part of any secret-handling workflow
+- `BuildPipeline`
+- `ConsensusEngine`
+- `GitHubTool`
+- stage checkpoints per PR
+- build memory persistence
+- build rules persistence
+- document-store-backed context retrieval for generation
 
-### Consensus Engine must never
-- Own UI/auth/Keychain concerns
-- Substitute for the retrieval subsystem’s responsibility to provide context
-- Violate the documented arbitration model stated in the README
+### Outside this subsystem
 
-### Provider Adapter must never
-- Expand into shell responsibilities
-- Bypass consensus/arbitration and transport/security contracts defined elsewhere in the TRDs
+ForgeAgent does not own:
 
-### Pipeline must never
-- Execute generated code
-- Bypass lint, self-correction, fix-loop, or CI stages that are explicitly part of the documented flow
-- Replace explicit operator review/approval with implicit merge authority
+- direct GitHub API access outside `GitHubTool`
+- arbitrary execution of generated code
+- automatic approval decisions
+- silent degradation when authentication, cryptography, or identity handling fails
+- bypass of security refusal behavior
+- trust of external inputs without validation
 
-### GitHub Operations must never
-- Own Keychain or biometric authentication
-- Read or use credentials outside the shell-controlled authentication/secret model
-- Bypass repository state checks such as file content/SHA interactions evidenced in the loaded docs
+ForgeAgent also does not redefine XPC protocol behavior; it consumes the defined wire protocol and must conform to its constraints.
 
-### Document Store and Retrieval Engine must never
-- Replace the consensus engine
-- Assume ownership of shell concerns such as UI, auth, installation, or Keychain
-- Store project cache outside the documented application-support cache path
-- Omit per-generation context injection where TRD-10 says `auto_context()` is required
+### Explicit operational boundaries
 
-### XPC / Bridge / Interprocess Transport must never
-- Operate without authentication
-- Violate the line-delimited JSON transport contract stated in the loaded docs
-- Deadlock or silently fail credential delivery without surfacing error paths
-- Blur process ownership boundaries between shell and backend
+- All GitHub operations must go through `GitHubTool`. Direct GitHub API usage is out of bounds.
+- All file writes must be path-validated via `path_security.validate_write_path()` before execution.
+- External document context belongs in the `USER` prompt only, never the `SYSTEM` prompt.
+- Build memory and build rules are persistent learning systems and must not be automatically cleared during normal clean runs.
 
-### Installation / Packaging / Update System must never
-- Redefine runtime ownership boundaries between shell and backend
-- Bypass signing/update controls implied by Developer ID and Sparkle-based distribution
+## Data Flow
 
-### CI Integration must never
-- Be treated as optional in the documented PR production flow
-- Blur the distinction between macOS Swift test jobs and Python test jobs where the loaded docs explicitly separate them
+The subsystem’s data flow is a staged orchestration pipeline with persistent checkpoints and operator gates.
 
----
+### 1. Session and protocol initialization
 
-## Key Data Flows
+ForgeAgent communicates over XPC using:
 
-## 1. User intent to draft PR flow
-Derived from the README product flow.
+- line-delimited JSON
+- nonce authentication
+- maximum `16MB` per message
 
-1. Operator provides:
-   - repository
-   - TRDs/specifications
-   - plain-language intent
-2. System assesses confidence in scope
-3. System decomposes intent into an ordered PRD plan
-4. System decomposes each PRD into a sequence of typed pull requests
-5. Python backend generates implementation and tests using two LLM providers in parallel
-6. Consensus/arbitration occurs
-7. Self-correction pass runs
-8. Lint gate runs
-9. Iterative fix loop runs
-10. CI executes
-11. Draft pull request is opened for review
-12. After approval, subsequent work continues
+The protocol surface includes:
 
-## 2. Shell-to-backend control flow
-Derived from AGENTS.md and CLAUDE.md.
+- `ready` message  
+  `{ agent_version, min_swift_version, capabilities[], doc_store_status }`
+- `build_card`  
+  `{ card_type, stage, content, progress }`  
+  streamed to `BuildStreamView`
+- `gate_card`  
+  `{ gate_type, options[], description }`  
+  blocks until operator responds
+- `credentials`  
+  `{ anthropic_api_key, openai_api_key, github_token, engineer_id }`
+- `doc_status`  
+  `{ doc_id, doc_name, status, chunk_count, embedded_count }`
 
-1. Swift shell orchestrates subsystems
-2. Python backend performs intelligence/generation/pipeline/GitHub work
-3. Communication occurs over an authenticated Unix socket
-4. Message framing is line-delimited JSON
+Unknown XPC message types are not raised as exceptions; they are discarded and logged.
 
-## 3. Authentication and credential flow
-Derived from TRD-1 and loaded heading fragments.
+### 2. Build intent to scoped plan
 
-1. Swift shell owns authentication
-2. Biometric gate controls access
-3. Secrets are stored in Keychain
-4. Session lifecycle is maintained in the shell
-5. Identity attributes include:
-   - `display_name` in UserDefaults
-   - `engineer_id` in Keychain
-   - `github_username` fetched from GitHub on first auth
-6. If GitHub App authentication is used, JWT generation relies on App private key material from Keychain
+A plain-language build intent enters ForgeAgent. The subsystem performs scope analysis and computes:
 
-## 4. Document ingestion and retrieval flow
-Derived from TRD-10.
+- confidence score
+- coverage gaps
 
-1. Project is created
-2. Empty index is created in `~/Library/Application Support/Crafted/cache/{project_id}/`
-3. Document store ingests project/spec content
-4. Retrieval context is supplied to generation via `auto_context()`
-5. TRD-3 Stage 1/5 can consume `doc_filter`
-6. TRD-6 consumes retrieval output for review context
-7. TRD-7 consumes retrieval output for `PRODUCT_CONTEXT` auto-load
+If confidence is below `_CONFIDENCE_THRESHOLD = 85`, `_stage_scope` emits a gate to the operator with options to:
 
-## 5. GitHub file operation flow
-Derived from loaded heading fragments.
+- proceed
+- answer
+- cancel
 
-1. Read current file from GitHub
-2. Obtain content + SHA
-3. Compute new content hash
-4. Use GitHub credentials/auth flow mediated by shell-owned secrets
+If the operator provides gap answers, ForgeAgent performs one re-scope pass. There is no repeated clarification loop.
 
-## 6. Error signaling / bridge flow
-Derived from loaded heading fragments.
+### 3. Context assembly for generation
 
-1. Start Python backend process with socket path and nonce
-2. If connection is open, send error via XPC
-3. Failure conditions explicitly identified include:
-   - XPC connection failed to establish
-   - Swift shell crashed before sending credentials
-   - deadlock in credential delivery path
+ForgeAgent assembles generation context from repository state and document sources.
 
-## 7. CI verification flow
-Derived from README and workflow headings.
+Document Store is used for generation context, including loading specific documents such as `PRODUCT_CONTEXT.md`.
 
-1. Pipeline reaches CI phase
-2. Python CI jobs run
-3. macOS Swift unit tests run where applicable
-4. macOS XPC integration tests run where applicable
-5. Results gate draft PR creation in the documented workflow
+Context handling constraints:
 
----
+- all external input is untrusted and validated
+- document-derived context is placed in the `USER` prompt
+- document-derived context is never placed in the `SYSTEM` prompt
 
-## Critical Invariants
+ContextManager behavior is automatic:
 
-These are the strongest architecture-level invariants directly supported by the loaded documents.
+- trims at `30k` tokens
+- preserves the spec-anchor first turn
+- preserves the last 6 messages
 
-1. **Crafted is a two-process system.**  
-   The architecture is split into a Swift shell and a Python backend.
+### 4. Generation and consensus
 
-2. **Process ownership is strict.**  
-   - Swift shell owns UI, authentication, and secrets/Keychain.
-   - Python backend owns intelligence, generation, consensus/pipeline, and GitHub operations.
+For each PR in the ordered sequence, ForgeAgent invokes parallel generation across two LLM providers. Consensus behavior is owned by `ConsensusEngine` in `src/consensus.py`, with Claude acting as arbitrator.
 
-3. **Generated code is never executed.**  
-   This applies to both processes.
+Generation system prompts are defined in that component:
 
-4. **Interprocess communication is authenticated.**  
-   The documented transport is an authenticated Unix socket using line-delimited JSON.
+- `GENERATION_SYSTEM`
+- `SWIFT_GENERATION_SYSTEM+UI_ADDENDUM`
 
-5. **Security is centralized by TRD-11.**  
-   Any component touching credentials, external content, generated code, or CI is governed by the security model in TRD-11.
+### 5. Correction and validation loop
 
-6. **The shell is the only owner of secret material.**  
-   The backend may consume authenticated capabilities/workflows but does not own Keychain storage.
+After generation, ForgeAgent runs:
 
-7. **Document retrieval is part of generation-time context assembly.**  
-   TRD-10 requires `auto_context()` per generation and defines downstream consumers in TRD-2, TRD-3, TRD-6, and TRD-7.
+- self-correction pass
+- lint gate
+- local fix loop with a maximum of 20 attempts
 
-8. **Document store data location is fixed.**  
-   Retrieval cache is stored under `~/Library/Application Support/Crafted/cache/{project_id}/`.
+Failure handling is strategy-driven. In `failure_handler.py`, `_choose_strategy(failure_type, attempt, records)` uses:
 
-9. **The autonomous build flow is gated, not freeform.**  
-   The documented path includes confidence assessment, planning, decomposition, generation, self-correction, lint, iterative fixing, CI, and draft PR creation.
+- failure type as the primary signal
+- attempt count as secondary escalation
 
-10. **Operator review remains part of the workflow.**  
-    The README states draft PRs are opened for review and approval.
+Documented strategy rules:
 
-11. **Trust must be explicit and verifiable.**  
-    This is reinforced by the loaded architecture rules: trust must never be inferred implicitly when it can be asserted and verified explicitly.
+- `assertion_error` → `test_driven` immediately
+- `import_error` / `runtime_error` → `converse` first, then `test_driven`
+- `attempt >= 8` → `nuclear` every 3rd attempt
+- never retry indefinitely — max 20 local attempts, then move on
 
-12. **Control decisions must be explainable, observable, and reproducible.**  
-    This applies across identity, policy, telemetry, and enforcement according to the architecture rules included in the loaded content.
+### 6. CI processing
 
-13. **Components must default to enforcement, not suggestion.**  
-    The architecture rules explicitly require policy enforcement by default.
+ForgeAgent executes CI and processes CI output as untrusted external input.
 
-14. **Transport and credential delivery are failure-sensitive paths.**  
-    The loaded documents explicitly call out:
-    - XPC connection establishment failure
-    - shell crash before credential delivery
-    - deadlock in credential delivery path
+Polling and API interaction behavior includes:
 
-15. **CI is part of the production architecture, not an external afterthought.**  
-    The documented product flow includes CI before draft PR creation, and separate Python/macOS jobs are explicitly identified.
+- `403 primary` → exponential backoff: `2s → 4s → 8s → 16s → 32s → 64s`
+- `429 secondary` → respect `Retry-After` header
+- ETag caching on all polling endpoints
+
+CI log handling is automatic:
+
+- output truncated at `8k` chars
+- truncation preserves `70%` head and `30%` tail
+
+### 7. Operator gate and merge boundary
+
+Before merge, ForgeAgent emits `gate_card` and waits indefinitely for operator input.
+
+This gate:
+
+- does not auto-approve
+- does not timeout into approval
+- blocks further progression until the operator responds
+
+### 8. Persistence and crash recovery
+
+ForgeAgent maintains per-PR stage checkpoints to prevent re-running completed work after a crash.
+
+It also persists long-lived learning state:
+
+- `build_memory.json`
+  - location: `workspace/{engineer_id}/build_memory.json`
+  - written after every successful PR via `build_memory.record_pr()`
+  - survives fresh installs and thread state wipes
+  - must not be deleted on clean runs
+- `build_rules.md`
+  - location: `Mac-Docs/build_rules.md`
+  - loaded automatically by `DocumentStore`
+  - written after each build run when 3+ recurring failure patterns are found
+  - must not be deleted on clean runs unless switching to a completely new codebase
+
+## Key Invariants
+
+ForgeAgent is constrained by the following non-negotiable invariants from the architecture context and subsystem headings.
+
+### Security and trust
+
+- Fail closed on auth, crypto, and identity errors; never degrade silently.
+- No silent failure paths; every error must surface with context.
+- Secrets must never appear in logs, error messages, or generated code.
+- All external input, including documents, PR comments, and CI output, is untrusted and validated.
+- Generated code is never executed by the agent; no `eval`, no `exec`, and no subprocess execution of generated content.
+- `SECURITY_REFUSAL` output is never bypassed by rephrasing; stop, gate, and log.
+
+### Operator control
+
+- Gates wait indefinitely for operator input.
+- There is no auto-approve behavior ever.
+- Scope clarification below threshold supports at most one re-scope cycle when the operator answers gaps.
+
+### File and path safety
+
+- All file writes are path-validated via `path_security.validate_write_path()` before execution.
+- Validate paths before any write.
+
+### Prompt and context isolation
+
+- Context from external documents goes in the `USER` prompt, never the `SYSTEM` prompt.
+
+### Protocol robustness
+
+- XPC unknown message types are discarded and logged, never raised as exceptions.
+- XPC messages are line-delimited JSON, nonce-authenticated, and capped at `16MB`.
+
+### Work progression and durability
+
+- Per-PR stage checkpoints prevent re-running completed work after a crash.
+- Build memory and build rules are persistent learning systems and are never cleared automatically.
+
+### Retry and escalation discipline
+
+- Failure type drives local repair strategy selection.
+- Local retries are bounded at 20 attempts.
+- Network/API retry behavior follows the documented backoff and rate-limit handling rules.
+
+## Failure Modes
+
+ForgeAgent is designed to surface, contain, and gate failures rather than masking them.
+
+### Scope-confidence failure mode
+
+If scoping confidence is below the threshold:
+
+- ForgeAgent does not silently continue as if scope were adequate
+- it surfaces `coverage_gaps`
+- it gates on operator choice
+- it permits only one answer-driven re-scope pass
+
+Primary effect: uncertain scope becomes an explicit operator decision point.
+
+### Auth, crypto, and identity failure mode
+
+On authentication, cryptographic, or identity errors:
+
+- ForgeAgent fails closed
+- it does not degrade to reduced-trust operation
+- errors must be surfaced with context
+
+Primary effect: protected operations stop instead of proceeding insecurely.
+
+### Security refusal failure mode
+
+If a `SECURITY_REFUSAL` is produced:
+
+- ForgeAgent stops
+- gates
+- logs
+- does not attempt to bypass by rephrasing
+
+Primary effect: refusal is terminal for that path until operator intervention.
+
+### Invalid external input failure mode
+
+Because documents, PR comments, and CI output are untrusted:
+
+- invalid or unsafe input must be validated and contained
+- it must not be implicitly promoted into trusted system instructions
+
+Primary effect: untrusted content may influence user-context generation, but not privileged instruction channels.
+
+### Unknown XPC message failure mode
+
+If an unknown XPC message type is received:
+
+- the message is discarded
+- the event is logged
+- no exception is raised
+
+Primary effect: protocol evolution or malformed traffic does not crash the agent on unknown types.
+
+### File write safety failure mode
+
+If a write path does not pass `path_security.validate_write_path()`:
+
+- the write must not execute
+
+Primary effect: filesystem mutation is blocked before unsafe writes occur.
+
+### Generation and fix-loop exhaustion
+
+If generated changes fail validation or tests repeatedly:
+
+- strategy selection follows `_choose_strategy(failure_type, attempt, records)`
+- retries are capped at 20 local attempts
+- ForgeAgent does not retry indefinitely
+
+Primary effect: the subsystem escalates deterministically and then moves on rather than livelocking.
+
+### GitHub and polling failure modes
+
+For GitHub or polling-related failures:
+
+- all operations remain within `GitHubTool`
+- `403 primary` triggers exponential backoff from `2s` to `64s`
+- `429 secondary` honors `Retry-After`
+- polling uses ETag caching
+
+Primary effect: API pressure and transient denial are handled with bounded, protocol-aware retry behavior.
+
+### Crash recovery failure mode
+
+If ForgeAgent crashes mid-PR:
+
+- per-PR stage checkpoints prevent re-running already completed work
+
+Primary effect: resumed execution is stage-aware and avoids duplicating successful stages.
+
+### Logging and disclosure failure mode
+
+Even during failures:
+
+- secrets must not appear in logs
+- secrets must not appear in error messages
+- secrets must not appear in generated code
+
+Primary effect: failure reporting remains non-secret-bearing.
+
+## Dependencies
+
+The subsystem depends on the following components and interfaces named in the source material.
+
+### Internal backend modules
+
+- `src/build_director.py`
+  - owns `BuildPipeline` orchestration
+  - owns confidence gate behavior
+  - owns `pr_type` routing
+- `src/consensus.py`
+  - owns `ConsensusEngine`
+  - defines `GENERATION_SYSTEM`
+  - defines `SWIFT_GENERATION_SYSTEM+UI_ADDENDUM`
+- `src/github_tools.py`
+  - owns `GitHubTool`
+  - owns `WebhookReceiver`
+- `src/build_ledger.py`
+  - present in the backend file naming inventory
+
+### Supporting subsystems and utilities
+
+- `DocumentStore`
+  - used for generation context
+  - auto-loads `Mac-Docs/build_rules.md`
+- `ContextManager`
+  - trims context at `30k` tokens
+  - preserves spec-anchor first turn and last 6 messages
+- `failure_handler.py`
+  - provides `_choose_strategy(failure_type, attempt, records)`
+- `path_security.validate_write_path()`
+  - required before all file writes
+
+### External/provider dependencies
+
+- two LLM providers in parallel
+- Anthropic credentials via `anthropic_api_key`
+- OpenAI credentials via `openai_api_key`
+- GitHub access via `github_token`
+
+### Persistent data dependencies
+
+- `workspace/{engineer_id}/build_memory.json`
+- `Mac-Docs/build_rules.md`
+
+### Protocol/UI dependencies
+
+- XPC transport using the documented line-delimited JSON format
+- `BuildStreamView` as the consumer for streamed `build_card` messages
+- operator interaction via blocking `gate_card` messages
