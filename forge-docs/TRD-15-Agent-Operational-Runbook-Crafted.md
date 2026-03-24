@@ -1,6 +1,6 @@
 # TRD-15-Agent-Operational-Runbook-Crafted
 
-_Source: `TRD-15-Agent-Operational-Runbook-Crafted.docx` — extracted 2026-03-23 22:49 UTC_
+_Source: `TRD-15-Agent-Operational-Runbook-Crafted.docx` — extracted 2026-03-24 15:25 UTC_
 
 ---
 
