@@ -1,696 +1,618 @@
-# INTERFACES.md
+# Interface Contracts - ForgeAgent
 
-Definitive interface and wire format reference derived from the provided TRD documents and interface contract standards only.
+## Data Structures
 
----
+This document defines the wire-format and API contract requirements for the ForgeAgent subsystem based on the provided TRD interface standards.
 
-# Interface Contracts
-
-## System Boundary
-
-Crafted Dev Agent is a **two-process native macOS system**:
-
-- **Swift shell**
-  - Owns UI
-  - Owns authentication
-  - Owns Keychain / secrets
-  - Owns XPC responsibilities
-- **Python backend**
-  - Owns consensus
-  - Owns pipeline
-  - Owns GitHub operations
-
-The two processes communicate using:
-
-- **authenticated Unix socket**
-- **line-delimited JSON**
-
-Constraint:
-
-- **Neither process ever executes generated code**
+Where source material does not define an explicit object shape, this document records the exact required fields, values, and behavioral constraints only.
 
 ---
 
-## Authoritative Sources
+### ConsensusRunRequest
 
-The following interface facts are directly established by the provided documents:
+Request shape for invoking the consensus engine from ForgeAgent.
 
-- Product architecture and process ownership from `AGENTS.md`, `CLAUDE.md`, and `README`
-- Inter-process transport from `CLAUDE.md`
-- GitHub PR lifecycle constraints from `GitHub-Integration-Lessons-Learned`
-- Mandatory security and enforcement contracts from `Forge Component Interface Contracts`
+```ts
+type Language = "python" | "swift" | "go" | "typescript" | "rust"
 
-No additional interfaces are defined beyond those sources.
+interface ConsensusRunRequest {
+  task: string
+  context: string
+  language: Language
+}
+```
 
----
-
-# Per-Subsystem Data Structures (field names, types, constraints)
-
-## 1. Inter-Process Message Envelope
-
-Because Swift and Python communicate via **line-delimited JSON**, the base wire unit is a single JSON object serialized on one line.
-
-### Transport Object
+#### Fields
 
 | Field | Type | Required | Constraints |
 |---|---|---:|---|
-| `ctx_id` | string | Yes for agent actions | Must be validated first at every entry point that processes an agent action |
-| `session_id` | string | Required for TrustFlow/audit-bearing actions | Used to correlate session-bound activity |
-| `event_type` | string | Required for TrustFlow events | Must identify the event class |
-| `ts` | number | Required for TrustFlow events | UTC Unix timestamp with millisecond precision |
-| `payload` | object | Contextual | Serialized action payload |
-| `payload_hash` | string | Required for TrustFlow events | SHA-256 of serialized action payload |
-| `event_id` | string | Required for TrustFlow events | Globally unique, CSPRNG-generated, not sequential |
+| `task` | `string` | Yes | Freeform task description. Example source usage: `f"Implement: {spec.title}"`. |
+| `context` | `string` | Yes | Context string supplied to the consensus engine. |
+| `language` | `"python" \| "swift" \| "go" \| "typescript" \| "rust"` | Yes | Must always be passed. Values must match exactly. |
 
-### Transport Constraints
+#### Behavioral requirements
 
-- Serialization format: **JSON**
-- Framing format: **one JSON object per line**
-- Transport: **authenticated Unix socket**
-- Messages carrying agent actions are subject to:
-  - CTX-ID validation
-  - VTZ policy check
-  - synchronous TrustFlow emission
-  - fail-closed error handling
+- ForgeAgent MUST always pass `language` when invoking the consensus engine.
+- `language="swift"` selects `SWIFT_GENERATION_SYSTEM` plus optional `SWIFT_UI_ADDENDUM` when UI keywords are detected.
+- `language="python"` selects `GENERATION_SYSTEM`.
+- Fix loop strategy selection MUST use `_choose_strategy(failure_type, attempt, records)`.
+- Fix arbitration MUST use `_score_fix()`.
+- Length-based fix arbitration is forbidden.
 
 ---
 
-## 2. CTX-ID Token
+### ConsensusRunResult
 
-The standards define CTX-ID as an immutable identity/security token.
+Result shape returned by the consensus engine as consumed by ForgeAgent.
 
-### CTX-ID Structure
+```ts
+interface ConsensusRunResult {
+  final_code: string
+}
+```
 
-The provided documents do not define token field layout. The following properties are mandatory at the interface level:
+#### Fields
 
-| Property | Type | Constraint |
-|---|---|---|
-| `ctx_id` | string/token | Immutable once issued |
-| `vtz_binding` | implicit binding | Every session is bound to exactly one VTZ at issuance |
-| `expiry` | implicit validation property | Expired CTX-ID must be rejected |
-| `signature` / trust validation material | implicit validation property | Must validate against TrustLock public key; software-only validation is rejected |
-
-### CTX-ID Interface Rules
-
-- Missing `ctx_id` → treat as **UNTRUSTED**
-- Expired `ctx_id` → reject
-- Rotated `ctx_id` → issue new token and invalidate old token immediately
-- CTX-ID validation must happen **before any other processing**
-- Identity must never be inferred from ambient context when `ctx_id` is absent
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `final_code` | `string` | Yes | Generated code output returned by consensus execution. |
 
 ---
-
-## 3. VTZ Enforcement Decision
-
-The standards explicitly define a `VTZEnforcementDecision` record when policy denies an action.
 
 ### VTZEnforcementDecision
 
+Record that MUST be produced on VTZ policy denial.
+
+```ts
+interface VTZEnforcementDecision {
+  verdict: "block"
+}
+```
+
+#### Fields
+
 | Field | Type | Required | Constraints |
 |---|---|---:|---|
-| `verdict` | string | Yes | Must be `block` on policy denial |
+| `verdict` | `"block"` | Yes | On VTZ policy denial, value MUST be exactly `"block"`. |
 
-No other fields are defined in the supplied documents.
+#### Behavioral requirements
 
-### Behavioral Constraints
-
-- Every action must be checked against VTZ policy **before execution**
-- Cross-VTZ tool calls require **explicit policy authorization**
-- Implicit cross-VTZ access is denied
-- VTZ boundaries are structural and cannot be bypassed by application code
-- VTZ policy changes take effect at **next CTX-ID issuance**, not mid-session
+- Every action MUST be checked against VTZ policy BEFORE execution.
+- VTZ policy denial MUST produce a `VTZEnforcementDecision` record with `verdict=block`.
 
 ---
-
-## 4. TrustFlow Event
-
-TrustFlow event fields are explicitly mandated.
 
 ### TrustFlowEvent
 
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `event_id` | string | Yes | Globally unique; generated via CSPRNG; not sequential |
-| `session_id` | string | Yes | Session correlation identifier |
-| `ctx_id` | string | Yes | CTX-ID for the action/session |
-| `ts` | number | Yes | UTC Unix timestamp with millisecond precision |
-| `event_type` | string | Yes | Event classification |
-| `payload_hash` | string | Yes | SHA-256 hash of serialized action payload |
+Required event shape for TrustFlow emission in the enforcement path.
 
-### TrustFlow Constraints
+```ts
+interface TrustFlowEvent {
+  event_id: string
+  session_id: string
+  ctx_id: string
+  ts: number
+  event_type: string
+  payload_hash: string
+}
+```
 
-- Every action outcome must emit a TrustFlow event:
-  - allow
-  - restrict
-  - block
-- Emission must be **synchronous** in the enforcement path
-- Async buffering is **not permitted**
-- Emission failure:
-  - must not silently continue
-  - must be logged
-  - must be surfaced
-  - is a **WARN-level audit event**
-
----
-
-## 5. Audit Record
-
-Audit is mandatory for security-relevant actions.
-
-### AuditRecord
-
-The supplied documents define required semantics but not full field layout. The following fields are explicitly required for all errors, and audit must occur before execution for security-relevant actions.
+#### Fields
 
 | Field | Type | Required | Constraints |
 |---|---|---:|---|
-| `component` | string | Yes for error-bearing audit records | Identifies emitting subsystem |
-| `operation` | string | Yes for error-bearing audit records | Identifies attempted action |
-| `failure_reason` | string | Yes for error-bearing audit records | Non-secret failure description |
-| `ctx_id` | string | Required if available | Include when available |
+| `event_id` | `string` | Yes | MUST be globally unique. MUST be generated using CSPRNG. MUST NOT be sequential. |
+| `session_id` | `string` | Yes | Session identifier. |
+| `ctx_id` | `string` | Yes | CTX-ID associated with the action/event. |
+| `ts` | `number` | Yes | MUST be a UTC Unix timestamp with millisecond precision. |
+| `event_type` | `string` | Yes | Event type identifier. |
+| `payload_hash` | `string` | Yes | MUST be SHA-256 of the serialized action payload. |
 
-### Audit Constraints
+#### Behavioral requirements
 
-- Every security-relevant action must generate an audit record **before execution**
-- Audit records are **append-only**
-- No modification after append is permitted
+- Every TrustFlow event MUST include all fields listed above.
+- Emission MUST be synchronous in the enforcement path.
+- Async buffering is not permitted.
+- Failed emission is a WARN-level audit event.
+- Failed emission MUST NOT silently continue; failure must be logged and surfaced.
+- Every action outcome (`allow`, `restrict`, `block`) MUST emit a TrustFlow event.
 
 ---
 
-## 6. Error Object
+### CTX-ID Token
 
-The standards define minimum required error content.
+The source defines validation and lifecycle constraints for CTX-ID but does not define additional token fields beyond identifier usage.
 
-### Error Structure
+```ts
+interface CtxIdReference {
+  ctx_id: string
+}
+```
+
+#### Fields
 
 | Field | Type | Required | Constraints |
 |---|---|---:|---|
-| `component` | string | Yes | Subsystem name |
-| `operation` | string | Yes | Operation name |
-| `failure_reason` | string | Yes | Must not include secrets or cleartext payloads |
-| `ctx_id` | string | Conditional | Required if available |
+| `ctx_id` | `string` | Yes | Immutable once issued. Missing CTX-ID MUST be treated as `UNTRUSTED`. |
 
-### Error Constraints
+#### Behavioral requirements
 
-- All trust, identity, policy, and cryptographic failures must **fail closed**
-- Fail closed means:
-  - reject the action
-  - log the event
-  - surface to caller
-  - never silently continue
-- No swallowed exceptions in enforcement paths
-- Error messages must not include:
-  - keys
-  - tokens
-  - secrets
-  - cleartext payloads
+- Every entry point that processes an agent action MUST call CTX-ID validation FIRST.
+- CTX-ID validation failure MUST result in immediate rejection.
+- No partial processing is permitted after CTX-ID validation failure.
+- CTX-ID tokens are immutable once issued.
+- CTX-ID rotation creates a new token; the old one is invalidated immediately.
+- Expired CTX-ID MUST be rejected.
+- Clock skew tolerance is deployment-defined.
+- CTX-ID MUST be validated against TrustLock public key.
+- Software-only validation is rejected.
+- Missing CTX-ID MUST be treated as `UNTRUSTED`.
+- Identity MUST never be inferred from surrounding context when CTX-ID is missing.
 
 ---
 
-## 7. DTL Label Metadata
+### AgentActionPayload
 
-DTL label behavior is defined contractually.
+The source requires serialized action payload hashing but does not define a canonical payload schema.
 
-### DTLLabel
-
-Field names are not fully specified by the source documents. The interface-level properties are:
-
-| Property | Type | Constraint |
-|---|---|---|
-| `label` | enum/string | Assigned at data ingestion and immutable thereafter |
-| `inheritance_rule` | rule | Derived data inherits the highest classification of any source |
-
-### DTL Constraints
-
-- Unlabeled data must be treated as **CONFIDENTIAL**
-- Label verification must occur before data crosses a trust boundary
-- Label stripping is a security event
-- Label stripping must be:
-  - audited
-  - policy-controlled
-
----
-
-## 8. GitHub Pull Request State Interface
-
-The provided GitHub lessons-learned document defines a concrete external API contract for draft PR state transitions.
-
-### Pull Request Draft Transition
-
-| Operation | API | Supported | Notes |
-|---|---|---:|---|
-| Convert draft PR to ready for review | REST `PATCH /repos/{owner}/{repo}/pulls/{number}` with body `{"draft": false}` | No | GitHub silently ignores `draft`; returns `200` and PR remains draft |
-| Convert draft PR to ready for review | GraphQL `markPullRequestReadyForReview` mutation | Yes | Only officially supported mechanism in provided source |
-
-### GitHub Interface Constraint
-
-Automation that converts a draft PR to ready-for-review **must use GraphQL** `markPullRequestReadyForReview`.
-
-REST `PATCH` with `{"draft": false}` is **non-conformant** for this state transition.
-
----
-
-## 9. Process Ownership Contract
-
-### Swift Shell Interface Responsibilities
-
-| Subsystem | Ownership |
-|---|---|
-| UI | Swift shell |
-| Authentication | Swift shell |
-| Keychain / secrets | Swift shell |
-| XPC | Swift shell |
-
-### Python Backend Interface Responsibilities
-
-| Subsystem | Ownership |
-|---|---|
-| Consensus | Python backend |
-| Pipeline | Python backend |
-| GitHub operations | Python backend |
-
-### Ownership Constraint
-
-Interfaces must preserve process boundaries as specified above.
-
----
-
-# Cross-Subsystem Protocols
-
-## 1. Agent Action Enforcement Path
-
-Every entry point that processes an agent action must implement the following protocol in order.
-
-### Required Sequence
-
-1. **Receive action** over authenticated interface
-2. **Validate `ctx_id` first**
-3. **Reject immediately** on CTX-ID validation failure
-4. **Evaluate VTZ policy** before execution
-5. If denied:
-   - produce `VTZEnforcementDecision` with `verdict = "block"`
-6. **Emit TrustFlow event synchronously**
-7. **Create audit record** before execution for security-relevant action
-8. **Execute action only if allowed**
-9. On any trust/identity/policy/crypto failure:
-   - fail closed
-   - log
-   - surface to caller
-
-### Prohibited Behavior
-
-- Partial processing before CTX-ID validation
-- Silent continuation after TrustFlow failure
-- Async buffering of TrustFlow emissions
-- Swallowed exceptions in enforcement paths
-- Policy bypass through application logic
-- Inferring identity without CTX-ID
-
----
-
-## 2. Swift ↔ Python IPC Protocol
-
-### Transport
-
-- Authenticated Unix socket
-- Line-delimited JSON
-
-### Framing
-
-Each message is:
-
-- one complete JSON object
-- serialized to a single line
-- terminated by newline
-
-### Semantic Requirements
-
-For any message representing an agent action:
-
-- `ctx_id` validation occurs first
-- payload hashing must use serialized payload bytes/object representation as the basis for SHA-256
-- TrustFlow event emission is part of the enforcement path
-
-No additional command grammar is defined in the provided documents.
-
----
-
-## 3. Data Trust Boundary Protocol
-
-When data crosses a trust boundary:
-
-1. Verify DTL label
-2. Treat unlabeled data as `CONFIDENTIAL`
-3. Preserve immutable labels
-4. Apply highest-classification inheritance to derived data
-5. Audit any label stripping
-6. Require policy control for label stripping
-
----
-
-## 4. Session-to-VTZ Binding Protocol
-
-- A session is bound to **exactly one** VTZ at CTX-ID issuance
-- Cross-VTZ calls require explicit authorization
-- VTZ policy updates apply at next CTX-ID issuance
-- Mid-session rebinding is not supported by the provided standards
-
----
-
-## 5. GitHub PR Promotion Protocol
-
-For PRs created as draft and later promoted to ready-for-review:
-
-1. Identify draft PR
-2. Do **not** rely on REST `PATCH /pulls/{number}` with `{"draft": false}`
-3. Invoke GraphQL `markPullRequestReadyForReview`
-4. Treat REST success code `200` without state change as non-effective for this transition
-
----
-
-# Enums and Constants
-
-## 1. Enforcement Verdict
-
-### `VTZEnforcementVerdict`
-
-| Value | Meaning |
-|---|---|
-| `block` | Action denied by VTZ policy |
-
-Only `block` is explicitly defined in the provided materials.
-
----
-
-## 2. Trust Outcome Classes
-
-The CAL enforcement contract defines possible action outcomes.
-
-### `TrustOutcome`
-
-| Value | Meaning |
-|---|---|
-| `allow` | Action permitted |
-| `restrict` | Action permitted with restriction |
-| `block` | Action denied |
-
-These outcomes must emit TrustFlow events.
-
----
-
-## 3. Data Classification Constant
-
-### `DTLLabel`
-
-| Value | Meaning |
-|---|---|
-| `CONFIDENTIAL` | Default treatment for unlabeled data |
-
-No other classification literals are explicitly provided.
-
----
-
-## 4. Error Severity Constant
-
-### Audit Severity
-
-| Value | Meaning |
-|---|---|
-| `WARN` | Required severity for failed TrustFlow emission audit event |
-
----
-
-## 5. Time Format Constant
-
-### `ts`
-
-| Property | Value |
-|---|---|
-| Time base | UTC Unix timestamp |
-| Precision | Millisecond |
-
----
-
-## 6. Cryptographic Constants
-
-### `payload_hash`
-
-| Property | Value |
-|---|---|
-| Algorithm | SHA-256 |
-| Input | Serialized action payload |
-
-### `event_id`
-
-| Property | Value |
-|---|---|
-| Uniqueness | Global |
-| Generation source | CSPRNG |
-| Disallowed form | Sequential identifiers |
-
----
-
-## 7. Transport Constants
-
-| Constant | Value |
-|---|---|
-| IPC transport | Authenticated Unix socket |
-| Message framing | Line-delimited JSON |
-
----
-
-# Validation Rules
-
-## 1. CTX-ID Validation
-
-A message/action fails validation if any of the following are true:
-
-- `ctx_id` is missing
-- `ctx_id` is expired
-- `ctx_id` is invalid against TrustLock public key
-- `ctx_id` has been rotated and invalidated
-- `ctx_id` has been modified after issuance
-
-### Required Handling
-
-- Reject immediately
-- Do not partially process
-- Treat missing `ctx_id` as untrusted
-- Surface failure to caller
-- Log/audit failure with required error fields when available
-
----
-
-## 2. VTZ Validation
-
-An action fails VTZ validation if:
-
-- policy denies the action
-- action attempts unauthorized cross-VTZ tool call
-- application code attempts to bypass VTZ structural boundary
-
-### Required Handling
-
-- Produce `VTZEnforcementDecision` with `verdict = "block"`
-- Emit TrustFlow event
-- Fail closed
-
----
-
-## 3. TrustFlow Event Validation
-
-A TrustFlow event is valid only if:
-
-- `event_id` is present
-- `event_id` is globally unique
-- `event_id` is not sequential
-- `session_id` is present
-- `ctx_id` is present
-- `ts` is present and millisecond UTC Unix timestamp
-- `event_type` is present
-- `payload_hash` is present
-- `payload_hash` is SHA-256 of serialized action payload
-
-### Emission Validation
-
-- Emission must be synchronous
-- Async buffering is invalid
-- Emission failure must be surfaced and logged
-- Silent skip is invalid
-
----
-
-## 4. Error Object Validation
-
-An enforcement-path error is valid only if:
-
-- `component` is present
-- `operation` is present
-- `failure_reason` is present
-- `ctx_id` is included if available
-- no keys/tokens/secrets/cleartext payloads are present in the message
-
----
-
-## 5. DTL Label Validation
-
-Data handling is valid only if:
-
-- label assigned at ingestion remains immutable
-- derived data inherits highest classification among inputs
-- unlabeled data is treated as `CONFIDENTIAL`
-- label verification occurs before trust-boundary crossing
-- label stripping is audited and policy-controlled
-
----
-
-## 6. Audit Validation
-
-Audit behavior is valid only if:
-
-- security-relevant action produces audit record before execution
-- records are append-only
-- no post-append modification occurs
-
----
-
-## 7. GitHub Draft PR Transition Validation
-
-A draft→ready transition is valid only if:
-
-- GraphQL `markPullRequestReadyForReview` is used
-
-The following does **not** satisfy the contract even if HTTP status is 200:
-
-- REST `PATCH /repos/{owner}/{repo}/pulls/{number}` with `{"draft": false}`
-
----
-
-## 8. Process Boundary Validation
-
-Implementation is conformant only if responsibilities remain partitioned as follows:
-
-- Swift shell:
-  - UI
-  - auth
-  - Keychain/secrets
-  - XPC
-- Python backend:
-  - consensus
-  - pipeline
-  - GitHub operations
-
-Generated code execution is always invalid.
-
----
-
-# Wire Format Examples
-
-## 1. Line-Delimited JSON Agent Action
-
-```json
-{"ctx_id":"ctx_01","session_id":"sess_01","payload":{"action":"open_pr","repo":"owner/repo"}}
+```ts
+type AgentActionPayload = unknown
 ```
 
-Notes:
+#### Constraints
 
-- Single JSON object
-- One line
-- Suitable for authenticated Unix socket transport
-- `ctx_id` must be validated first before any processing
+- A serialized form of the action payload MUST exist.
+- `payload_hash` in `TrustFlowEvent` MUST equal the SHA-256 of the serialized action payload.
+- Every entry point processing an agent action is subject to CTX-ID and VTZ enforcement before execution.
 
 ---
 
-## 2. TrustFlow Event
+## Enums and Constants
 
-```json
-{"event_id":"8f2d7f2e-9b2d-4d4b-a7d5-8c4d2e8c9a11","session_id":"sess_01","ctx_id":"ctx_01","ts":1773330123456,"event_type":"action.allow","payload_hash":"7f83b1657ff1fc53b92dc18148a1d65dfa135014aafa4b5a9d6f5f8f5d5e9c1a"}
+### Language
+
+Exact allowed values for consensus engine invocation:
+
+```ts
+type Language = "python" | "swift" | "go" | "typescript" | "rust"
 ```
 
-Properties demonstrated:
+### VTZ Verdict
 
-- globally unique `event_id`
-- UTC Unix timestamp in milliseconds
-- SHA-256 `payload_hash`
+Exact required denial verdict value:
 
----
-
-## 3. VTZ Policy Denial Record
-
-```json
-{"verdict":"block"}
+```ts
+type VTZVerdict = "block"
 ```
 
-This is the only explicitly defined field/value pair for `VTZEnforcementDecision` in the provided materials.
+### Action Outcome
 
----
+TrustFlow emission is required for all of the following outcomes:
 
-## 4. Enforcement Error
-
-```json
-{"component":"policy_engine","operation":"authorize_action","failure_reason":"ctx_id validation failed","ctx_id":"ctx_01"}
+```ts
+type ActionOutcome = "allow" | "restrict" | "block"
 ```
 
-Rules:
+### CTX-ID Missing State
 
-- Must not contain secrets
-- Must be surfaced to caller
-- Must be logged
-- Must fail closed
+Exact required treatment for absent CTX-ID:
 
----
-
-## 5. Audit Record Example
-
-```json
-{"component":"trust_enforcement","operation":"execute_agent_action","failure_reason":"pre-execution audit record","ctx_id":"ctx_01"}
+```ts
+type TrustState = "UNTRUSTED"
 ```
 
-Note: The provided documents define audit semantics and append-only behavior, but do not define a larger mandatory field set.
+### Generator System Selection Constants
 
----
+These identifiers are selected by language and must match exactly as named in source text:
 
-## 6. GitHub GraphQL Draft Promotion Intent
+- `SWIFT_GENERATION_SYSTEM`
+- `SWIFT_UI_ADDENDUM`
+- `GENERATION_SYSTEM`
 
-Illustrative operation name from the provided source:
+### Internal Strategy Functions
 
-```json
-{"operation":"markPullRequestReadyForReview"}
+These function identifiers are part of the required implementation contract and must match exactly:
+
+- `_choose_strategy(failure_type, attempt, records)`
+- `_score_fix()`
+
+### Forbidden Pattern
+
+The following arbitration pattern is explicitly forbidden:
+
+```python
+winner = max(claude_fix, openai_fix, key=len)
 ```
 
-Constraint:
+---
 
-- This GraphQL mutation is the supported mechanism for converting draft PRs to ready-for-review.
+## Validation Rules
+
+## 1. Entry-point enforcement
+
+For every entry point that processes an agent action:
+
+1. CTX-ID validation MUST occur first.
+2. If CTX-ID validation fails, the request/action MUST be rejected immediately.
+3. No partial processing is permitted before or after a CTX-ID validation failure.
+4. VTZ policy MUST be evaluated before execution.
+5. If VTZ denies the action, a `VTZEnforcementDecision` with `verdict: "block"` MUST be produced.
+6. Every outcome (`allow`, `restrict`, `block`) MUST emit a `TrustFlowEvent`.
+7. TrustFlow emission failure MUST be logged and surfaced.
+8. TrustFlow emission failure MUST NOT silently continue.
 
 ---
 
-## 7. Invalid REST Draft Promotion Example
+## 2. TrustFlow event validation
 
-```json
-{"method":"PATCH","path":"/repos/{owner}/{repo}/pulls/{number}","body":{"draft":false}}
+A valid `TrustFlowEvent` MUST satisfy all of the following:
+
+- `event_id` present
+- `session_id` present
+- `ctx_id` present
+- `ts` present
+- `event_type` present
+- `payload_hash` present
+- `event_id` globally unique
+- `event_id` generated via CSPRNG
+- `event_id` not sequential
+- `ts` encoded as UTC Unix timestamp with millisecond precision
+- `payload_hash` equals SHA-256 of the serialized action payload
+- emission occurs synchronously in the enforcement path
+- async buffering is not used
+
+---
+
+## 3. CTX-ID validation rules
+
+A CTX-ID is valid only if all applicable checks pass:
+
+- token is present unless explicitly treated as missing/`UNTRUSTED`
+- token is not expired
+- token has not been invalidated by rotation
+- token validation is performed against TrustLock public key
+- validation is not software-only
+
+Additional rules:
+
+- CTX-ID fields MUST NOT be modified after issuance
+- rotation MUST create a new token
+- rotation MUST immediately invalidate the old token
+- expired CTX-ID MUST be rejected
+
+---
+
+## 4. VTZ enforcement rules
+
+- Every agent session is bound to exactly one VTZ at CTX-ID issuance.
+- Cross-VTZ tool calls require explicit policy authorization.
+- Implicit cross-VTZ access is denied.
+- VTZ boundaries are structural and cannot be bypassed by application code.
+- VTZ policy changes take effect at next CTX-ID issuance, not mid-session.
+
+---
+
+## 5. Consensus invocation rules
+
+A valid consensus engine call from ForgeAgent MUST satisfy:
+
+- `task` is present and is a string
+- `context` is present and is a string
+- `language` is present
+- `language` is one of:
+  - `"python"`
+  - `"swift"`
+  - `"go"`
+  - `"typescript"`
+  - `"rust"`
+
+Additional rules:
+
+- `language` MUST always be passed.
+- For Swift generation, system selection uses `SWIFT_GENERATION_SYSTEM` and optionally `SWIFT_UI_ADDENDUM`.
+- For Python generation, system selection uses `GENERATION_SYSTEM`.
+
+---
+
+## 6. Security and content-handling rules
+
+These requirements apply to ForgeAgent implementations:
+
+- Never hardcode credentials, API keys, tokens, or secrets as string literals.
+- Never use `shell=True` in subprocess calls.
+- Never call `eval()` or `exec()` on generated or external content.
+- Never log HTTP response bodies.
+- Log status codes and error types only.
+- All file paths written to disk MUST pass `path_security.validate_write_path()` before any write.
+- All loaded document chunks MUST pass injection scanning before inclusion in any LLM prompt.
+- Context from external documents MUST go in the USER prompt, never the SYSTEM prompt.
+- On `SECURITY_REFUSAL` output from the LLM: stop, gate, log. Never retry to bypass.
+
+---
+
+## 7. Python implementation rules
+
+When ForgeAgent is implemented in Python:
+
+- Python version MUST be 3.12.
+- Every function MUST have type annotations.
+- Backend code MUST use `async/await` throughout.
+- Blocking calls on the event loop are not permitted.
+- Structured data MUST use dataclasses.
+- Tests MUST use `pytest`.
+- Tests MUST live in `tests/` and mirror `src/` structure.
+- `ruff` must pass clean.
+- `mypy` must pass clean.
+- Test coverage on all new modules MUST be at least 85%.
+- `pyyaml` MUST be present in `requirements.txt`.
+
+---
+
+## 8. Swift-specific prohibitions
+
+The following are forbidden:
+
+```swift
+let value = optional!
 ```
 
-Status:
+```swift
+let client = AnthropicClient(apiKey: keychainValue)
+```
 
-- Returns `200`
-- `draft` field is silently ignored
-- PR remains draft
-- Must not be treated as a successful draft→ready transition
+```swift
+let token = KeychainKit.read("github_token")
+```
+
+Additional constraint:
+
+- Only Swift reads Keychain, only to deliver via XPC.
+- Python reads nothing from Keychain.
+- LLM API calls from Swift are forbidden.
+
+---
+
+## Wire Format Examples
+
+## Valid payloads
+
+### Valid ConsensusRunRequest
+
+```json
+{
+  "task": "Implement: Add session enforcement",
+  "context": "Relevant code paths and constraints",
+  "language": "python"
+}
+```
+
+### Valid ConsensusRunResult
+
+```json
+{
+  "final_code": "from dataclasses import dataclass\n"
+}
+```
+
+### Valid TrustFlowEvent
+
+```json
+{
+  "event_id": "5d6a3d5e-93e1-4d34-bf4d-0d8b4ad7d7c2",
+  "session_id": "sess_01HZXA7K8V4G9M2P1Q",
+  "ctx_id": "ctx_01HZXA7M0X8M4T2B7R",
+  "ts": 1717171717123,
+  "event_type": "block",
+  "payload_hash": "7f5c3b8d1f0e4c2a6b9d8e7f1234567890abcdef1234567890abcdef12345678"
+}
+```
+
+### Valid VTZEnforcementDecision
+
+```json
+{
+  "verdict": "block"
+}
+```
+
+### Valid CTX-ID reference
+
+```json
+{
+  "ctx_id": "ctx_01HZXA7M0X8M4T2B7R"
+}
+```
 
 ---
 
-# Conformance Summary
+## Invalid payloads
 
-A component is interface-conformant only if it satisfies all of the following:
+### Invalid ConsensusRunRequest: missing language
 
-- Uses the specified two-process boundary correctly
-- Uses authenticated Unix socket with line-delimited JSON for Swift↔Python IPC
-- Validates CTX-ID first for every agent action
-- Enforces VTZ before execution
-- Emits synchronous TrustFlow records with required fields
-- Fails closed on trust/identity/policy/crypto failure
-- Produces append-only pre-execution audit records for security-relevant actions
-- Applies immutable DTL labels and `CONFIDENTIAL` default for unlabeled data
-- Uses GraphQL `markPullRequestReadyForReview` for draft PR promotion
-- Never executes generated code
+```json
+{
+  "task": "Implement: Add session enforcement",
+  "context": "Relevant code paths and constraints"
+}
+```
+
+Reason:
+- `language` is required.
+- ForgeAgent must always pass `language`.
+
+### Invalid ConsensusRunRequest: unsupported language
+
+```json
+{
+  "task": "Implement: Add session enforcement",
+  "context": "Relevant code paths and constraints",
+  "language": "java"
+}
+```
+
+Reason:
+- `language` must be exactly one of `"python"`, `"swift"`, `"go"`, `"typescript"`, `"rust"`.
+
+### Invalid TrustFlowEvent: missing required fields
+
+```json
+{
+  "event_id": "123",
+  "session_id": "sess_1"
+}
+```
+
+Reason:
+- Missing `ctx_id`
+- Missing `ts`
+- Missing `event_type`
+- Missing `payload_hash`
+
+### Invalid VTZEnforcementDecision: wrong verdict
+
+```json
+{
+  "verdict": "deny"
+}
+```
+
+Reason:
+- On VTZ denial, `verdict` must be exactly `"block"`.
+
+### Invalid CTX-ID usage: absent token treated as trusted
+
+```json
+{}
+```
+
+Reason:
+- Missing CTX-ID must be treated as `UNTRUSTED`, never as authenticated or inferred identity.
+
+### Invalid fix arbitration pattern
+
+```python
+winner = max(claude_fix, openai_fix, key=len)
+```
+
+Reason:
+- Length-based fix arbitration is forbidden.
+- `_score_fix()` must be used.
 
 ---
+
+## Integration Points
+
+## Consensus Engine
+
+ForgeAgent integrates with the consensus engine using:
+
+```python
+result = await self._consensus.run(
+    task=f"Implement: {spec.title}",
+    context=context_string,
+    language=spec.language,
+)
+code = result.final_code
+```
+
+### Contract
+
+- Invocation is asynchronous.
+- `language` is mandatory.
+- Returned object must expose `final_code`.
+
+---
+
+## CAL enforcement path
+
+ForgeAgent entry points that process agent actions MUST integrate:
+
+1. CTX-ID validation
+2. VTZ policy enforcement
+3. TrustFlow emission
+
+### Required ordering
+
+1. Validate CTX-ID first
+2. Reject immediately on failure
+3. Evaluate VTZ policy before execution
+4. Produce `VTZEnforcementDecision` with `verdict="block"` on denial
+5. Emit `TrustFlowEvent` synchronously for every outcome
+
+---
+
+## TrustLock integration
+
+CTX-ID validation MUST integrate with:
+
+- TrustLock public key validation
+
+### Constraints
+
+- Software-only validation is rejected.
+- Missing CTX-ID must map to `UNTRUSTED`.
+
+---
+
+## Path security integration
+
+Before any disk write:
+
+- `path_security.validate_write_path()` MUST be called.
+
+---
+
+## Prompt-construction integration
+
+When using external documents:
+
+- loaded document chunks MUST pass injection scanning before prompt inclusion
+- external document context MUST be placed in the USER prompt
+- external document context MUST NOT be placed in the SYSTEM prompt
+
+---
+
+## Logging and audit integration
+
+### Required logging behavior
+
+- TrustFlow emission failure: WARN-level audit event
+- HTTP logging: status codes and error types only
+- HTTP response bodies: never log
+- `SECURITY_REFUSAL`: stop, gate, log; never retry to bypass
+
+---
+
+## Test and quality integration
+
+Before changes:
+
+```bash
+cd src && pytest ../tests/ -v --tb=short
+```
+
+### Ongoing requirements
+
+- `pytest` test suite
+- `ruff` clean
+- `mypy` clean
+- coverage ≥ 85% on new modules
+
+---
+
+## Non-conformance
+
+A ForgeAgent component is non-conformant if it violates any required contract in this document, including but not limited to:
+
+- missing `language` in consensus invocation
+- missing CTX-ID-first validation
+- partial processing after CTX-ID validation failure
+- VTZ denial without `VTZEnforcementDecision { "verdict": "block" }`
+- missing TrustFlow event fields
+- async-buffered TrustFlow emission
+- silent TrustFlow emission failure
+- use of length-based fix arbitration
+- failure to validate disk write paths
+- inclusion of unscanned document chunks in prompts
+- logging HTTP response bodies
+- retrying after `SECURITY_REFUSAL`
