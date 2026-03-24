@@ -4,7 +4,7 @@
   "intent": "We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture.",
   "scope_statement": "Build the complete Crafted Dev Agent \u2014 a native macOS AI coding agent with a two-process architecture (Swift shell + Python backend) that uses dual-model consensus AI (Claude + GPT-4o) to autonomously decompose build intents into ordered PRDs and PRs, generate implementation and test code, run self-correction/lint/fix loops, execute CI, and gate on operator approval. The system encompasses 16 TRD-specified subsystems: macOS application shell with Touch ID/Keychain/XPC (TRD-1), consensus engine with parallel generation and Claude arbitration (TRD-2), confidence-gated build pipeline with pr_type routing (TRD-3), multi-agent coordination via GitHub-stored ledger (TRD-4), GitHub integration with rate limiting and CI workflow management (TRD-5), holistic 5-lens code review (TRD-6), adaptive TRD development workflow with FOUNDER/ENGINEER/CONSULTANT modes (TRD-7), full SwiftUI design system with health dashboard and remediation stream (TRD-8), self-hosted Mac CI runner infrastructure (TRD-9), FAISS-backed document store with injection defense (TRD-10), comprehensive security threat model (TRD-11), backend startup/shutdown sequence with version handshake (TRD-12), three-layer recovery and state management with build memory and self-improving build rules (TRD-13), seven-fix CI false-positive pipeline (TRD-14), operational runbook (TRD-15), FM-taxonomy testing with 35 regression tests (TRD-16), and self-healing autonomous observability and remediation loop (TRD-17). Five additional subsystems identified as gaps (TRD-18 Crafted Connect SDK, Figma connector, deployment infrastructure, email notification, and webhook receiver) will be resolved during PRD decomposition using best practices as confirmed by operator.\n\nClarifications:\n  - Resolve as part of the PRD process using best practices.\n  - Resolve as part of the PRD process using best practices. This needs to be a configurable inout in the app\n  - Resolve as part of the PRD process using best practices.\n  - Resolve as part of the PRD process using best practices.\n  - Resolve as part of the PRD process using best practices.\n  - on by default, fall back if not discovered\n  - Resolve as part of the PRD process using best practices.\n  - Resolve as part of the PRD process using best practices.\n  - TRD-18 was combined with TRD-17\n\nOperator on 'Is this build intent for the full system (all 17 TRDs from s':\nbuild intent for the full system\n\nOperator on 'The repo already contains a v38.153.0 codebase with 30+ Pyth':\ngenerate a fresh implementation\n\nOperator on 'TRD-17 (Self-Healing) and TRD-8 v3.0 (Health Dashboard) both':\nTRD-18 was combined with TRD-17\n\nOperator on 'The Figma design pipeline (TRD-8 \u00a714, \u00a724) references Figma ':\nyes. Resolve as part of the PRD process using best practices.",
   "created_at": 1774375161.229186,
-  "updated_at": 1774378059.419768,
+  "updated_at": 1774382182.955947,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -179,16 +179,15 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Creates the canonical monorepo directory layout with all top-level directories and root files. Includes VERSION (0.1.0), .gitignore, .env.example, AGENTS.md, LICENSE, Makefile with stub targets, and placeholder READMEs to preserve empty dirs in Git for forge-docs/, forge-standards/, scripts/, .github/workflows/.",
+      "summary": "Create the canonical directory tree (forge-docs/, forge-standards/, src/, src/shared/, Crafted/, Crafted/Shared/, Crafted/Shared/Config/, CraftedTests/, tests/, tests/shared/, tests/shared/config/, tests/integration/, scripts/, config/, docs/, .github/workflows/) with __init__.py and .gitkeep sentinel files. Add root .gitignore, .editorconfig, LICENSE placeholder, and top-level README.md describing the repository layout and module ownership boundaries.",
       "impl_files": [
-        "VERSION",
+        "README.md",
         ".gitignore",
-        ".env.example",
-        "AGENTS.md",
-        "LICENSE",
-        "Makefile",
-        "forge-docs/README.md",
-        "scripts/README.md"
+        ".editorconfig",
+        "src/__init__.py",
+        "src/shared/__init__.py",
+        "tests/__init__.py",
+        "scripts/.gitkeep"
       ],
       "test_files": [],
       "language": "python",
@@ -215,7 +214,7 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Creates the four canonical standards documents in forge-standards/: ARCHITECTURE.md (two-process architecture, module boundaries), INTERFACES.md (XPC contract shapes, API surface), CONVENTIONS.md (naming, file layout, import ordering, docstring format), DECISIONS.md (ADR log template with first entry for monorepo choice), and build_rules.md template with seed rules for version sync, lint-before-commit, test-before-merge.",
+      "summary": "Create the canonical standards documents in forge-standards/: ARCHITECTURE.md (two-process architecture overview, module dependency graph, data flow), INTERFACES.md (XPC protocol surface, config loading API, shared schema contracts), CONVENTIONS.md (naming rules, import ordering, docstring format, commit message format, branch naming), DECISIONS.md (ADR log \u2014 initial entries for monorepo choice, Pydantic v2, StrEnum, TOML config, no secrets in source), build_rules.md (initial self-improving build rules template).",
       "impl_files": [
         "forge-standards/ARCHITECTURE.md",
         "forge-standards/INTERFACES.md",
@@ -227,7 +226,7 @@
       "language": "python",
       "framework": "pytest",
       "security_critical": false,
-      "estimated_complexity": "low",
+      "estimated_complexity": "medium",
       "acceptance_criteria": [],
       "impl_plan": {}
     },
@@ -248,19 +247,19 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Creates src/forge_agent/__init__.py, tests/__init__.py, and .github/workflows/README.md to establish the Python package and test directory tree. Ensures Git tracks all required paths for the Python backend.",
+      "summary": "Create the authoritative VERSION file at the repo root (initial value 0.1.0). Add scripts/sync_version.py that reads VERSION and patches pyproject.toml version field and Crafted Info.plist CFBundleShortVersionString. The script is idempotent and exits non-zero on mismatch when run in --check mode for CI gating. Add scripts/bump_version.py for semver increment operations.",
       "impl_files": [
-        "src/forge_agent/__init__.py",
-        "src/README.md",
-        "tests/__init__.py",
-        "tests/README.md",
-        ".github/workflows/README.md"
+        "VERSION",
+        "scripts/sync_version.py",
+        "scripts/bump_version.py"
       ],
-      "test_files": [],
+      "test_files": [
+        "tests/test_sync_version.py"
+      ],
       "language": "python",
       "framework": "pytest",
       "security_critical": false,
-      "estimated_complexity": "low",
+      "estimated_complexity": "medium",
       "acceptance_criteria": [],
       "impl_plan": {}
     },
@@ -281,15 +280,10 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Introduces the Crafted/ and CraftedTests/ directory structure with minimal Swift entry files (CraftedApp.swift, AppRootView.swift), Info.plist, Version.xcconfig, and Xcode project metadata placeholder. Establishes the Swift shell side of the two-process architecture.",
+      "summary": "Create pyproject.toml with project metadata (name, version read from VERSION, Python >=3.12), dependency groups (runtime, dev, test), and inline tool configuration for ruff (select rules, line-length 120, src paths), mypy (strict mode, per-module overrides for src/shared), and pytest (testpaths, markers, minimum coverage threshold). Add py.typed marker in src/shared/.",
       "impl_files": [
-        "Crafted/README.md",
-        "Crafted/App/CraftedApp.swift",
-        "Crafted/App/AppRootView.swift",
-        "Crafted/Support/Info.plist",
-        "Crafted/Support/Version.xcconfig",
-        "CraftedTests/README.md",
-        "CraftedTests/App/CraftedAppTests.swift"
+        "pyproject.toml",
+        "src/shared/py.typed"
       ],
       "test_files": [],
       "language": "python",
@@ -316,12 +310,10 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Creates pyproject.toml with version dynamically reading from VERSION file, requirements.txt with pinned runtime deps (pyyaml, pydantic), requirements-dev.txt (pytest, ruff, mypy, pre-commit), and root conftest.py that inserts src/ into sys.path for pytest import resolution. Configures pytest settings, ruff rules, and mypy strict mode in pyproject.toml.",
+      "summary": "Create scripts/bootstrap.sh that checks Python version, creates a venv, installs dependencies from pyproject.toml in editable mode, verifies ruff/mypy/pytest are available, and runs version sync in --check mode. Add a top-level Makefile with targets: bootstrap, lint, typecheck, test, fmt, version-check, clean. The bootstrap script prints a summary table of tool versions on success.",
       "impl_files": [
-        "pyproject.toml",
-        "requirements.txt",
-        "requirements-dev.txt",
-        "conftest.py"
+        "scripts/bootstrap.sh",
+        "Makefile"
       ],
       "test_files": [],
       "language": "python",
@@ -348,20 +340,18 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Creates src/forge_agent/version.py that reads VERSION at import time and exposes __version__ string. Creates scripts/sync_version.py that reads VERSION and patches pyproject.toml version field and Crafted/Support/Info.plist CFBundleShortVersionString. Creates Crafted/Support/GeneratedVersion.swift with version constant. Adds Makefile target 'version-sync'. Script is idempotent and fails with non-zero exit if target files are missing.",
+      "summary": "Implement the shared Python enums in src/shared/enums.py consumed by every subsystem. Includes BuildStage (decompose, generate, review, test, lint_fix, ci, gate), PRType (implementation, documentation, test), ConfidenceLevel (low, medium, high with numeric thresholds), AgentMode (FOUNDER, ENGINEER, CONSULTANT), HealthStatus (healthy, degraded, critical), and ProviderName (claude, gpt4o). All enums use StrEnum for JSON serialization compatibility. Add src/shared/constants.py for shared magic values and thresholds.",
       "impl_files": [
-        "src/forge_agent/version.py",
-        "scripts/sync_version.py",
-        "scripts/verify_version_sync.py",
-        "Crafted/Support/GeneratedVersion.swift"
+        "src/shared/enums.py",
+        "src/shared/constants.py"
       ],
       "test_files": [
-        "tests/test_version.py"
+        "tests/shared/test_enums.py"
       ],
       "language": "python",
       "framework": "pytest",
       "security_critical": false,
-      "estimated_complexity": "medium",
+      "estimated_complexity": "low",
       "acceptance_criteria": [],
       "impl_plan": {}
     },
@@ -383,19 +373,18 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Implements src/forge_agent/errors.py with hierarchical ForgeError base exception, subsystem-specific error classes (ConfigError, ConsensusError, PipelineError, GitHubError, XPCError, CIError, DocumentStoreError, SecurityError, RecoveryError), and severity enum. Implements src/forge_agent/enums.py with shared enumerations: BuildPhase, PRType, ConfidenceBand, AgentMode (FOUNDER/ENGINEER/CONSULTANT), HealthStatus, CIStatus, ConsensusStrategy, and ReviewLens.",
+      "summary": "Implement src/shared/errors.py with a hierarchical exception taxonomy: ForgeBaseError as root, then ConfigurationError, ProviderError (with sub-types RateLimitError, AuthenticationError, ProviderTimeoutError), ConsensusError, PipelineError, GitHubAPIError, CIError, RecoveryError, SecurityError, VersionMismatchError. Each error carries a machine-readable error_code string and optional context dict. Add src/shared/error_codes.py with the canonical FORGE-{SUBSYSTEM}-{NNN} code registry ensuring uniqueness.",
       "impl_files": [
-        "src/forge_agent/errors.py",
-        "src/forge_agent/enums.py"
+        "src/shared/errors.py",
+        "src/shared/error_codes.py"
       ],
       "test_files": [
-        "tests/test_errors.py",
-        "tests/test_enums.py"
+        "tests/shared/test_errors.py"
       ],
       "language": "python",
       "framework": "pytest",
       "security_critical": false,
-      "estimated_complexity": "medium",
+      "estimated_complexity": "low",
       "acceptance_criteria": [],
       "impl_plan": {}
     },
@@ -417,20 +406,16 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Creates src/forge_agent/contracts/ package with xpc_schemas.py defining typed Pydantic message schemas for Swift\u2013Python XPC communication: HandshakeRequest, HandshakeResponse (with version field), CommandEnvelope, ResponseEnvelope, HealthPing, HealthPong, ErrorPayload. Creates primitives.py for shared atomic types (ConfidenceScore, Timestamp). All schemas support JSON round-trip serialization.",
+      "summary": "Implement src/shared/schemas.py with Pydantic v2 BaseModel classes for cross-subsystem contracts: PRDReference (id, title, status), PRReference (pr_num, title, pr_type, depends_on, status), BuildIntent (description, scope, metadata), ConsensusResult (provider_outputs list, chosen_output, confidence, rationale), ReviewResult (lens, passed, findings list, severity), PipelineState (build_id, current_stage, pr_refs, started_at, error), VersionInfo (version, git_sha, python_version). All models use strict mode and forbid extra fields.",
       "impl_files": [
-        "src/forge_agent/contracts/__init__.py",
-        "src/forge_agent/contracts/xpc_schemas.py",
-        "src/forge_agent/contracts/primitives.py"
+        "src/shared/schemas.py"
       ],
       "test_files": [
-        "tests/contracts/__init__.py",
-        "tests/contracts/test_xpc_schemas.py",
-        "tests/contracts/test_primitives.py"
+        "tests/shared/test_schemas.py"
       ],
       "language": "python",
       "framework": "pytest",
-      "security_critical": true,
+      "security_critical": false,
       "estimated_complexity": "medium",
       "acceptance_criteria": [],
       "impl_plan": {}
@@ -455,12 +440,13 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Creates src/forge_agent/contracts/build_schemas.py with typed Pydantic models for build pipeline contracts: PRDSpec, PRSpec (with pr_type routing field), BuildIntent, BuildResult, ConfidenceScore, ConsensusVote, ReviewResult, CIResult, and OperatorApproval. These are the data contracts that flow through the confidence-gated pipeline. All models use enums from PR-7.",
+      "summary": "Create Swift-side shared enums in Crafted/Shared/ that mirror the Python enums for XPC boundary type safety. Includes Crafted/Shared/SharedEnums.swift (BuildStage, PRType, ConfidenceLevel, AgentMode, HealthStatus, ProviderName \u2014 all Codable, String-backed) and Crafted/Shared/SharedConstants.swift with threshold values matching Python constants.",
       "impl_files": [
-        "src/forge_agent/contracts/build_schemas.py"
+        "Crafted/Shared/SharedEnums.swift",
+        "Crafted/Shared/SharedConstants.swift"
       ],
       "test_files": [
-        "tests/contracts/test_build_schemas.py"
+        "CraftedTests/Shared/SharedEnumsTests.swift"
       ],
       "language": "python",
       "framework": "pytest",
@@ -487,19 +473,18 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Introduces Codable Swift contract models and error definitions that mirror the Python shared contracts for shell\u2013backend interoperability: AgentEnums.swift, AgentErrors.swift, AgentMessage.swift (CommandEnvelope, ResponseEnvelope, Handshake types), AgentPrimitives.swift. Field names and enum cases match Python definitions exactly.",
+      "summary": "Create Crafted/Shared/SharedErrors.swift with ForgeError enum with associated values matching Python error codes and stable error_code mapping. Create Crafted/Shared/SharedSchemas.swift with Codable structs for VersionInfo, PipelineState, HealthReport, PRReference used in XPC messages. Includes Crafted/Shared/ErrorCodes.swift for the canonical code registry.",
       "impl_files": [
-        "Crafted/Contracts/AgentEnums.swift",
-        "Crafted/Contracts/AgentErrors.swift",
-        "Crafted/Contracts/AgentMessage.swift",
-        "Crafted/Contracts/AgentPrimitives.swift"
+        "Crafted/Shared/SharedErrors.swift",
+        "Crafted/Shared/ErrorCodes.swift",
+        "Crafted/Shared/SharedSchemas.swift"
       ],
       "test_files": [
-        "CraftedTests/Contracts/AgentContractsTests.swift"
+        "CraftedTests/Shared/SharedErrorsTests.swift"
       ],
       "language": "python",
       "framework": "pytest",
-      "security_critical": true,
+      "security_critical": false,
       "estimated_complexity": "medium",
       "acceptance_criteria": [],
       "impl_plan": {}
@@ -521,12 +506,14 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Adds golden tests that verify shared contract identifiers, serialized field names, and enum coverage remain aligned between Python and Swift definitions. Python side generates a manifest JSON of all contract names/fields; Swift side validates against the same manifest. Catches drift between the two language representations.",
+      "summary": "Create tests that validate the Python and Swift shared enums remain in sync. tests/shared/test_contract_parity.py parses Swift source files for enum case names and compares against Python StrEnum members, failing if any enum has a case present on one side but not the other. Also validates error code registries match. Add tests/fixtures/shared_contract_sample.json as a canonical serialization fixture and forge-standards/SHARED_CONTRACTS.md documenting the parity contract.",
       "impl_files": [
-        "tests/contracts/test_contract_parity_manifest.py",
-        "CraftedTests/Contracts/AgentContractParityTests.swift"
+        "forge-standards/SHARED_CONTRACTS.md",
+        "tests/fixtures/shared_contract_sample.json"
       ],
-      "test_files": [],
+      "test_files": [
+        "tests/shared/test_contract_parity.py"
+      ],
       "language": "python",
       "framework": "pytest",
       "security_critical": false,
@@ -552,15 +539,14 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Creates src/forge_agent/config/ package with models.py containing Pydantic BaseModel classes: RuntimeConfig, BuildConfig, AIProviderConfig (endpoints, model names, temperature, max_tokens \u2014 no secrets), GitHubConfig (owner, repo, rate limit params), CIConfig (runner labels, timeout, retry), ObservabilityConfig (log level, metrics port, trace sampling), SelfHealingConfig (enabled toggle, max retries, cooldown), and FeatureToggles (consensus_enabled, touch_id_required, ci_gating). All fields typed with defaults and validators. No secret values in defaults.",
+      "summary": "Create the typed configuration system in src/shared/config/. Implements base config infrastructure (src/shared/config/base.py) and core models in src/shared/config/models.py: AIProviderConfig, GitHubConfig, CIConfig, ObservabilityConfig, SelfHealingConfig, ConsensusConfig, PipelineConfig, DocumentStoreConfig, RecoveryConfig, FeatureTogglesConfig, and root ForgeConfig that composes all sub-configs. Secret fields are typed as SecretStr and never embedded in source. All models validate on construction with Pydantic.",
       "impl_files": [
-        "src/forge_agent/config/__init__.py",
-        "src/forge_agent/config/models.py",
-        "src/forge_agent/config/exceptions.py"
+        "src/shared/config/__init__.py",
+        "src/shared/config/base.py",
+        "src/shared/config/models.py"
       ],
       "test_files": [
-        "tests/config/__init__.py",
-        "tests/config/test_models.py"
+        "tests/shared/config/test_models.py"
       ],
       "language": "python",
       "framework": "pytest",
@@ -588,17 +574,14 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Creates src/forge_agent/config/loader.py that loads configuration from layered sources: defaults \u2192 config file (YAML) \u2192 environment variables. Reads FORGE_CONFIG_PATH for YAML file location, applies env var overrides with FORGE_ prefix. Creates src/forge_agent/config/validation.py for cross-field validation and secret rejection (rejects keys matching *_SECRET, *_TOKEN, *_API_KEY in YAML). Creates src/forge_agent/config/redaction.py for safe config serialization that masks sensitive fields. Returns frozen ForgeConfig root model. Includes default config.yaml resource.",
+      "summary": "Build the config loading pipeline in src/shared/config/loader.py that reads from TOML files with environment variable overlay (FORGE_ prefix). Add src/shared/config/redaction.py for safe logging of config values with secret fields masked. Layering order: defaults.toml \u2192 config/local.toml \u2192 env vars. Loader validates required fields and exits with clear error messages on missing secrets.",
       "impl_files": [
-        "src/forge_agent/config/loader.py",
-        "src/forge_agent/config/validation.py",
-        "src/forge_agent/config/redaction.py",
-        "src/forge_agent/resources/defaults/config.yaml"
+        "src/shared/config/loader.py",
+        "src/shared/config/redaction.py"
       ],
       "test_files": [
-        "tests/config/test_loader.py",
-        "tests/config/test_validation.py",
-        "tests/config/test_redaction.py"
+        "tests/shared/config/test_loader.py",
+        "tests/shared/config/test_redaction.py"
       ],
       "language": "python",
       "framework": "pytest",
@@ -626,18 +609,18 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Creates src/forge_agent/config/settings_surface.py defining the SettingsSurface model \u2014 all operator-configurable inputs (AI provider selection, consensus toggle, CI gating, Touch ID requirement, approval mode, notification preferences) with descriptions, types, defaults, and validation. Creates src/forge_agent/config/operator_io.py for operator-resolved ambiguity inputs. This is the canonical registry of tunable knobs.",
+      "summary": "Create config/defaults.toml with all non-secret default values organized by section matching ForgeConfig sub-models. Create config/.env.example listing every FORGE_ environment variable with placeholder descriptions, clearly marking which are required secrets. Create config/README.md documenting the config layering order, operator-configurable inputs, and how to add new settings.",
       "impl_files": [
-        "src/forge_agent/config/settings_surface.py",
-        "src/forge_agent/config/operator_io.py"
+        "config/defaults.toml",
+        "config/.env.example",
+        "config/README.md"
       ],
       "test_files": [
-        "tests/config/test_settings_surface.py",
-        "tests/config/test_operator_io.py"
+        "tests/shared/config/test_defaults_toml.py"
       ],
       "language": "python",
       "framework": "pytest",
-      "security_critical": false,
+      "security_critical": true,
       "estimated_complexity": "medium",
       "acceptance_criteria": [],
       "impl_plan": {}
@@ -660,16 +643,16 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Focused regression tests for: non-secret defaults validation, environment override precedence over YAML over defaults, invalid value rejection, secret redaction in emitted config views, cross-field validation rules, and frozen config immutability.",
-      "impl_files": [],
+      "summary": "Implement src/shared/config/feature_toggles.py providing a FeatureToggleManager that reads the feature_toggles section of ForgeConfig, exposes is_enabled(toggle_name) -> bool, supports runtime reload from config without restart, emits a toggle_changed event for observers, and defaults all toggles to their config/defaults.toml values. Toggles include: dual_model_consensus (on by default, falls back to single provider if second not configured), self_healing, touch_id_auth, ci_auto_trigger, figma_connector.",
+      "impl_files": [
+        "src/shared/config/feature_toggles.py"
+      ],
       "test_files": [
-        "tests/config/test_security_precedence.py",
-        "tests/config/test_invalid_values.py",
-        "tests/config/test_defaults_nonsecret.py"
+        "tests/shared/config/test_feature_toggles.py"
       ],
       "language": "python",
       "framework": "pytest",
-      "security_critical": true,
+      "security_critical": false,
       "estimated_complexity": "medium",
       "acceptance_criteria": [],
       "impl_plan": {}
@@ -693,15 +676,21 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Adds .pre-commit-config.yaml with hooks for ruff format, ruff check --fix, mypy, trailing whitespace, end-of-file fixer, and VERSION sync check. Adds .ruff.toml if additional config beyond pyproject.toml is needed. Ensures all tooling config is consistent with pyproject.toml settings from PR-5.",
+      "summary": "Create Swift-side Codable configuration models in Crafted/Shared/Config/ that mirror the Python config models for XPC boundary type safety: RuntimeConfig, BuildConfig, AIConfig, ServiceConfig (GitHub/CI/Observability), and a root AppConfig composing them. These are used for configuration handshake between processes.",
       "impl_files": [
-        ".pre-commit-config.yaml"
+        "Crafted/Shared/Config/RuntimeConfig.swift",
+        "Crafted/Shared/Config/BuildConfig.swift",
+        "Crafted/Shared/Config/AIConfig.swift",
+        "Crafted/Shared/Config/ServiceConfig.swift",
+        "Crafted/Shared/Config/AppConfig.swift"
       ],
-      "test_files": [],
+      "test_files": [
+        "CraftedTests/Shared/ConfigModelTests.swift"
+      ],
       "language": "python",
       "framework": "pytest",
       "security_critical": false,
-      "estimated_complexity": "low",
+      "estimated_complexity": "medium",
       "acceptance_criteria": [],
       "impl_plan": {}
     },
@@ -724,19 +713,16 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Creates scripts/bootstrap.sh: checks Python \u22653.11, creates venv, installs requirements, runs version sync, installs pre-commit hooks, verifies tooling availability, prints success banner. Creates scripts/check_env.py that validates required env vars from .env.example (warns on missing, errors on security-critical). Creates scripts/bootstrap_swift.sh for macOS Swift prerequisites. Updates Makefile 'bootstrap' target. All scripts are idempotent.",
+      "summary": "Create scripts/check_no_secrets.py that scans all source-controlled files for patterns matching API keys, tokens, passwords, and other secret material. Integrates with the config system to verify SecretStr fields never appear in TOML defaults. Exits non-zero if any potential secret is detected. Designed for CI gating.",
       "impl_files": [
-        "scripts/bootstrap.sh",
-        "scripts/check_env.py",
-        "scripts/bootstrap_swift.sh",
-        "scripts/lib/common.sh"
+        "scripts/check_no_secrets.py"
       ],
       "test_files": [
-        "tests/test_check_env.py"
+        "tests/scripts/test_check_no_secrets.py"
       ],
       "language": "python",
       "framework": "pytest",
-      "security_critical": false,
+      "security_critical": true,
       "estimated_complexity": "medium",
       "acceptance_criteria": [],
       "impl_plan": {}
@@ -760,15 +746,14 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Creates .github/workflows/crafted-ci.yml: triggers on push/PR to main, runs ruff check, ruff format --check, mypy, pytest with coverage, and version sync verification. Creates .github/workflows/crafted-ci-macos.yml: triggers on push/PR, runs Swift build and CraftedTests on macos-latest runner. Both use concurrency groups to cancel stale runs.",
-      "impl_files": [
-        ".github/workflows/crafted-ci.yml",
-        ".github/workflows/crafted-ci-macos.yml"
+      "summary": "Focused regression tests validating: secret fields are never serialized to JSON/TOML without redaction, environment override of SecretStr fields works correctly, config loader rejects files containing plaintext secrets in non-secret fields, redaction covers all SecretStr paths in ForgeConfig, and error_codes across the error taxonomy are globally unique.",
+      "impl_files": [],
+      "test_files": [
+        "tests/shared/config/test_secret_handling.py"
       ],
-      "test_files": [],
       "language": "python",
       "framework": "pytest",
-      "security_critical": false,
+      "security_critical": true,
       "estimated_complexity": "medium",
       "acceptance_criteria": [],
       "impl_plan": {}
@@ -793,13 +778,12 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Validates workflow file presence and required structure, bootstrap script behavior contracts (idempotency, error on missing Python), and baseline repository assumptions for contributors and CI.",
-      "impl_files": [],
-      "test_files": [
-        "tests/test_workflow_files.py",
-        "tests/scripts/test_bootstrap_script.py",
-        "tests/scripts/test_check_env_script.py"
+      "summary": "Create .github/workflows/crafted-ci.yml that runs on push/PR: checkout, setup Python 3.12, install dependencies, ruff check + format --check, mypy src/, scripts/sync_version.py --check, scripts/check_no_secrets.py, pytest with coverage report, upload coverage artifact. Create .github/workflows/crafted-ci-macos.yml for macOS Swift builds (xcodebuild test). Uses matrix strategy for ubuntu-latest.",
+      "impl_files": [
+        ".github/workflows/crafted-ci.yml",
+        ".github/workflows/crafted-ci-macos.yml"
       ],
+      "test_files": [],
       "language": "python",
       "framework": "pytest",
       "security_critical": false,
@@ -824,19 +808,15 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Updates ARCHITECTURE.md with finalized module boundaries reflecting actual code structure. Updates INTERFACES.md with concrete XPC schema references. Updates DECISIONS.md with ADR entries for config layering, contract parity approach, and error taxonomy. Updates CONVENTIONS.md with import ordering and docstring examples from actual codebase. Updates build_rules.md with CI-enforced rules.",
-      "impl_files": [
-        "forge-standards/ARCHITECTURE.md",
-        "forge-standards/INTERFACES.md",
-        "forge-standards/DECISIONS.md",
-        "forge-standards/CONVENTIONS.md",
-        "forge-standards/build_rules.md"
+      "summary": "End-to-end integration tests validating the complete foundation layer works together: (1) ForgeConfig loads from defaults.toml with env var overlays and rejects missing required secrets, (2) all shared schemas round-trip through JSON serialization (Pydantic \u2192 JSON \u2192 Pydantic), (3) VersionInfo constructed from VERSION file matches pyproject.toml, (4) feature toggles respect config-driven defaults and env overrides, (5) error taxonomy error_codes are unique across all error classes, (6) bootstrap script exit codes are correct.",
+      "impl_files": [],
+      "test_files": [
+        "tests/integration/test_foundation_integration.py"
       ],
-      "test_files": [],
       "language": "python",
       "framework": "pytest",
       "security_critical": false,
-      "estimated_complexity": "low",
+      "estimated_complexity": "medium",
       "acceptance_criteria": [],
       "impl_plan": {}
     },
@@ -860,18 +840,17 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Integration tests validating the complete foundation layer: VERSION file, pyproject.toml version, and version.py __version__ all agree; ForgeConfig constructs from defaults, overrides by env vars, serializes to/from JSON; all contract schemas round-trip through JSON; error hierarchy is correct (all errors inherit ForgeError); settings surface entries have valid defaults that pass config validation; repository structure matches required layout.",
-      "impl_files": [],
-      "test_files": [
-        "tests/integration/__init__.py",
-        "tests/integration/test_foundation.py",
-        "tests/integration/test_repository_structure.py",
-        "tests/integration/test_standards_docs.py"
+      "summary": "Create comprehensive developer documentation: docs/DEVELOPMENT.md (local setup instructions referencing bootstrap.sh, Makefile targets, IDE recommendations), docs/CONFIGURATION.md (full config surface reference, layering rules, how to add new settings, secret handling policy), docs/VERSIONING.md (version authority, sync script usage, release tagging workflow). Update root README.md with quickstart pointing to these docs.",
+      "impl_files": [
+        "docs/DEVELOPMENT.md",
+        "docs/CONFIGURATION.md",
+        "docs/VERSIONING.md"
       ],
+      "test_files": [],
       "language": "python",
       "framework": "pytest",
       "security_critical": false,
-      "estimated_complexity": "medium",
+      "estimated_complexity": "low",
       "acceptance_criteria": [],
       "impl_plan": {}
     },
@@ -914,7 +893,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 3,
+  "version": 4,
   "schema_version": 3,
   "agent_version": "38.195.0"
 }
