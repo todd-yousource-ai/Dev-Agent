@@ -1,75 +1,72 @@
 # AGENTS.md
-
-Crafted is a native macOS AI coding agent that ingests technical specifications and operator intent, then autonomously plans, implements, validates, and opens gated GitHub pull requests through a two-process Swift shell and Python backend architecture.
+Crafted is a native macOS AI coding agent that ingests technical specifications and operator intent, plans and builds software as a sequence of gated GitHub pull requests through a two-process Swift shell and Python backend without ever executing generated code.
 
 ## How to Use This File
-
-Use this file as the mandatory baseline for every code change in this repository. Read the owning subsystem TRD in `forge-docs/` for exact requirements and consult `forge-standards/` for synthesised architecture, interface, and decision references before you implement anything.
+Use this file as the mandatory baseline for every change in this repository and apply its rules before reading or modifying code. Read `forge-docs/` for authoritative subsystem TRDs and read `forge-standards/` for synthesized architecture, interface, and decision references before implementing subsystem-specific behavior.
 
 ## Document Index
 
 | Document Name | Type | Repo Path | What It Covers |
 |---|---|---|---|
-| AGENTS | MD | `forge-docs/AGENTS.md` | Repository identity, agent working rules, TRD-first workflow, testing expectations, and security reminders for contributors. |
-| CLAUDE | MD | `forge-docs/CLAUDE.md` | Existing implementation guidance for Crafted, including product summary, subsystem-to-TRD lookup, and coding expectations. |
-| README | MD | `forge-docs/README.md` | Product overview, operator workflow, TRD-driven build model, and repository-level purpose. |
-| TRD-1-macOS-Application-Shell-Crafted | DOCX / MD | `forge-docs/TRD-1-macOS-Application-Shell-Crafted.md` / `forge-docs/TRD-1-macOS-Application-Shell-Crafted.docx` | macOS Application Shell requirements: Swift shell, SwiftUI container, packaging, auth, Keychain, XPC, orchestration, and foundational module boundaries. |
-| TRD-10-Document-Store-Crafted | DOCX / MD | `forge-docs/TRD-10-Document-Store-Crafted.md` / `forge-docs/TRD-10-Document-Store-Crafted.docx` | Document Store requirements: ingestion, chunking, embedding status, document lifecycle, and retrieval support for TRD-backed generation. |
-| TRD-12-Backend-Runtime-Startup-Crafted | DOCX / MD | `forge-docs/TRD-12-Backend-Runtime-Startup-Crafted.md` / `forge-docs/TRD-12-Backend-Runtime-Startup-Crafted.docx` | Backend runtime startup sequencing, process boot, handshake expectations, readiness reporting, and startup integrity rules. |
-| TRD-13-Recovery-State-Management-Crafted | DOCX / MD | `forge-docs/TRD-13-Recovery-State-Management-Crafted.md` / `forge-docs/TRD-13-Recovery-State-Management-Crafted.docx` | Recovery and state management: checkpoints, crash recovery, persistence, restart behavior, and resumability constraints. |
-| TRD-14-Code-Quality-CI-Pipeline-Crafted | DOCX / MD | `forge-docs/TRD-14-Code-Quality-CI-Pipeline-Crafted.md` / `forge-docs/TRD-14-Code-Quality-CI-Pipeline-Crafted.docx` | Code quality gates, linting, validation loops, CI policy, and quality enforcement rules for generated changes. |
-| TRD-15-Agent-Operational-Runbook-Crafted | DOCX / MD | `forge-docs/TRD-15-Agent-Operational-Runbook-Crafted.md` / `forge-docs/TRD-15-Agent-Operational-Runbook-Crafted.docx` | Operational runbook, support procedures, runtime expectations, and operator-facing recovery and intervention workflows. |
-| TRD-16-Agent-Testing-and-Validation-Crafted | DOCX / MD | `forge-docs/TRD-16-Agent-Testing-and-Validation-Crafted.md` / `forge-docs/TRD-16-Agent-Testing-and-Validation-Crafted.docx` | Testing and validation strategy across subsystems, including unit, integration, failure-path, and acceptance requirements. |
-| TRD-17-Self-Healing-Software-Crafted | DOCX / MD | `forge-docs/TRD-17-Self-Healing-Software-Crafted.md` / `forge-docs/TRD-17-Self-Healing-Software-Crafted.docx` | Self-healing behavior, fault response, retry or repair orchestration, and controlled automated recovery behavior. |
-| TRD-2-Consensus-Engine-Crafted | DOCX / MD | `forge-docs/TRD-2-Consensus-Engine-Crafted.md` / `forge-docs/TRD-2-Consensus-Engine-Crafted.docx` | Consensus Engine requirements: multi-model generation, arbitration, provider adapters, confidence handling, and generation contracts. |
-| TRD-3-Build-Pipeline-Crafted | DOCX / MD | `forge-docs/TRD-3-Build-Pipeline-Crafted.md` / `forge-docs/TRD-3-Build-Pipeline-Crafted.docx` | Build Pipeline requirements: intent decomposition, PR planning, staged execution, gating, fix loops, CI orchestration, and PR creation flow. |
-| TRD-4-Multi-Agent-Coordination-Crafted | DOCX / MD | `forge-docs/TRD-4-Multi-Agent-Coordination-Crafted.md` / `forge-docs/TRD-4-Multi-Agent-Coordination-Crafted.docx` | Multi-Agent Coordination requirements: agent roles, task handoffs, orchestration policy, shared context, and structured coordination behavior. |
-| TRD-5-GitHub-Integration-Crafted | DOCX / MD | `forge-docs/TRD-5-GitHub-Integration-Crafted.md` / `forge-docs/TRD-5-GitHub-Integration-Crafted.docx` | GitHub integration: repository operations, PR creation, webhooks, authentication handling, and GitHub-side workflow constraints. |
-| TRD-6-Holistic-Code-Review-Crafted | DOCX / MD | `forge-docs/TRD-6-Holistic-Code-Review-Crafted.md` / `forge-docs/TRD-6-Holistic-Code-Review-Crafted.docx` | Holistic code review system: review passes, defect detection, quality evaluation, and review-driven acceptance criteria. |
-| TRD-7-TRD-Development-Workflow-Crafted | DOCX / MD | `forge-docs/TRD-7-TRD-Development-Workflow-Crafted.md` / `forge-docs/TRD-7-TRD-Development-Workflow-Crafted.docx` | TRD development workflow: how specifications are loaded, interpreted, and translated into implementation plans and PRDs. |
-| TRD-8-UIUX-Design-System-Crafted | DOCX / MD | `forge-docs/TRD-8-UIUX-Design-System-Crafted.md` / `forge-docs/TRD-8-UIUX-Design-System-Crafted.docx` | UI/UX Design System: SwiftUI views, cards, panels, operator experience, build stream presentation, and interaction patterns. |
-| TRD-9-Mac-CI-Runner-Crafted | DOCX / MD | `forge-docs/TRD-9-Mac-CI-Runner-Crafted.md` / `forge-docs/TRD-9-Mac-CI-Runner-Crafted.docx` | Mac CI Runner requirements: local CI execution, sandboxing expectations, runner lifecycle, and integration with pipeline validation. |
-| forge_architecture_context | MD | `forge-docs/forge_architecture_context.md` | Loaded architecture context, protocol invariants, wire formats, startup and gating rules, persistence invariants, and file-level references. |
+| AGENTS | MD | `forge-docs/AGENTS.md` | Repository identity, product summary, two-process architecture, and agent instructions for using the TRDs before coding. |
+| CLAUDE | MD | `forge-docs/CLAUDE.md` | Existing repository guidance for implementing Crafted, including subsystem-to-TRD mapping and core product behavior. |
+| README | MD | `forge-docs/README.md` | Product overview, operator workflow, autonomous build pipeline summary, and repository-level orientation. |
+| TRD-1-macOS-Application-Shell-Crafted | MD/DOCX | `forge-docs/TRD-1-macOS-Application-Shell-Crafted.md` / `forge-docs/TRD-1-macOS-Application-Shell-Crafted.docx` | macOS Application Shell requirements: Swift/SwiftUI container, packaging, authentication, Keychain, XPC orchestration, and shell-owned responsibilities. |
+| TRD-10-Document-Store-Crafted | MD/DOCX | `forge-docs/TRD-10-Document-Store-Crafted.md` / `forge-docs/TRD-10-Document-Store-Crafted.docx` | Document Store requirements for ingesting, indexing, tracking, and serving specification documents to the system. |
+| TRD-11-Security-Threat-Model-Crafted | MD/DOCX | `forge-docs/TRD-11-Security-Threat-Model-Crafted.md` / `forge-docs/TRD-11-Security-Threat-Model-Crafted.docx` | Security threat model, trust boundaries, credential handling, external input rules, generated code restrictions, and fail-closed security requirements. |
+| TRD-12-Backend-Runtime-Startup-Crafted | MD/DOCX | `forge-docs/TRD-12-Backend-Runtime-Startup-Crafted.md` / `forge-docs/TRD-12-Backend-Runtime-Startup-Crafted.docx` | Backend runtime startup, process boot, handshake, readiness, and startup orchestration requirements. |
+| TRD-13-Recovery-State-Management-Crafted | MD/DOCX | `forge-docs/TRD-13-Recovery-State-Management-Crafted.md` / `forge-docs/TRD-13-Recovery-State-Management-Crafted.docx` | Recovery and state management requirements, including crash recovery, checkpointing, and durable workflow state. |
+| TRD-14-Code-Quality-CI-Pipeline-Crafted | MD/DOCX | `forge-docs/TRD-14-Code-Quality-CI-Pipeline-Crafted.md` / `forge-docs/TRD-14-Code-Quality-CI-Pipeline-Crafted.docx` | Code quality gates, linting, CI expectations, and pipeline quality requirements. |
+| TRD-15-Agent-Operational-Runbook-Crafted | MD/DOCX | `forge-docs/TRD-15-Agent-Operational-Runbook-Crafted.md` / `forge-docs/TRD-15-Agent-Operational-Runbook-Crafted.docx` | Operational runbook for running, supporting, and diagnosing the agent in practice. |
+| TRD-16-Agent-Testing-and-Validation-Crafted | MD/DOCX | `forge-docs/TRD-16-Agent-Testing-and-Validation-Crafted.md` / `forge-docs/TRD-16-Agent-Testing-and-Validation-Crafted.docx` | Testing and validation strategy, expected test types, and verification requirements across subsystems. |
+| TRD-17-Self-Healing-Software-Crafted | MD/DOCX | `forge-docs/TRD-17-Self-Healing-Software-Crafted.md` / `forge-docs/TRD-17-Self-Healing-Software-Crafted.docx` | Self-healing software behavior, iterative correction, and automated recovery logic inside the build workflow. |
+| TRD-2-Consensus-Engine-Crafted | MD/DOCX | `forge-docs/TRD-2-Consensus-Engine-Crafted.md` / `forge-docs/TRD-2-Consensus-Engine-Crafted.docx` | Consensus Engine requirements for multi-model generation, arbitration, and result selection. |
+| TRD-3-Build-Pipeline-Crafted | MD/DOCX | `forge-docs/TRD-3-Build-Pipeline-Crafted.md` / `forge-docs/TRD-3-Build-Pipeline-Crafted.docx` | Build Pipeline requirements for intent decomposition, PRD planning, typed PR sequencing, gates, CI, and PR creation. |
+| TRD-4-Multi-Agent-Coordination-Crafted | MD/DOCX | `forge-docs/TRD-4-Multi-Agent-Coordination-Crafted.md` / `forge-docs/TRD-4-Multi-Agent-Coordination-Crafted.docx` | Multi-Agent Coordination requirements for orchestrating specialized agents and coordinating work safely. |
+| TRD-5-GitHub-Integration-Crafted | MD/DOCX | `forge-docs/TRD-5-GitHub-Integration-Crafted.md` / `forge-docs/TRD-5-GitHub-Integration-Crafted.docx` | GitHub Integration requirements for repository operations, PR workflows, and GitHub-facing automation. |
+| TRD-6-Holistic-Code-Review-Crafted | MD/DOCX | `forge-docs/TRD-6-Holistic-Code-Review-Crafted.md` / `forge-docs/TRD-6-Holistic-Code-Review-Crafted.docx` | Holistic Code Review requirements for full-change evaluation, review logic, and quality/security analysis of generated work. |
+| TRD-7-TRD-Development-Workflow-Crafted | MD/DOCX | `forge-docs/TRD-7-TRD-Development-Workflow-Crafted.md` / `forge-docs/TRD-7-TRD-Development-Workflow-Crafted.docx` | TRD Development Workflow requirements for producing and managing technical requirements documents. |
+| TRD-8-UIUX-Design-System-Crafted | MD/DOCX | `forge-docs/TRD-8-UIUX-Design-System-Crafted.md` / `forge-docs/TRD-8-UIUX-Design-System-Crafted.docx` | UI/UX Design System requirements for SwiftUI views, cards, panels, and operator-facing interaction patterns. |
+| TRD-9-Mac-CI-Runner-Crafted | MD/DOCX | `forge-docs/TRD-9-Mac-CI-Runner-Crafted.md` / `forge-docs/TRD-9-Mac-CI-Runner-Crafted.docx` | Mac CI Runner requirements for CI execution on macOS, build/test orchestration, and CI result handling. |
+| forge_architecture_context | MD | `forge-docs/forge_architecture_context.md` | Loaded architecture context, product-wide invariants, XPC protocol details, file naming references, and runtime rules. |
 
 ## Critical Rules — Non-Negotiable
-
-1. Read the owning TRD before you modify any subsystem.
-2. Preserve the two-process architecture: Swift owns UI, authentication, Keychain, and orchestration; Python owns consensus, pipeline, and GitHub operations.
-3. Communicate between Swift and Python only through the authenticated Unix socket using line-delimited JSON.
-4. Validate every external input as untrusted, including documents, PR comments, CI output, and protocol messages.
-5. Execute no generated code under any circumstance, including through `eval`, `exec`, or subprocess invocation of generated content.
-6. Fail closed on authentication, cryptographic, identity, and policy errors.
-7. Surface every error with context and allow no silent failure paths.
-8. Log no secrets, keys, tokens, credentials, or cleartext sensitive payloads.
-9. Require operator action for every gate and never auto-approve.
-10. Wait indefinitely for operator input at gates and never bypass a blocking gate with timeout-based approval.
-11. Validate every file write path through `path_security.validate_write_path()` before writing.
-12. Put external document context only in the user prompt and never in the system prompt.
-13. Stop immediately on `SECURITY_REFUSAL`, gate the operation, and log the event without rephrasing around the refusal.
-14. Discard and log unknown XPC message types without raising them as exceptions.
-15. Preserve per-PR stage checkpoints and persistent build memory and never clear them automatically.
+1. Read the owning TRD before changing any subsystem behavior, interface, state machine, security control, or test.
+2. Keep the system as a two-process architecture with the Swift shell owning UI, authentication, secrets, and orchestration, and the Python backend owning consensus, pipeline, and GitHub operations.
+3. Communicate between processes only through the authenticated Unix socket using line-delimited JSON and the documented message formats.
+4. Reject all authentication, cryptographic, identity, and trust failures immediately and fail closed without partial processing.
+5. Treat all external content, including documents, pull request comments, CI output, and tool responses, as untrusted input and validate it before use.
+6. Never execute generated code, generated scripts, or generated content through eval, exec, shell execution, or subprocess launch.
+7. Never bypass operator gates and wait indefinitely for operator input when a gate is required.
+8. Validate every file write path with `path_security.validate_write_path()` before performing the write.
+9. Keep context from external documents in the user prompt and never place that context in the system prompt.
+10. Stop processing, gate, and log when a `SECURITY_REFUSAL` is produced and never bypass it by rephrasing.
+11. Discard and log unknown XPC message types and never raise them as uncaught exceptions.
+12. Preserve per-PR stage checkpoints so completed work is not rerun after a crash or restart.
+13. Preserve build memory and build rules as persistent learning systems and never clear them automatically.
+14. Keep secrets, tokens, credentials, and keys out of logs, error messages, prompts, and generated code.
+15. Make every error explicit, attributable, and observable and never allow silent failure paths in runtime-critical or security-critical code.
 
 ## Architecture Overview
-
-- **macOS Application Shell** — Provides the native Swift/SwiftUI container, installation, auth, Keychain access, XPC/socket orchestration, and session lifecycle; called by the operator and startup flow; calls the Python backend and UI subsystems; must never move secrets or authentication ownership into Python.
-- **UI/UX Design System** — Renders SwiftUI views, cards, panels, build stream, and operator gates; called by the macOS Application Shell; calls orchestration state and build stream rendering; must never implement backend business logic or bypass gate semantics.
-- **Consensus Engine** — Runs parallel model generation and arbitration across providers; called by the Build Pipeline and coordination flows; calls provider adapters and review/correction stages; must never become the authority for shell-owned identity, secrets, or code execution.
-- **Build Pipeline** — Decomposes intent into PRDs and typed pull requests, stages generation, lint/fix/CI loops, and draft PR creation; called by the operator workflow and orchestration; calls Consensus Engine, GitHub Integration, review, CI, recovery, and document retrieval; must never skip required gates or rerun completed stages without checkpoint rules.
-- **Multi-Agent Coordination** — Coordinates specialized agents, task delegation, and shared state across build work; called by the Build Pipeline; calls agent roles, consensus tasks, and shared context mechanisms; must never allow uncontrolled parallel changes or ambiguous task ownership.
-- **GitHub Integration** — Performs repository operations, webhook handling, branch/PR management, and GitHub API workflows; called by the Build Pipeline and operational flows; calls GitHub APIs and webhook receivers; must never expose tokens or permit unaudited repository mutation.
-- **Holistic Code Review** — Performs structured review and defect detection over generated changes; called by the Build Pipeline and validation stages; calls analysis passes and review result synthesis; must never silently waive critical findings.
-- **TRD Development Workflow** — Governs how TRDs are loaded, interpreted, and translated into executable planning context; called by operator setup and planning stages; calls Document Store and planning logic; must never invent requirements beyond loaded specifications.
-- **Mac CI Runner** — Executes local macOS validation and CI tasks for candidate changes; called by the Build Pipeline; calls build/test/lint tooling under controlled execution; must never execute generated code directly or outside defined validation workflows.
-- **Document Store** — Ingests, chunks, tracks embedding status, and retrieves source specifications and supporting documents; called by TRD workflow, planning, and generation context assembly; calls storage and embedding pipelines; must never treat ingestion content as trusted executable instructions.
-- **Backend Runtime Startup** — Boots the Python runtime, emits readiness state, and enforces startup handshake sequencing; called by the macOS Application Shell; calls backend initialization and protocol readiness reporting; must never report readiness before required startup invariants hold.
-- **Recovery State Management** — Persists stage checkpoints, resumable state, and crash recovery metadata; called by the Build Pipeline, startup, and self-healing flows; calls durable state storage and resume logic; must never lose completed-stage state or replay work unsafely after a crash.
-- **Code Quality CI Pipeline** — Enforces lint, quality gates, fix loops, and CI pass criteria; called by the Build Pipeline and runner stages; calls analysis tools and CI orchestration; must never downgrade security or correctness gates for speed.
-- **Agent Operational Runbook** — Defines operational intervention, support, and runtime handling procedures; called by operators and operational tooling; calls documented workflows rather than code paths; must never be contradicted by hidden runtime behavior.
-- **Agent Testing and Validation** — Defines repository-wide validation obligations and acceptance criteria; called by every implementation effort; calls unit, integration, and failure-path suites; must never permit untested security-critical changes.
-- **Self-Healing Software** — Detects eligible failures and performs controlled recovery actions; called by runtime monitoring and recovery flows; calls Recovery State Management and operational recovery mechanisms; must never mask root-cause failures or mutate completed work without traceability.
+- **macOS Application Shell** — Native Swift/SwiftUI container for packaging, installation, authentication, Keychain, UI, and orchestration; called by the operator and startup flow; calls the backend runtime over authenticated local IPC and OS services such as biometrics and Keychain; must NEVER delegate shell-owned secrets or authentication authority to the Python backend.
+- **UI/UX Design System** — SwiftUI views, cards, panels, and operator interaction patterns such as streamed build cards and blocking gate cards; called by the macOS Application Shell; calls shell view models and XPC-backed orchestration state; must NEVER invent workflow states or bypass gate semantics defined by the pipeline.
+- **Backend Runtime Startup** — Python backend boot, readiness, startup sequencing, and handshake lifecycle; called by the macOS Application Shell; calls Consensus Engine, Build Pipeline, Document Store, and GitHub Integration after successful startup; must NEVER report readiness before dependencies and protocol state are valid.
+- **Consensus Engine** — Multi-model generation and arbitration using parallel providers with Claude arbitrating outcomes; called by the Build Pipeline and review flows; calls provider adapters and returns structured generation decisions; must NEVER collapse into uncontrolled single-provider behavior or return untraceable decisions.
+- **Build Pipeline** — End-to-end orchestration from operator intent to PRD plan to typed pull requests, generation, self-correction, lint, CI, and draft PR creation; called by the backend runtime and operator workflows; calls Consensus Engine, Multi-Agent Coordination, Holistic Code Review, Mac CI Runner, GitHub Integration, and recovery/state services; must NEVER skip required gates, confidence checks, or stage persistence.
+- **Multi-Agent Coordination** — Coordination of specialized agents and partitioned work across the build flow; called by the Build Pipeline; calls agent-specific tasks and returns coordinated outputs; must NEVER permit overlapping unsafe writes, ambiguous ownership, or uncontrolled autonomous branching.
+- **GitHub Integration** — Repository access, branch management, PR creation, webhook handling, and GitHub-facing automation; called by the Build Pipeline and operational workflows; calls GitHub APIs and webhook endpoints; must NEVER trust GitHub-originated content without validation or expose tokens outside approved secret handling.
+- **Holistic Code Review** — Repository-wide evaluation of changes for correctness, quality, and risk before PR advancement; called by the Build Pipeline; calls analysis logic over generated diffs, test results, and requirements context; must NEVER approve changes without traceable evidence against requirements and observed outputs.
+- **TRD Development Workflow** — Structured handling of technical requirements documents and their evolution; called by operator and planning flows; calls Document Store and planning logic; must NEVER let implementation drift from authoritative TRD requirements.
+- **Mac CI Runner** — macOS-based CI execution for builds, tests, linting, and result capture; called by the Build Pipeline; calls build/test tools and returns CI artifacts and statuses; must NEVER execute unvalidated generated content as arbitrary commands outside the approved CI workflow.
+- **Document Store** — Ingestion, indexing, chunking, embedding status, and retrieval of source documents and TRDs; called by startup, planning, and generation flows; calls storage/indexing services and supplies contextual retrieval; must NEVER treat ingestion status as complete when chunking or embedding state is incomplete.
+- **Security Threat Model** — Cross-cutting trust boundaries, credential rules, generated-code restrictions, and secure failure behavior; called by every subsystem through design and implementation constraints; calls no runtime subsystem directly but governs all of them; must NEVER be weakened by convenience shortcuts.
+- **Recovery State Management** — Durable checkpoints, restart recovery, and prevention of duplicated completed work; called by the Build Pipeline and backend runtime; calls persistent state storage and resume logic; must NEVER replay completed stages or lose authoritative workflow state.
+- **Code Quality CI Pipeline** — Lint, code quality gates, and acceptance criteria for changes; called by the Build Pipeline and repository processes; calls tests and validation tooling; must NEVER allow critical warnings or failures to pass silently.
+- **Agent Operational Runbook** — Operational procedures, diagnostics, and support expectations; called by human operators and maintainers; calls documented system behaviors and observability outputs; must NEVER be contradicted by hidden runtime behavior.
+- **Agent Testing and Validation** — Required unit, integration, negative-path, and validation coverage across the system; called by development and CI processes; calls test harnesses and validation suites; must NEVER be reduced below required enforcement coverage.
+- **Self-Healing Software** — Iterative fix loops and automated correction behaviors after failures; called by the Build Pipeline; calls analysis and remediation passes; must NEVER mask root causes, erase checkpoints, or bypass operator control.
 
 ## Interface Contracts
-
 ## Forge Component Interface Contracts
 
 Every Forge component MUST implement these contracts or the component is non-conformant.
@@ -111,67 +108,72 @@ These are not guidelines — they are hard requirements enforced at code review.
 - Label verification MUST occur before any data crosses a trust boundary
 - Label stripping is a security event that MUST be audited and policy-controlled
 
-## Error Handling Rules
+### Error Handling Contract
+- All trust, identity, policy, and cryptographic failures MUST fail CLOSED
+- Fail closed means: reject the action, log the event, surface to caller — never silently continue
+- No swallowed exceptions in enforcement paths (try/except/pass is BANNED in enforcement code)
+- All errors MUST include: component, operation, failure_reason, ctx_id (if available)
+- Error messages MUST NOT include: keys, tokens, secrets, or cleartext payloads
 
-- Fail closed on all trust, identity, authentication, authorization, policy, and cryptographic failures.
-- Reject the action, log the event, and surface the failure to the caller on every fail-closed path.
-- Include `component`, `operation`, `failure_reason`, and `ctx_id` when available in every enforcement-path error.
-- Exclude keys, tokens, secrets, credentials, and cleartext payloads from every error message and log entry.
-- Discard and log unknown XPC message types instead of raising uncaught exceptions.
-- Reject malformed, oversized, or protocol-invalid line-delimited JSON messages instead of attempting partial recovery.
-- Stop processing immediately when CTX-ID validation fails.
-- Stop processing immediately when VTZ policy denies an action.
-- Stop processing immediately when required TrustFlow emission cannot complete silently; log and surface the failure.
-- Gate and log every `SECURITY_REFUSAL` and do not retry by paraphrasing the same unsafe request.
-- Preserve completed stage state through checkpoints and resume from persisted state after crashes instead of re-running prior completed stages.
-- Keep audit records append-only and never modify or delete prior security-relevant records.
-- Ban swallowed exceptions in enforcement paths.
-- Ban `try/except/pass` in trust, crypto, policy, and enforcement code.
-- Ban silent retries that hide first-failure context.
-- Ban fallback behavior that weakens authentication, policy, validation, or cryptographic guarantees.
+### Audit Contract
+- Every security-relevant action MUST generate an audit record BEFORE execution
+- Audit records are APPEND-ONLY — no modification or deletion
+- Audit failures are NON-FATAL to agent operation but MUST be surfaced immediately
+- Audit records MUST NOT contain: secrets, keys, tokens, or cleartext sensitive data
+- Replay MUST be possible from the audit stream alone (no external state required)
+
+### Test Requirements Contract
+- Every enforcement path MUST have a negative test (what happens on rejection)
+- Every cryptographic operation MUST have a test with invalid/expired material
+- Every TrustFlow emission MUST be tested for both success and failure paths
+- Tests MUST NOT mock the enforcement decision — they may mock the external call but the logic must run
+- Test coverage for enforcement paths MUST be >= 90%
+
+## Error Handling Rules
+- Reject auth, crypto, identity, trust, and policy failures immediately and do not continue partial execution.
+- Surface every failure to the caller with component, operation, failure reason, and `ctx_id` when available.
+- Remove all silent catches, swallowed exceptions, and best-effort continuation from enforcement paths.
+- Log unknown XPC message types and discard them without crashing the process.
+- Stop the workflow, gate the operator, and log the event when a `SECURITY_REFUSAL` occurs.
+- Redact secrets, tokens, keys, credentials, and cleartext sensitive payloads from logs, metrics, audit records, and error messages.
+- Validate message bounds, parser inputs, and wire payload sizes before parsing and fail safely on malformed input.
+- Preserve durable checkpoints before and after material stage transitions so crash recovery resumes from the last valid state.
+- Keep audit failures non-fatal to agent operation but surface them immediately as observable warnings.
+- Ban `try/except/pass`, silent `None` fallthroughs, ignored return values in enforcement paths, hidden retries that change semantics, and any fallback that weakens security controls.
 
 ## Testing Requirements
-
-- Run the existing test suite before making changes.
-- Add tests that map directly to the owning TRD requirements for the subsystem you changed.
-- Test every security-critical logic path with unit, integration, and negative-path coverage.
-- Test malformed external input, parser boundaries, protocol failures, and attacker-controlled content.
-- Test failure behavior, not only success behavior.
-- Add regression tests for every material bug.
-- Add benchmark tests for performance-sensitive paths, especially network, crypto, policy, and telemetry paths.
-- Add fuzzing where inputs are complex, parser-driven, or attacker-controlled.
-- Add a negative test for every enforcement path.
-- Add tests for invalid or expired cryptographic material for every cryptographic operation.
-- Test TrustFlow emission success and TrustFlow emission failure paths.
-- Do not mock the enforcement decision logic; mock only the external dependency when necessary.
-- Maintain enforcement-path test coverage at or above 90%.
-- Verify startup, recovery, and checkpoint behavior with restart and crash-resume tests.
-- Verify that generated code is never executed as part of runtime behavior.
+- Add unit, integration, and negative-path tests for every security-critical, policy-critical, and runtime-critical code path.
+- Add at least one rejection-path test for every enforcement boundary.
+- Test every cryptographic operation with invalid, expired, malformed, and unauthorized material.
+- Test TrustFlow emission on both success and failure paths.
+- Run enforcement logic in tests and mock only external side effects, not the decision itself.
+- Maintain enforcement-path coverage at 90% or higher.
+- Add regression tests for every material bug, crash-recovery defect, and stage-checkpoint failure.
+- Add tests for malformed external content, including documents, PR comments, CI output, wire messages, and parser-driven inputs.
+- Add benchmark coverage for network, crypto, policy, and telemetry hot paths.
+- Add fuzzing for complex or attacker-controlled parsers and message handlers.
+- Verify that completed per-PR stages do not rerun after crash recovery.
+- Verify that generated code is never executed anywhere in the system.
 
 ## File Naming and Directory Layout
-
-- Follow the Forge subsystem layout exactly for enforcement-related components:
-  - `src/cal/` — Conversation Abstraction Layer components
-  - `src/dtl/` — Data Trust Label components
-  - `src/trustflow/` — TrustFlow audit stream components
-  - `src/vtz/` — Virtual Trust Zone enforcement
-  - `src/trustlock/` — Cryptographic machine identity (TPM-anchored)
-  - `src/mcp/` — MCP Policy Engine
-  - `src/rewind/` — Forge Rewind replay engine
-  - `sdk/connector/` — Forge Connector SDK
-  - `tests/<subsystem>/` — Tests mirror `src/` structure exactly
-- Preserve the documented Python backend file naming from the architecture context:
-  - `src/consensus.py` — ConsensusEngine and generation system entry points
-  - `src/build_director.py` — BuildPipeline orchestration, confidence gate, and PR routing
-  - `src/github_tools.py` — GitHub integration and webhook handling
-  - `src/build_ledger.py` — Build state and ledger-related persistence
-- Keep Swift shell code in the macOS Application Shell structure defined by TRD-1.
-- Keep SwiftUI view and design-system code in the UI/UX Design System structure defined by TRD-8.
-- Place new files in the subsystem that owns the behavior instead of creating cross-cutting utility dumping grounds.
-- Mirror every new source subsystem with corresponding tests under `tests/`.
+- Place Conversation Abstraction Layer components in `src/cal/`.
+- Place Data Trust Label components in `src/dtl/`.
+- Place TrustFlow audit stream components in `src/trustflow/`.
+- Place Virtual Trust Zone enforcement components in `src/vtz/`.
+- Place TrustLock cryptographic machine identity components in `src/trustlock/`.
+- Place MCP Policy Engine components in `src/mcp/`.
+- Place Forge Rewind replay engine components in `src/rewind/`.
+- Place Forge Connector SDK components in `sdk/connector/`.
+- Mirror `src/` exactly under `tests/<subsystem>/`.
+- Keep Python backend entry and orchestration modules aligned with the loaded architecture context:
+  - `src/consensus.py` — `ConsensusEngine`, provider generation systems, and arbitration-related backend logic.
+  - `src/build_director.py` — `BuildPipeline` orchestration, confidence gate flow, and PR type routing.
+  - `src/github_tools.py` — `GitHubTool` and `WebhookReceiver` integration logic.
+  - `src/build_ledger.py` — build state and durable workflow tracking.
+- Keep Swift shell code in shell-owned Swift/SwiftUI modules for UI, authentication, Keychain, and local IPC orchestration.
+- Keep protocol handlers, policy enforcement, trust boundaries, and critical data flows explicitly documented at their source locations.
 
 ## Security Checklist — Before Every Commit
-
 ## Forge Code Review Checklist
 
 Before any PR is merged, a reviewer MUST confirm:
