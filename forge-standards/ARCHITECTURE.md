@@ -1,736 +1,606 @@
 # Architecture
 
-## System Overview
+## System Overview (derived from the TRDs above)
 
-**Product:** Crafted Dev Agent / Crafted
+**Crafted** is a **native macOS AI coding agent** that builds software autonomously from specifications. The loaded documents define it as a **two-process system**:
 
-Crafted is a **native macOS AI coding agent** that autonomously builds software from specifications. The product is explicitly **not** a chat interface, code autocomplete tool, or copilot. The operating model described in the source documents is:
+- a **Swift macOS application shell**
+- a **Python backend**
 
-1. The operator provides:
-   - a repository,
-   - a set of technical specifications (**TRDs**),
-   - a plain-language intent.
-2. The agent:
-   - assesses confidence in scope,
-   - decomposes intent into an ordered **PRD plan**,
-   - decomposes each PRD into a sequence of **typed pull requests**,
-   - generates implementation and tests using **two LLM providers in parallel**,
-   - applies a **self-correction pass**,
-   - runs a **lint gate** and **iterative fix loop**,
-   - executes **CI**,
-   - opens a **draft GitHub pull request** for review.
-3. The operator gates, reviews, and merges.
-4. The agent proceeds to the next pull request while the previous one is under review.
+The repository-level documents are explicit about process ownership:
 
-The architecture is a strict **two-process system**:
+- **Swift shell** owns **UI, authentication, Keychain secret storage, and XPC/orchestration**
+- **Python backend** owns **intelligence, generation, consensus, pipeline, document retrieval, and GitHub operations**
 
-- **Swift shell**
-  - owns UI,
-  - authentication,
-  - secrets / Keychain,
-  - process orchestration,
-  - XPC / local IPC-facing shell responsibilities.
-- **Python backend**
-  - owns intelligence,
-  - consensus,
-  - generation pipeline,
-  - document retrieval,
-  - GitHub operations.
+The product is not specified as a chat interface or autocomplete tool. It is specified as a **directed build agent** that takes:
 
-The two processes communicate over an **authenticated Unix socket** using **line-delimited JSON**. The documents are explicit that **neither process ever executes generated code**.
+- a repository
+- technical specifications, including **TRDs**
+- a plain-language intent
 
-The loaded TRDs establish the following architecture anchors:
+It then performs a bounded autonomous workflow that includes:
 
-- **TRD-1** defines the **macOS Application Shell** as the native Swift/SwiftUI container that packages, installs, authenticates, and orchestrates all subsystems.
-- **TRD-10** defines the **Document Store and Retrieval Engine** as a Python subsystem that ingests and retrieves project documents, with storage under `~/Library/Application Support/Crafted/cache/{project_id}/`.
-- Repository-level docs define the existence of:
-  - a **two-model consensus engine** using **Claude + GPT-4o**, with **Claude arbitrating every result**,
-  - a **GitHub PR production flow**,
-  - a **security model governed by TRD-11**,
-  - CI jobs spanning Python and macOS/Swift validation.
+- confidence assessment
+- decomposition into an ordered plan
+- decomposition into typed pull requests
+- parallel multi-provider generation
+- arbitration / consensus
+- self-correction
+- lint gate
+- iterative fix loop
+- CI execution
+- opening a draft GitHub pull request for operator review
 
-Per the repository guidance, the **16 TRDs in `forge-docs/` are the source of truth**. This architecture summary is therefore limited to what is explicitly present in the provided documents.
+The architecture is constrained by the source documents in several important ways:
 
----
+1. **Two-process separation is fundamental**  
+   The shell and backend are separate processes with distinct responsibilities.
 
-## Subsystem Map
+2. **Inter-process communication is authenticated**  
+   The documents state that the two processes communicate over an **authenticated Unix socket** using **line-delimited JSON**.
+
+3. **Generated code is never executed by either process**  
+   This is stated explicitly in the repository guidance.
+
+4. **The Swift shell is foundational**  
+   TRD-1 defines the native shell as the container that packages, installs, authenticates, and orchestrates all subsystems.
+
+5. **The Python document store is a required backend subsystem**  
+   TRD-10 defines a Python 3.12 document store and retrieval engine that is required by multiple backend stages.
+
+6. **Security is global and normative**  
+   AGENTS.md declares that **TRD-11 governs all components** and must be consulted for any security-relevant work. Its detailed contents are not included in the provided excerpts, so this architecture references it only where the loaded documents explicitly do so.
+
+At minimum from the loaded documents, the system is composed of the following major architectural domains:
+
+- **macOS Application Shell**
+- **SwiftUI application/UI layer**
+- **identity and authentication**
+- **secret storage via Keychain**
+- **inter-process bridge / XPC-orchestrated backend startup**
+- **authenticated Unix-socket protocol**
+- **Python backend intelligence pipeline**
+- **consensus engine**
+- **document store and retrieval engine**
+- **GitHub operations**
+- **CI integration**
+- **installation and auto-update**
+
+## Subsystem Map (one entry per subsystem found in the docs)
 
 ### 1. macOS Application Shell
-**Source:** TRD-1
-
-The macOS Application Shell is the foundational native container for Crafted.
-
-**Declared responsibilities:**
-- installation and distribution:
-  - `.app` bundle,
-  - drag-to-Applications,
-  - Sparkle auto-update;
-- identity and authentication:
-  - biometric gate,
-  - Keychain secret storage,
-  - session lifecycle;
-- Swift module architecture:
-  - module boundaries,
-  - concurrency model,
-  - state ownership;
-- SwiftUI view hierarchy;
-- orchestration of all subsystems.
-
-**Implementation domain:**
-- Swift 5.9+
-- SwiftUI
-- native macOS 13.0+ (Ventura)
-
-**Architectural role:**
-- root host process,
-- user-facing shell,
-- trust boundary for secrets and local operator interaction,
-- launcher/orchestrator for the Python backend.
-
----
-
-### 2. Swift UI Layer
-**Source:** TRD-1, CLAUDE.md TRD map
-
-The documents distinguish SwiftUI views/cards/panels as a specifically owned area.
-
-**Declared responsibilities from provided docs:**
-- SwiftUI view hierarchy is owned by the shell.
-- SwiftUI views, cards, and panels are associated with a dedicated TRD reference path.
-
-**Architectural role:**
-- renders native operator interface,
-- surfaces shell-owned state,
-- presents progress and control surfaces for the directed build workflow.
-
-Because the loaded content is partial, no additional view taxonomy should be inferred beyond SwiftUI hierarchy ownership.
-
----
-
-### 3. Authentication and Identity Subsystem
-**Source:** TRD-1, extracted headings/content
-
-A shell-owned subsystem for identity, authentication, and session handling.
-
-**Declared responsibilities:**
-- biometric gate,
-- Keychain secret storage,
-- session lifecycle.
-
-**Observed related stored identities/secrets from extracted content:**
-- `display_name` stored in `UserDefaults`,
-- `engineer_id` stored in Keychain as `SecretKey.engineerId`,
-- `github_username` fetched from GitHub `/user` endpoint on first auth.
-
-**Architectural role:**
-- gates access to privileged product operations,
-- persists identity and secret material in shell-owned stores,
-- mediates authenticated use of downstream services.
-
----
-
-### 4. Secret Storage / Keychain Subsystem
 **Source:** TRD-1, AGENTS.md, CLAUDE.md
 
-While part of the shell’s auth responsibilities, Keychain ownership is explicit enough to call out as a security-relevant subsystem boundary.
+The **macOS Application Shell** is the native **Swift/SwiftUI container** for Crafted. TRD-1 states that it specifies the complete technical requirements for the shell and that the shell owns:
 
-**Declared responsibilities:**
-- secret storage in Keychain,
-- shell ownership of secrets,
-- credential handling and delivery to the backend as part of orchestration.
+- installation and distribution
+- identity and authentication
+- Swift module architecture
+- SwiftUI view hierarchy
+- orchestration of subsystems
 
-**Architectural role:**
-- sole local persistence authority for secrets,
-- participates in backend startup/authentication,
-- must comply with the repository-wide security model governed by TRD-11.
+It is the foundational subsystem on which TRD-2, TRD-3, TRD-4, TRD-5, and TRD-8 depend.
 
----
-
-### 5. Swift–Python IPC / XPC Bridge
-**Source:** AGENTS.md, CLAUDE.md, TRD-1 dependency references, extracted file references
-
-The provided docs describe authenticated communication between the two processes and reference XPC-related implementation artifacts.
-
-**Declared/provided facts:**
-- communication is over an **authenticated Unix socket**,
-- protocol is **line-delimited JSON**,
-- Swift shell owns XPC-related responsibilities,
-- `Crafted/XPCBridge.swift` and `src/xpc_server.py` are named artifacts,
-- TRD-10 depends on TRD-1 for **XPC progress messages**.
-
-**Architectural role:**
-- transports commands, progress, and results between shell and backend,
-- forms the local process trust link,
-- must authenticate the backend connection rather than assuming trust.
+**Technology stated in docs:**
+- Swift 5.9+
+- SwiftUI
+- bundled Python 3.12
+- minimum macOS 13.0 (Ventura)
 
 ---
 
-### 6. Python Backend
-**Source:** AGENTS.md, CLAUDE.md, README, TRD-10
+### 2. Installation and Distribution
+**Source:** TRD-1
 
-The Python backend is the non-UI execution process for all intelligence and automation logic.
+TRD-1 explicitly lists installation/distribution as shell-owned, including:
 
-**Declared responsibilities:**
-- consensus,
-- pipeline,
-- GitHub,
-- generation,
-- document retrieval/retrieval-context injection,
-- backend server functionality (`src/xpc_server.py` is referenced).
+- `.app` bundle packaging
+- drag-to-Applications installation
+- Sparkle auto-update
 
-**Implementation domain:**
-- Python 3.12
-- bundled with the app per TRD-1 metadata.
-
-**Architectural role:**
-- executes the autonomous build workflow,
-- consumes shell-delivered authentication/material as needed,
-- performs no direct UI ownership,
-- must never execute generated code.
+This subsystem is part of the Swift shell domain and exists to package and deliver the application on macOS.
 
 ---
 
-### 7. Consensus Engine
-**Source:** README, AGENTS.md, CLAUDE.md, TRD-10 dependencies
+### 3. Identity and Authentication
+**Source:** TRD-1, repository headings
 
-The repository description explicitly identifies a two-model consensus architecture.
+TRD-1 states that the shell owns **identity and authentication**, including:
 
-**Declared responsibilities/facts:**
-- uses **two LLM providers in parallel**,
-- specifically **Claude + GPT-4o**,
-- **Claude arbitrates every result**,
-- consensus is a Python backend responsibility,
-- TRD-10 says its retrieval engine is required by **TRD-2** and that `auto_context()` is called per generation.
+- biometric gate
+- session lifecycle
 
-**Architectural role:**
-- coordinates multi-provider generation,
-- arbitrates outputs,
-- consumes retrieval context,
-- feeds downstream correction, lint, and fix stages.
+Repository content also references identity data fields and storage locations, including:
+
+- `display_name` in `UserDefaults`
+- `engineer_id` in Keychain
+- `github_username` fetched from GitHub `/user` on first auth
+
+This indicates an authentication/identity subsystem anchored in the Swift shell, with GitHub identity enrichment occurring after auth.
 
 ---
 
-### 8. Generation / Build Pipeline
+### 4. Secret Storage / Keychain
+**Source:** AGENTS.md, CLAUDE.md, TRD-1, repository headings
+
+The loaded documents state that the Swift process owns **secrets** and **Keychain secret storage**. Repository excerpts also reference:
+
+- `SecretKey.engineerId` in Keychain
+- GitHub App private key usage from Keychain for JWT generation
+
+This subsystem is within the shell boundary and is security-sensitive under the global governance of TRD-11.
+
+---
+
+### 5. Swift Module Architecture and Concurrency / State Ownership
+**Source:** TRD-1
+
+TRD-1 explicitly includes:
+
+- Swift module architecture
+- module boundaries
+- concurrency model
+- state ownership
+
+This is a shell-internal architectural subsystem defining how the native app is partitioned and how shell-side state is controlled.
+
+---
+
+### 6. SwiftUI View Hierarchy / UI Layer
+**Source:** TRD-1, CLAUDE.md
+
+TRD-1 says the shell owns the **SwiftUI view hierarchy**. CLAUDE.md maps SwiftUI views, cards, and panels to TRD-8, establishing a UI-specific subsystem under the shell.
+
+This subsystem is responsible for presenting the operator-facing native interface, but the loaded excerpts do not enumerate every screen or card.
+
+---
+
+### 7. Backend Process Launch and Orchestration
+**Source:** AGENTS.md, CLAUDE.md, repository headings
+
+The repository-level documents define a separate **Python backend** and a shell responsibility for orchestration. The loaded headings additionally reference:
+
+- starting the Python backend process with a test socket path and nonce
+- error delivery via XPC if the connection is open
+- failure modes such as:
+  - Swift shell crashed before sending credentials
+  - XPC connection failed to establish
+  - deadlock in the credential delivery path
+
+This establishes a dedicated orchestration subsystem in the shell for backend process lifecycle and bootstrap.
+
+---
+
+### 8. Inter-Process Communication Layer
+**Source:** CLAUDE.md, TRD-10, repository headings
+
+The documents state that the shell and backend communicate via:
+
+- **authenticated Unix socket**
+- **line-delimited JSON**
+
+TRD-10 also depends on TRD-1 for **XPC progress messages**, which shows that progress/status reporting participates in shell/backend coordination.
+
+The loaded headings further identify implementation artifacts:
+
+- `Crafted/XPCBridge.swift`
+- `src/xpc_server.py`
+
+Together these indicate an IPC subsystem split across both processes.
+
+---
+
+### 9. Python Backend
+**Source:** AGENTS.md, CLAUDE.md, README
+
+The Python backend owns:
+
+- intelligence
+- generation
+- consensus
+- pipeline
+- GitHub operations
+
+The README further specifies the backend workflow behavior:
+
+- assess confidence in scope
+- decompose intent into ordered PRD plan
+- decompose PRD into typed pull requests
+- generate implementation and tests using two LLM providers in parallel
+- run self-correction
+- enforce lint gate
+- run iterative fix loop
+- execute CI
+- open draft PR
+
+This subsystem is the autonomous planning and execution engine of Crafted.
+
+---
+
+### 10. Consensus Engine
+**Source:** README, AGENTS.md, CLAUDE.md, TRD-10 dependency notes
+
+The README describes Crafted as using a **two-model consensus engine** with:
+
+- Claude
+- GPT-4o
+- Claude arbitrating every result
+
+AGENTS.md/CLAUDE.md explicitly identify **consensus** as a Python backend responsibility. TRD-10 states that TRD-2 is the **Consensus Engine** and that the document store’s `auto_context()` is called per generation, making the consensus engine a consumer of retrieval context.
+
+This subsystem is therefore responsible for multi-provider generation and arbitration, with document retrieval injected into generation-time context.
+
+---
+
+### 11. Generation / Self-Correction / Fix Pipeline
 **Source:** README, AGENTS.md
 
-The core product flow is a structured generation pipeline, not an ad hoc interaction loop.
+The README defines a sequenced backend pipeline including:
 
-**Declared stages/behaviors from README:**
-- confidence assessment,
-- intent decomposition into PRD plan,
-- PR decomposition into typed pull requests,
-- implementation and test generation,
-- self-correction pass,
-- lint gate,
-- iterative fix loop,
-- CI execution,
-- draft PR creation.
+- generation
+- self-correction pass
+- lint gate
+- iterative fix loop
+- CI execution
 
-**Architectural role:**
-- deterministic orchestration framework for converting operator intent and project specs into reviewable pull requests.
+AGENTS.md states the backend owns the **pipeline**. While the loaded excerpts do not include TRD-3 in full, the architecture clearly contains a dedicated execution pipeline subsystem in Python.
 
 ---
 
-### 9. Document Store and Retrieval Engine
+### 12. Document Store and Retrieval Engine
 **Source:** TRD-10
 
-A Python subsystem that ingests project documents and serves context into generation/review flows.
+TRD-10 defines the **Document Store and Retrieval Engine** as a Python 3.12 subsystem. It is responsible for ingesting documents and retrieving context for backend consumers.
 
-**Declared responsibilities:**
-- ingest documents,
-- retrieval for context injection,
-- support `auto_context()` per generation,
-- support `doc_filter` integration in Stage 1/5,
-- support review context,
-- support `PRODUCT_CONTEXT` auto-load.
+Key facts explicitly stated:
 
-**Declared storage location:**
-- `~/Library/Application Support/Crafted/cache/{project_id}/`
+- storage path: `~/Library/Application Support/Crafted/cache/{project_id}/`
+- depends on:
+  - TRD-1 for file layout, project schema, XPC progress messages
+  - TRD-2 because consensus consumes injected context
+- required by:
+  - TRD-2 via `auto_context()` per generation
+  - TRD-3 via `doc_filter` in Stage 1/5
+  - TRD-6 for review context
+  - TRD-7 for `PRODUCT_CONTEXT` auto-load
+- project creation behavior:
+  - “Project created: empty index created in cache/{project_id}/”
+- loaded note:
+  - “no explicit unload — FAISS index is small enough to keep all loaded”
 
-**Declared lifecycle/storage facts from extracted content:**
-- project creation initializes an empty index in `cache/{project_id}/`,
-- no explicit unload because the FAISS index is small enough to keep loaded,
-- 10 projects ≈ ~3MB total.
-
-**Architectural role:**
-- local project knowledge base,
-- retrieval provider for generation and review stages,
-- backend-owned persistent cache.
+This is a distinct backend subsystem with persistent per-project cache state and retrieval-time context assembly.
 
 ---
 
-### 10. GitHub Operations Subsystem
-**Source:** AGENTS.md, CLAUDE.md, README, extracted content
+### 13. Review Context / Review Support
+**Source:** TRD-10 required-by notes, repository headings
 
-The Python backend explicitly owns GitHub operations.
+TRD-10 explicitly states it is required by **TRD-6 (review context)**. The repository headings also include operator review command examples such as:
 
-**Declared responsibilities/facts:**
-- opens draft pull requests,
-- fetches user identity from GitHub `/user` on first auth,
-- performs repository operations as part of the build workflow.
+- `/review start`
+- `/review exclude`
+- selecting lenses
+- excluding directories/files
 
-**Observed extracted operation details:**
-- fetch file content from GitHub,
-- get content + SHA,
-- generate JWT using App private key from Keychain.
-
-Because the source set is partial, these are recorded only as explicit observed responsibilities and interaction patterns.
-
-**Architectural role:**
-- repository read/write integration,
-- PR publication mechanism,
-- external system boundary to GitHub.
+This demonstrates a review-oriented subsystem that consumes document retrieval and applies scoped review operations. The loaded excerpts do not provide the full TRD, so only the existence and document-store dependency can be asserted.
 
 ---
 
-### 11. CI Integration Subsystem
-**Source:** extracted workflow headings, README
+### 14. Product Context Auto-Load
+**Source:** TRD-10 required-by notes
 
-The product pipeline includes CI execution prior to PR readiness, and repository workflows are explicitly named.
+TRD-10 states it is required by **TRD-7 (`PRODUCT_CONTEXT` auto-load)**. This establishes a subsystem concerned with loading product context into backend workflows, with the document store providing the retrieval foundation.
 
-**Declared/observed CI jobs:**
+---
+
+### 15. GitHub Operations
+**Source:** AGENTS.md, CLAUDE.md, README, repository headings
+
+The Python backend owns **GitHub** operations. The README specifies outcome-level GitHub behavior:
+
+- opening draft pull requests
+- sequencing one PR per logical unit
+
+Repository headings additionally show file-level operations and auth mechanics, including:
+
+- fetch file content from GitHub
+- get content + SHA
+- read current file from GitHub
+- generate JWT using App private key from Keychain
+- fetch GitHub `/user` on first auth
+
+This defines a backend GitHub subsystem that depends on shell-managed credentials/secrets.
+
+---
+
+### 16. CI Integration
+**Source:** README, repository headings
+
+The README states the system **executes CI** as part of the build pipeline before opening a draft PR. Loaded headings reference CI jobs/workflows such as:
+
 - `Forge CI — Python / test`
 - `Forge CI — macOS / unit-test`
 - `Forge CI — macOS / xpc-integration-test`
+- Crafted CI (ubuntu) — main Python test job
+- Crafted CI — macOS (Swift) — only triggers for Swift files
 
-**README-declared role:**
-- CI is executed as part of the automated flow before opening/reviewing PRs.
-
-**Architectural role:**
-- validation gate across Python and Swift/macOS surfaces,
-- enforces quality before PR handoff.
+This establishes CI as an integrated subsystem in the end-to-end pipeline, though the full CI orchestration TRD text is not included.
 
 ---
 
-### 12. Distribution and Update Subsystem
-**Source:** TRD-1, extracted content
+### 17. Security Governance
+**Source:** AGENTS.md, CLAUDE.md
 
-A shell-owned subsystem for installation and update.
+Security is not merely a cross-cutting concern; it is explicitly governed by **TRD-11**. AGENTS.md states:
 
-**Declared responsibilities:**
-- `.app` bundling,
-- drag-to-Applications installation,
-- Sparkle auto-update.
+- “TRD-11 governs all components.”
+- It must be read before touching security-relevant code.
 
-**Observed distribution identity detail:**
-- Developer ID Application: `YouSource.ai ({TEAM_ID})`
+CLAUDE.md additionally states:
+- neither process ever executes generated code
+- communication is authenticated
+- secrets belong to the Swift process
 
-**Architectural role:**
-- packages and distributes the native app,
-- updates the shell according to macOS application conventions.
+Because the full TRD-11 text is not present in the excerpts, this architecture treats security governance as a mandatory controlling layer rather than expanding undocumented controls.
 
----
+## Component Boundaries (what each subsystem must never do)
 
-### 13. Session and Operator Control Surface
-**Source:** TRD-1, README, extracted command examples
+This section is restricted to boundaries that are directly supported by the loaded documents.
 
-The shell owns session lifecycle, while the overall product exposes operator-controlled review/gating flows.
+### macOS Application Shell must never
+- implement backend intelligence, consensus, generation, or GitHub operations, because those are assigned to the Python backend by AGENTS.md and CLAUDE.md
+- execute generated code, because CLAUDE.md states that neither process ever executes generated code
+- delegate ownership of UI, authentication, or secrets to the Python backend, because those are explicitly owned by the Swift process
 
-**Declared/observed facts:**
-- session lifecycle is shell-owned,
-- operator gates, reviews, and merges,
-- review commands and exclusions exist in the product surface:
-  - `/ledger note <text>`
-  - `/review start`
-  - `/review exclude`
-  - file/directory/lens exclusions.
+### Installation and Distribution must never
+- assume responsibility for backend intelligence or repository mutation
+- bypass the shell, because TRD-1 places installation/distribution inside the shell boundary
 
-**Architectural role:**
-- operator-facing control boundary,
-- enables explicit human gating and scope control,
-- constrains autonomous actions within reviewed workflow stages.
+### Identity and Authentication must never
+- be owned by the Python backend, because authentication is shell-owned in TRD-1
+- rely on undocumented secret storage outside shell-controlled mechanisms, because the documents explicitly assign secrets and Keychain storage to the Swift process
 
----
+### Secret Storage / Keychain must never
+- be implemented in the Python backend as a source of truth for application secrets, because the Swift process owns secrets and Keychain storage
+- expose private key material as a backend-owned concern, because the headings explicitly show private key use sourced from Keychain
 
-### 14. Security Governance
-**Source:** AGENTS.md, CLAUDE.md, architecture rules excerpt
+### SwiftUI UI Layer must never
+- become the owner of backend planning/generation logic
+- bypass shell state ownership and shell module boundaries, because TRD-1 explicitly defines shell state ownership and module architecture
 
-Security is defined as a cross-cutting subsystem/governance layer rather than an isolated implementation component.
+### Backend Process Launch and Orchestration must never
+- treat the backend as in-process, because the architecture is explicitly two-process
+- omit authentication material for IPC setup, because backend communication is defined as authenticated
+- collapse into unauthenticated ad hoc local calls, because the docs define a specific authenticated Unix-socket transport
 
-**Declared facts:**
-- **TRD-11 governs all components** for security-relevant changes.
-- It must be consulted for credentials, external content, generated code, or CI.
-- Trust must be asserted and verified explicitly.
-- Identity, policy, telemetry, and enforcement must remain separable but tightly linked.
-- Components default to policy enforcement, not suggestion.
+### Inter-Process Communication Layer must never
+- use an undocumented transport in place of the specified one, because CLAUDE.md specifies an authenticated Unix socket with line-delimited JSON
+- operate without authentication, because the transport is explicitly authenticated
+- be used to execute generated code, because neither process may execute generated code
 
-**Architectural role:**
-- cross-cutting control plane for all sensitive operations,
-- defines admissible behavior around secrets, content, generated artifacts, and automation.
+### Python Backend must never
+- own the UI
+- own authentication
+- own shell-managed secrets
+- execute generated code
 
----
+All four constraints are explicit in the loaded documents.
 
-## Component Boundaries
+### Consensus Engine must never
+- replace the shell as authentication or secret owner
+- operate without document retrieval context where `auto_context()` is required, because TRD-10 states it is called per generation
+- be reduced to a single undocumented provider flow; the README explicitly specifies a two-model consensus engine with Claude and GPT-4o and Claude arbitration
 
-This section captures what each subsystem is explicitly responsible for and, critically, what it must **never** do based on the provided documents.
+### Generation / Self-Correction / Fix Pipeline must never
+- skip the defined gated workflow described in README by treating generation as a single unreviewed step
+- execute generated code, because neither process may do so
 
-### macOS Application Shell
-**Must do:**
-- own UI, authentication, Keychain secrets, installation/update, and orchestration.
+### Document Store and Retrieval Engine must never
+- own shell concerns such as authentication, Keychain, or UI
+- store outside its specified cache root when implementing its persisted index, because TRD-10 defines storage under `~/Library/Application Support/Crafted/cache/{project_id}/`
+- assume explicit unload behavior for indexes, because the loaded notes state no explicit unload and that FAISS indexes are small enough to keep loaded
 
-**Must never do:**
-- own backend intelligence, consensus, generation, or GitHub operations;
-- implicitly delegate shell-owned trust decisions without authenticated handoff;
-- execute generated code.
+### Review Context / Review Support must never
+- ignore document-store dependency when assembling review context, because TRD-10 explicitly says TRD-6 requires the document store
+- exceed the explicit loaded scope by inventing review behaviors not present in the documents
 
----
+### Product Context Auto-Load must never
+- be implemented independently of the document store dependency declared by TRD-10
+- redefine backend retrieval ownership away from the document store
 
-### Swift UI Layer
-**Must do:**
-- render the shell-owned native interface and state.
+### GitHub Operations must never
+- own private secret storage, because secret ownership belongs to the Swift shell
+- bypass authenticated identity/credential flow sourced from shell-managed storage
+- be conflated with local code execution, because the system explicitly does not execute generated code
 
-**Must never do:**
-- store secrets directly outside shell-defined secret management;
-- perform backend intelligence functions;
-- execute generated code.
+### CI Integration must never
+- be treated as optional in the autonomous pipeline description, because README includes CI execution in the flow before draft PR creation
+- redefine shell/backend ownership boundaries; CI is part of the pipeline, not a replacement for process responsibilities
 
----
-
-### Authentication and Identity Subsystem
-**Must do:**
-- enforce biometric gate,
-- manage session lifecycle,
-- persist identity/secrets through approved stores.
-
-**Must never do:**
-- allow unauthenticated elevation into backend operations by assumption;
-- bypass Keychain for secret-class data where Keychain ownership is defined;
-- execute generated code.
-
----
-
-### Secret Storage / Keychain
-**Must do:**
-- remain the shell-owned persistence location for secret material.
-
-**Must never do:**
-- leak secrets into non-secret storage by convenience;
-- transfer credentials without authenticated process linkage;
-- execute generated code.
-
----
-
-### Swift–Python IPC / XPC Bridge
-**Must do:**
-- use authenticated local communication,
-- exchange line-delimited JSON messages,
-- carry progress and orchestration traffic.
-
-**Must never do:**
-- assume process trust without authentication;
-- become the owner of business logic that belongs to shell or backend;
-- execute generated code.
-
----
-
-### Python Backend
-**Must do:**
-- own intelligence, consensus, generation pipeline, document retrieval, and GitHub operations.
-
-**Must never do:**
-- own native UI, biometric auth, or Keychain secret persistence;
-- violate shell ownership of secrets and identity;
-- execute generated code.
-
----
-
-### Consensus Engine
-**Must do:**
-- run two-provider generation in parallel,
-- use Claude + GPT-4o,
-- apply Claude arbitration,
-- consume retrieval context.
-
-**Must never do:**
-- replace the shell as security/secret owner;
-- bypass documented context or pipeline stages when they are required;
-- execute generated code.
-
----
-
-### Generation / Build Pipeline
-**Must do:**
-- transform intent into PRD plan, then typed pull requests,
-- run correction, lint, iterative fix loop, CI, and PR creation.
-
-**Must never do:**
-- collapse into unrestricted chat behavior;
-- skip operator review/gating as described in the product model;
-- execute generated code.
-
----
-
-### Document Store and Retrieval Engine
-**Must do:**
-- ingest documents,
-- persist project-local retrieval data in the declared cache path,
-- provide context to generation/review consumers.
-
-**Must never do:**
-- redefine generation policy or consensus behavior;
-- escape its project-scoped storage boundary;
-- execute generated code.
-
----
-
-### GitHub Operations Subsystem
-**Must do:**
-- interact with GitHub for identity and repository/PR actions.
-
-**Must never do:**
-- become the primary owner of local identity/secrets;
-- bypass review-oriented workflow expectations in the product definition;
-- execute generated code.
-
----
-
-### CI Integration Subsystem
-**Must do:**
-- validate Python and macOS/Swift behavior via named CI jobs.
-
-**Must never do:**
-- substitute for local policy/security controls;
-- execute generated code beyond normal test/validation scope as defined by the repository;
-- bypass the broader pipeline ordering defined in product flow.
-
----
-
-### Distribution and Update Subsystem
-**Must do:**
-- package and update the app as a native macOS application.
-
-**Must never do:**
-- own runtime intelligence logic,
-- bypass platform signing/distribution expectations implied by Developer ID and Sparkle usage,
-- execute generated code.
-
----
-
-### Session and Operator Control Surface
-**Must do:**
-- preserve operator gating, review, merge, and exclusion controls.
-
-**Must never do:**
-- remove explicit operator control from reviewed workflow stages;
-- infer approval from silence;
-- execute generated code.
-
----
-
-### Security Governance
-**Must do:**
-- apply TRD-11 across credentials, external content, generated code, and CI-touching behavior,
-- require explicit trust assertion and verification.
-
-**Must never do:**
-- allow implicit trust where explicit verification is possible;
-- collapse identity, policy, telemetry, and enforcement into an unobservable control path.
-
----
+### Security Governance must never
+- be inferred informally where the governing TRD exists
+- be separated from component implementation decisions in security-relevant areas, because AGENTS.md states TRD-11 governs all components
 
 ## Key Data Flows
 
-## 1. App startup and subsystem orchestration
-1. The native macOS shell launches as the `.app` bundle.
-2. The shell owns installation/runtime environment concerns.
-3. The shell starts and orchestrates the Python backend.
-4. Communication is established over an **authenticated Unix socket** using **line-delimited JSON**.
-5. The shell and backend exchange orchestration and progress messages.
+## 1. Operator intent to autonomous build flow
+**Sources:** README, AGENTS.md, CLAUDE.md
 
-**Boundary owners:**
-- shell owns process lifecycle and local trust establishment,
-- backend owns automation logic after successful authenticated connection.
-
----
-
-## 2. Authentication and session establishment
-1. The operator interacts with the native shell.
-2. The shell performs biometric gate and manages session lifecycle.
-3. Secret material is stored in Keychain.
-4. Identity attributes are persisted/fetched through the documented stores and external GitHub identity lookup where applicable.
-5. Authenticated state enables access to downstream automation flows.
-
-**Boundary owners:**
-- shell owns auth/session/secrets,
-- GitHub may provide identity data,
-- backend consumes but does not own these primitives.
-
----
-
-## 3. Intent-to-PR automation flow
-1. The operator supplies repository, TRDs, and intent.
+1. The operator provides:
+   - a repository
+   - TRDs / specifications
+   - a plain-language intent
 2. The backend assesses confidence in scope.
 3. The backend decomposes intent into an ordered PRD plan.
 4. The backend decomposes each PRD into typed pull requests.
-5. The backend generates implementation and tests using two providers in parallel.
-6. Claude arbitrates every result.
-7. The pipeline applies self-correction, lint, iterative fix loop, and CI.
-8. The system opens a draft PR for review.
-9. The operator gates, reviews, and merges.
-10. The agent proceeds to the next PR.
+5. The backend performs implementation/test generation using two LLM providers in parallel.
+6. The consensus layer arbitrates results, with Claude arbitrating every result per README.
+7. The pipeline performs:
+   - self-correction
+   - lint gate
+   - iterative fix loop
+   - CI execution
+8. The system opens a draft GitHub pull request for operator review.
 
-**Boundary owners:**
-- shell owns operator interaction and gating surface,
-- backend owns decomposition/generation/pipeline/GitHub execution.
-
----
-
-## 4. Retrieval-augmented generation flow
-1. Project documents are ingested into the Document Store.
-2. The store persists retrieval artifacts under `~/Library/Application Support/Crafted/cache/{project_id}/`.
-3. On generation, `auto_context()` is invoked per TRD-10.
-4. Retrieval context is supplied to consensus/generation consumers.
-5. Review and product-context consumers also use retrieval outputs where specified.
-
-**Boundary owners:**
-- document store owns ingestion/index/cache,
-- consensus/pipeline own use of retrieved context.
+This is the primary product flow defined in the README.
 
 ---
 
-## 5. GitHub content and PR flow
-1. The backend interacts with GitHub for repository/user operations.
-2. On first auth, GitHub `/user` can provide `github_username`.
-3. Repository content may be fetched with content and SHA metadata.
-4. PR artifacts are pushed as draft pull requests for operator review.
+## 2. Shell-to-backend bootstrap and communication flow
+**Sources:** CLAUDE.md, repository headings
 
-**Boundary owners:**
-- shell owns local secret material,
-- backend owns GitHub API workflow,
-- operator remains approval authority.
+1. The Swift shell launches the Python backend process.
+2. Bootstrap includes transport setup using:
+   - Unix socket path
+   - authentication material, including a nonce as referenced in headings
+3. Shell and backend communicate over an **authenticated Unix socket**.
+4. Messages are encoded as **line-delimited JSON**.
+5. Progress/status can be surfaced through shell-side bridge/orchestration mechanisms; TRD-10 explicitly references **XPC progress messages**.
+6. If the connection remains open, errors can be sent via XPC, as reflected in repository headings.
+
+This flow is central to process separation.
+
+---
+
+## 3. Authentication and credential flow
+**Sources:** TRD-1, AGENTS.md, CLAUDE.md, repository headings
+
+1. The shell performs authentication and session lifecycle management.
+2. The shell stores secrets in Keychain.
+3. Identity fields are persisted using the storage called out in headings:
+   - `display_name` in `UserDefaults`
+   - `engineer_id` in Keychain
+4. GitHub username is obtained from GitHub `/user` on first auth.
+5. Backend GitHub operations consume credentials that originate from shell-owned secret storage.
+6. Repository headings indicate GitHub App JWT generation uses a private key from Keychain.
+
+The loaded documents therefore define a one-way trust relationship: credentials originate in shell-controlled secure storage and are used to enable backend operations.
+
+---
+
+## 4. Document ingestion and retrieval flow
+**Sources:** TRD-10
+
+1. A project is created.
+2. An empty retrieval index is created at:
+   - `~/Library/Application Support/Crafted/cache/{project_id}/`
+3. Documents are ingested into the document store.
+4. Retrieval functions provide contextual material to backend consumers.
+5. `auto_context()` is called per generation by the consensus engine.
+6. `doc_filter` is consumed in Stage 1/5 by TRD-3.
+7. Review context (TRD-6) and `PRODUCT_CONTEXT` auto-load (TRD-7) also consume this retrieval layer.
+8. FAISS indexes remain loaded; the loaded notes explicitly say there is no explicit unload.
+
+This makes the document store the shared retrieval substrate for multiple backend workflows.
+
+---
+
+## 5. GitHub mutation flow
+**Sources:** README, repository headings
+
+1. The system prepares repository changes as part of typed pull request execution.
+2. GitHub file content may be read first to obtain content and SHA.
+3. The backend uses authenticated GitHub operations.
+4. Draft pull requests are opened for operator review.
+5. The operator gates, reviews, and merges.
+6. The agent proceeds to the next PR while the previous one is being reviewed, per README.
+
+Only the above can be asserted from the provided material.
 
 ---
 
 ## 6. CI validation flow
-1. Generated or updated code enters the validation phase.
-2. CI jobs run across Python and macOS/Swift surfaces.
-3. CI results gate progress toward PR readiness.
+**Sources:** README, repository headings
 
-**Observed CI surfaces:**
-- Python test job,
-- macOS unit test job,
-- macOS XPC integration test job.
-
-**Boundary owners:**
-- pipeline owns invocation/order,
-- CI owns validation outcome,
-- operator owns final merge decision.
-
----
+1. Generated changes enter the pipeline validation path.
+2. CI is executed before draft PR publication.
+3. The repository includes referenced CI jobs for:
+   - Python tests
+   - macOS unit tests
+   - macOS XPC integration tests
+4. CI results are part of the gated progression toward draft PR creation.
 
 ## Critical Invariants
 
-## 1. Two-process separation is mandatory
-The architecture is explicitly two-process:
+These are architecture-level invariants directly supported by the loaded documents.
+
+### 1. Crafted is always a two-process system
+The architecture is explicitly defined as:
+
 - **Swift shell**
 - **Python backend**
 
-Responsibilities are partitioned accordingly and must not be merged implicitly.
+This separation is not optional.
 
----
+### 2. Process responsibilities are fixed by ownership
+The **Swift process** owns:
 
-## 2. Secret ownership remains in the Swift shell
-The shell owns:
-- authentication,
-- Keychain,
-- secret storage,
-- session lifecycle.
+- UI
+- authentication
+- Keychain / secrets
+- orchestration / XPC-related shell responsibilities
 
-The backend may consume authenticated capabilities but does not become the system of record for secrets.
+The **Python process** owns:
 
----
+- intelligence
+- generation
+- consensus
+- pipeline
+- GitHub operations
 
-## 3. Local inter-process trust must be authenticated
-Communication between shell and backend is not a raw convenience channel. It is explicitly:
-- over an **authenticated Unix socket**,
-- using **line-delimited JSON**.
+No component may violate these ownership assignments.
 
-Trust must be asserted and verified explicitly.
+### 3. IPC is authenticated and uses a specific message format
+The shell/backend channel must be:
 
----
+- an **authenticated Unix socket**
+- using **line-delimited JSON**
 
-## 4. Generated code is never executed by the product
-The repository docs are explicit: **neither process ever executes generated code**.
+This is a hard architectural contract stated in CLAUDE.md.
 
-This is a system-wide invariant applying to shell, backend, and all supporting subsystems.
+### 4. Generated code is never executed
+The repository guidance explicitly states:
 
----
+- neither process ever executes generated code
 
-## 5. Crafted is a directed build agent, not a chat product
-The product’s architectural purpose is constrained:
-- repository + TRDs + intent in,
-- reviewed pull requests out.
+This is one of the strongest system-wide invariants.
 
-The system must preserve the staged planning/build/review pipeline and not degrade into unrestricted conversational tooling behavior.
+### 5. The shell is the sole owner of authentication and secrets
+Authentication, biometric gate, session lifecycle, and Keychain secret storage all belong to the shell per TRD-1 and repository guidance.
 
----
+### 6. The Python backend is the sole owner of intelligence and repository automation
+Consensus, generation, pipeline behavior, and GitHub operations are backend-owned according to AGENTS.md and CLAUDE.md.
 
-## 6. Consensus is multi-provider and Claude-arbitrated
-The generation architecture uses:
-- **Claude**
-- **GPT-4o**
-in parallel, with
-- **Claude arbitrating every result**.
+### 7. Document retrieval is a shared backend dependency, not an optional utility
+TRD-10 makes the Document Store and Retrieval Engine required by multiple subsystems:
 
-Any implementation of consensus must preserve that explicit control structure.
+- consensus generation context
+- pipeline doc filtering
+- review context
+- product context auto-load
 
----
+Therefore retrieval is a core backend dependency.
 
-## 7. Retrieval is project-scoped and cache-backed
-Document retrieval state is stored under:
+### 8. Document store persistence is project-scoped and path-constrained
+TRD-10 fixes the cache location to:
 
 `~/Library/Application Support/Crafted/cache/{project_id}/`
 
-This establishes a project-scoped persistence boundary for document indexing and retrieval artifacts.
+Project indexing is therefore persistent and project-scoped.
 
----
+### 9. The shell is foundational for dependent TRDs
+TRD-1 is foundational and explicitly required by multiple later TRDs. Shell contracts therefore anchor downstream subsystem behavior.
 
-## 8. Operator review and merge remain explicit
-The product flow requires:
-- draft PR creation,
-- operator review,
-- operator gating,
-- operator merge.
+### 10. Security requirements are centrally governed
+AGENTS.md states that **TRD-11 governs all components**. Even where detailed controls are not quoted in the loaded excerpts, the architecture must treat security requirements as centralized and mandatory.
 
-Autonomous production of changes does not remove human approval from the described workflow.
+### 11. CI is part of the build pipeline before PR creation
+The README includes CI execution in the autonomous workflow before the draft pull request is opened. This makes validation part of the architecture, not a post-hoc add-on.
 
----
+### 12. Operator review remains part of the system boundary
+The README explicitly states:
 
-## 9. TRDs are the source of truth
-The documents state that the codebase is specified completely in **16 TRDs** and that code must match them.
+- the agent opens draft PRs
+- the operator gates, reviews, and merges
 
-Architecture, interfaces, error contracts, state machines, security controls, and performance behavior must therefore remain subordinate to TRD definitions.
-
----
-
-## 10. TRD-11 governs all security-relevant behavior
-Any change involving:
-- credentials,
-- external content,
-- generated code,
-- CI
-
-must remain consistent with **TRD-11**. Security is not optional or advisory in this system.
-
----
-
-## 11. Identity, policy, telemetry, and enforcement must remain separable but linked
-From the provided architecture rules:
-- trust must not be inferred implicitly where it can be verified,
-- identity, policy, telemetry, and enforcement remain separable but tightly linked,
-- decisions must be explainable, observable, and reproducible,
-- enforcement defaults over suggestion.
-
-These rules function as architecture-wide invariants across all subsystems.
-
----
-
-## 12. Native macOS packaging and runtime are first-class architecture constraints
-Crafted is specified as a **native macOS** application with:
-- Swift/SwiftUI shell,
-- macOS 13.0+ minimum,
-- bundled Python 3.12,
-- `.app` distribution,
-- Sparkle auto-update.
-
-These are not incidental implementation choices; they are part of the architectural contract.
+Therefore autonomy is bounded by human review and merge approval.
