@@ -1,0 +1,163 @@
+{
+  "build_id": "forgeagent-4408bb65",
+  "subsystem": "ForgeAgent",
+  "intent": "We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture.",
+  "scope_statement": "Build the complete Crafted Dev Agent \u2014 a native macOS two-process AI coding agent consisting of a Swift/SwiftUI shell (UI, Touch ID auth, Keychain, XPC channel, process management) and a Python 3.12 backend (consensus engine with Claude+GPT-4o parallel generation, build pipeline with confidence-gated scope through operator-gated PR merge, GitHub integration, document store with FAISS vector retrieval, multi-agent coordination ledger, holistic code review, TRD development workflow with FOUNDER/ENGINEER/CONSULTANT modes, self-healing observability loop, cross-run learning via BuildMemory and BuildRules, and Mac CI runner infrastructure). The system is fully specified across 16 TRDs plus supporting documents, with five identified gaps (TRD-18 Crafted Connect SDK, deployment pipeline, Figma MCP integration, EmailNotifier contract, and WebhookReceiver details) to be resolved during PRD decomposition as the operator has directed.\n\nClarifications:\n  - resolve as part of the PRD process with best practices\n  - resolve as part of the PRD process with best practices\n  - resolve as part of the PRD process with best practices\n  - resolve as part of the PRD process with best practices\n  - resolve as part of the PRD process with best practices\n\nOperator on 'The 16 TRDs specify a large system \u2014 should the PRD decompos':\nbuild the PRDs in the order that allows for maximum code efficiency\n\nOperator on 'TRD-17 (Self-Healing) references runtime telemetry and healt':\nincluded in the build\n\nOperator on 'TRD-7 v2.0 CONSULTANT mode (\u00a721) includes client summary .do':\nincluded in the build\n\nOperator on 'TRD-8 v3.0 Health Dashboard and Figma pipeline UI are signif':\ninclude them in the build",
+  "created_at": 1774368479.8516521,
+  "updated_at": 1774368479.851746,
+  "updated_by": "todd-gould",
+  "prd_plan": [
+    {
+      "prd_id": "PRD-001",
+      "title": "Platform Foundations, Canonical Contracts, and Gap Resolution",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-002",
+      "title": "Security Architecture and Safety Enforcement Layer",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-003",
+      "title": "Backend Runtime, Startup Handshake, XPC Server, and Command Routing",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-004",
+      "title": "Recovery, Thread State, Checkpointing, and Cross-Run Learning",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-005",
+      "title": "Document Store, Parsing, Embeddings, Retrieval, and Context Safety",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-006",
+      "title": "GitHub Integration Core, Webhooks, CI Polling, and Repository Bootstrap",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-007",
+      "title": "Consensus Engine and Provider Orchestration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-008",
+      "title": "Build Pipeline Orchestrator, Scope Gate, PR Planning, and Execution Routing",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-009",
+      "title": "Code Quality Engine: Self-Correction, Lint Gate, and Fix Loop",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-010",
+      "title": "Multi-Agent Coordination Ledger and Collaboration Surfaces",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-011",
+      "title": "Holistic Code Review Workflow and Fix PR Automation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-012",
+      "title": "TRD Development Workflow with FOUNDER, ENGINEER, and CONSULTANT Modes",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-013",
+      "title": "Swift Shell Core: App Structure, Auth, Keychain, and Process Management",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-014",
+      "title": "Swift-Python XPC Bridge and Shell-Backend Event Integration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-015",
+      "title": "SwiftUI Product UX: Build Stream, TRD UX, Health Dashboard, and Remediation Views",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-016",
+      "title": "Document Import, Sketch Input, Figma Integration, and Figma MCP Pipeline",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-017",
+      "title": "Crafted Connect SDK, Target Registry, Runtime Telemetry, and In-App Health Reporting",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-018",
+      "title": "Self-Healing Observability, Detection, Diagnosis, Remediation, and Learning Loop",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-019",
+      "title": "Notifications, EmailNotifier, Operator Alerts, and Native macOS Attention Surfaces",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-020",
+      "title": "Mac CI Runner, Swift Validation Pipeline, Signing, Notarization, and Release Deployment",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-021",
+      "title": "Comprehensive Testing, Regression Enforcement, and Release Validation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    }
+  ],
+  "pr_entries": {},
+  "knowledge_notes": [],
+  "version": 1,
+  "schema_version": 3,
+  "agent_version": "38.188.0"
+}
