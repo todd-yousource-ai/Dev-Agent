@@ -1,143 +1,118 @@
-## Two-process native macOS architecture
-**Status:** Accepted  
-**Context:** The product is defined as a native macOS AI coding agent with distinct responsibilities across UI/platform concerns and AI/generation concerns. The repository guidance and product description state that Swift owns UI, authentication, secrets, and local orchestration, while Python owns intelligence, generation, consensus, and GitHub operations.  
-**Decision:** The system is split into two processes: a native Swift/SwiftUI macOS shell and a Python 3.12 backend. The Swift shell is the platform host for packaging, installation, authentication, Keychain access, and orchestration. The Python backend implements consensus, generation pipelines, self-correction, lint/fix loops, CI coordination, and GitHub pull request operations.  
-**Consequences:** Clear trust and responsibility boundaries are enforced between platform/security functions and model/backend functions. Cross-process interfaces must be explicitly specified and authenticated. Features must be assigned to one side of the boundary rather than duplicated.  
-**Rejected alternatives:**  
-- **Single-process application:** Rejected because the product specification explicitly separates platform/security ownership from intelligence/backend ownership.  
-- **Web or Electron-style shell:** Rejected because the product is specified as a native macOS application shell in Swift/SwiftUI.
+# DECISIONS.md
 
-## Swift shell owns UI, identity, and secrets
+## Repository documentation is the source of truth
 **Status:** Accepted  
-**Context:** TRD and repository guidance assign platform-native concerns to the Swift shell, especially user interface, authentication, session handling, and secret storage.  
-**Decision:** All UI rendering, SwiftUI views, local authentication, biometric gating, Keychain secret storage, and shell-side orchestration are implemented in the Swift process. The shell is the only component that directly manages end-user identity and platform secrets.  
-**Consequences:** Sensitive material remains under native macOS security primitives. Backend features requiring credentials must obtain them through defined shell-mediated interfaces rather than direct secret storage.  
+**Context:** The repository structure explicitly defines `forge-docs/` as the location where all TRDs and PRDs live and states they must be read before building. The ForgeAgent subsystem operates from requirements that are document-driven, and implementation must remain aligned with those artifacts.  
+**Decision:** Treat documents in `forge-docs/` as the authoritative source of product and technical requirements before implementing or modifying ForgeAgent behavior.  
+**Consequences:** Implementation decisions must trace back to TRDs/PRDs. Code changes that conflict with documented requirements are invalid unless the documents are updated first. Agent workflows should prefer document-derived constraints over ad hoc code conventions when conflicts arise.  
 **Rejected alternatives:**  
-- **Python backend managing credentials directly:** Rejected because shell ownership of authentication and Keychain is explicitly specified.  
-- **Shared responsibility for secrets between processes:** Rejected because it weakens trust boundaries and conflicts with the documented ownership model.
+- Treating code as the primary source of truth was rejected because the repository explicitly places requirements in `forge-docs/` and expects builders to read them first.  
+- Allowing undocumented behavior to evolve in implementation was rejected because it creates divergence between the agent and its governing specifications.
 
-## Python backend owns intelligence, consensus, and GitHub operations
+## ForgeAgent must preserve the defined repository boundary
 **Status:** Accepted  
-**Context:** Product and repository documents consistently assign AI reasoning, implementation generation, model coordination, and repository automation to Python.  
-**Decision:** The Python backend is the sole owner of consensus logic, provider coordination, planning/generation pipelines, self-correction, lint/fix loops, CI-related backend logic, and GitHub pull request creation/update behavior.  
-**Consequences:** Backend code is the implementation locus for autonomous development workflows. Shell code should not duplicate planning or generation logic. Cross-process communication must be sufficient to expose backend state to the shell UI.  
+**Context:** The repository layout assigns clear responsibilities to top-level directories: `forge-docs/` for requirements, `forge-standards/` for architecture and conventions, `src/` for Python backend implementation, `Crafted/` and `CraftedTests/` for Swift app code, and `tests/` for Python tests. ForgeAgent must operate within this structure predictably.  
+**Decision:** Enforce the existing repository layout and place ForgeAgent implementation work only in the designated locations for each concern.  
+**Consequences:** Backend agent logic belongs in `src/`, Python validation in `tests/`, and standards updates in `forge-standards/`. The subsystem must not create parallel structures for equivalent concerns. Tooling and prompts should reference these canonical locations.  
 **Rejected alternatives:**  
-- **Embedding model orchestration in Swift:** Rejected because backend intelligence is explicitly assigned to Python.  
-- **Moving GitHub operations into the shell:** Rejected because repository automation belongs to the backend in the documented architecture.
+- Creating a dedicated top-level `agents/` tree was rejected because it duplicates responsibilities already assigned to `src/` and `forge-standards/`.  
+- Allowing free-form file placement was rejected because it weakens traceability and increases maintenance cost.
 
-## Authenticated Unix socket with line-delimited JSON IPC
+## Critical files require heightened change discipline
 **Status:** Accepted  
-**Context:** The system requires a defined communication mechanism between the Swift shell and Python backend. Repository guidance specifies both the transport and message framing.  
-**Decision:** Inter-process communication uses an authenticated Unix domain socket with line-delimited JSON messages. All cross-process requests and responses must conform to this IPC model.  
-**Consequences:** Interface contracts must be serializable as JSON and framed one message per line. Authentication of the local channel is mandatory. Alternative transport layers are out of scope unless the TRDs are updated.  
+**Context:** Several files are identified as critical before modification: `src/consensus.py`, `src/build_director.py`, `src/github_tools.py`, `src/path_security.py`, and `src/ci_workflow.py`. These files define core loop behavior, orchestration, GitHub I/O, security boundaries, and CI generation.  
+**Decision:** Treat the enumerated critical files as protected architectural surfaces and require changes to them to preserve their documented responsibilities exactly.  
+**Consequences:** Modifications in these files must be minimal, intentional, and validated against subsystem-wide effects. Refactors that move or dilute these responsibilities are constrained. New functionality should prefer extension around these files rather than responsibility drift into unrelated modules.  
 **Rejected alternatives:**  
-- **XPC-only communication:** Rejected because the repository guidance explicitly specifies an authenticated Unix socket with line-delimited JSON.  
-- **HTTP/gRPC over localhost:** Rejected because it is not the documented IPC mechanism.
+- Treating all source files as equally mutable was rejected because the repository explicitly identifies these files as system-critical.  
+- Redistributing the responsibilities of critical files across many modules was rejected because it obscures review boundaries and weakens operational guarantees.
 
-## Generated code is never executed by either process
+## Path validation is a mandatory security boundary for all writes
 **Status:** Accepted  
-**Context:** Security guidance in the repository instructions explicitly states that neither process ever executes generated code. This is a foundational safety boundary for the product.  
-**Decision:** The shell and backend must not execute generated code as part of generation, validation, or review workflows. The agent may generate code, tests, patches, PRs, and CI-triggering changes, but neither local process directly runs generated artifacts.  
-**Consequences:** Validation strategies must rely on permitted mechanisms documented in the TRDs rather than direct execution of generated outputs by the agent processes. Any feature proposal requiring execution of generated code is non-compliant unless the TRDs change.  
+**Context:** `src/path_security.py` is declared the security boundary, and every write path must pass through it. ForgeAgent performs repository mutations and therefore must not bypass path enforcement.  
+**Decision:** Route every filesystem write performed by ForgeAgent through the path security layer without exception.  
+**Consequences:** Any write helper, generation stage, GitHub integration, or repair loop that creates or modifies files must depend on validated paths. Direct writes that bypass `src/path_security.py` are prohibited. This constrains utility design and test setup to model the same enforcement path.  
 **Rejected alternatives:**  
-- **Sandboxed local execution of generated code:** Rejected because the repository guidance states neither process ever executes generated code.  
-- **Selective execution for tests only:** Rejected for the same reason; no exception is specified in the provided documents.
+- Allowing trusted internal modules to write directly was rejected because it creates bypasses in the primary security boundary.  
+- Validating only user-supplied paths was rejected because generated and transformed paths can also become unsafe.
 
-## TRDs are the sole source of truth for design and implementation
+## GitHub interactions must be centralized in github_tools
 **Status:** Accepted  
-**Context:** Multiple repository documents state that the 16 TRDs in `forge-docs/` completely specify the system and that code must match them.  
-**Decision:** All significant behavior, interfaces, state machines, error contracts, security controls, testing expectations, and subsystem boundaries are derived from the TRDs. In implementation and design disputes, the relevant TRD governs.  
-**Consequences:** Engineers and agents must consult the owning TRD before changing a subsystem. Unspecified behavior should not be invented. Design changes require TRD updates, not ad hoc implementation drift.  
+**Context:** `src/github_tools.py` is defined as the location for all GitHub I/O, including path validation, rate limiting, and SHA protocol handling. ForgeAgent relies on GitHub operations during PR construction and repository mutation.  
+**Decision:** Centralize all GitHub API and repository I/O for ForgeAgent in `src/github_tools.py` and require consumers to use that interface rather than ad hoc clients.  
+**Consequences:** Rate limiting, SHA handling, and validation remain consistent across the subsystem. New GitHub features must extend the shared integration surface instead of instantiating alternate clients. Testing can mock a single boundary.  
 **Rejected alternatives:**  
-- **README or agent instruction files as primary specs:** Rejected because they direct implementers back to the TRDs rather than replacing them.  
-- **Code-as-specification:** Rejected because the repository explicitly requires code to match the TRDs.
+- Letting each workflow stage use its own GitHub client was rejected because it would duplicate protocol logic and increase inconsistency.  
+- Performing raw HTTP calls from orchestration code was rejected because it bypasses required validation and rate-limit controls.
 
-## TRD-11 is the governing security authority across all components
+## The core generation loop remains centralized in consensus.py
 **Status:** Accepted  
-**Context:** Repository guidance identifies TRD-11 as governing all security-relevant work, especially credentials, external content, generated code, and CI.  
-**Decision:** Security-sensitive design and implementation decisions across shell, backend, CI-related workflows, and content handling must conform to TRD-11. Any component touching credentials, untrusted/external content, generated artifacts, or CI must be reviewed against TRD-11 requirements.  
-**Consequences:** Security review is centralized under a single governing TRD. Subsystem-specific documents do not override TRD-11 on security matters. Security-impacting changes require explicit alignment with that document.  
+**Context:** `src/consensus.py` is identified as the core generation loop, and changes there affect every PR the agent builds. ForgeAgent’s behavior depends on a stable central mechanism for generation and convergence.  
+**Decision:** Keep the primary generation and consensus loop centralized in `src/consensus.py` and treat it as the single control point for PR-wide generation behavior.  
+**Consequences:** Cross-cutting generation policy belongs in this module, not scattered among stage-specific helpers. Feature work that changes how the agent generates code must integrate through the consensus layer. Regressions here are considered subsystem-wide risks.  
 **Rejected alternatives:**  
-- **Per-subsystem security models only:** Rejected because the repository defines a cross-cutting governing security TRD.  
-- **Best-effort security interpretation without TRD-11 reference:** Rejected because the guidance explicitly mandates consulting TRD-11.
+- Splitting generation logic across independent stage modules was rejected because it would fragment policy and make PR behavior harder to reason about.  
+- Embedding generation decisions directly in UI, CI, or GitHub adapters was rejected because those layers are not the proper control point.
 
-## Native macOS application shell as the primary product container
+## Pipeline orchestration must remain in build_director with strict complexity limits
 **Status:** Accepted  
-**Context:** TRD-1 defines the shell as the native Swift/SwiftUI container that packages, installs, authenticates, and orchestrates all subsystems, with macOS 13.0+ as the minimum supported platform.  
-**Decision:** The product is delivered as a native macOS `.app` built with Swift 5.9+ and SwiftUI, targeting macOS 13.0 Ventura or newer, and bundling Python 3.12 for the backend.  
-**Consequences:** Platform support, packaging, and UI technology choices are fixed. Cross-platform desktop targets are out of scope. Backend runtime distribution must work within the app-bundled macOS application model.  
+**Context:** `src/build_director.py` owns pipeline orchestration, and the repository states that every stage has a maximum cyclomatic complexity of 15, with the complexity 15 limit strictly enforced for this file. ForgeAgent coordinates multi-stage work and must do so within maintainable control-flow bounds.  
+**Decision:** Implement and preserve pipeline orchestration in `src/build_director.py`, and keep every stage implementation at cyclomatic complexity 15 or below.  
+**Consequences:** Complex branching must be decomposed into helpers or state-driven handlers rather than accumulated in monolithic methods. Review of orchestration changes must include complexity checks. The subsystem is constrained toward explicit, composable stage logic.  
 **Rejected alternatives:**  
-- **Cross-platform desktop distribution:** Rejected because the product is specified as a native macOS application shell.  
-- **System-installed Python dependency:** Rejected in favor of bundled Python 3.12 as stated in TRD-1.
+- Allowing orchestration complexity to grow beyond 15 for convenience was rejected because the repository explicitly forbids it.  
+- Moving orchestration into a large implicit workflow engine was rejected because it would reduce transparency and complicate checkpoint semantics.
 
-## The shell is responsible for installation, distribution, and auto-update
+## The build pipeline stages are fixed and must be implemented explicitly
 **Status:** Accepted  
-**Context:** TRD-1 explicitly assigns installation and distribution responsibilities to the shell, including `.app` bundling, drag-to-Applications installation, and Sparkle auto-update.  
-**Decision:** Distribution is implemented through a macOS application bundle with standard drag-to-Applications installation semantics, and the shell integrates Sparkle for automatic updates.  
-**Consequences:** Release engineering and update behavior must align with the macOS app bundle model and Sparkle integration. Alternative installers and update frameworks are not the default path.  
+**Context:** The build pipeline is defined in the README with explicit stages, including syntax and lint checks, import checks, a failure-type-aware fix loop with up to 20 pytest attempts, CI generation, and an operator gate before merge. ForgeAgent is the subsystem responsible for carrying out this flow.  
+**Decision:** Implement ForgeAgent workflows as explicit ordered pipeline stages matching the documented build pipeline, including the fix loop, CI stage, and final operator gate.  
+**Consequences:** Stage boundaries must remain visible in code and state. The agent may optimize within a stage but must not collapse or skip documented stages. Retry logic is constrained to the documented fix loop semantics, including the 20-attempt maximum for pytest repair.  
 **Rejected alternatives:**  
-- **Custom installer package as primary distribution method:** Rejected because TRD-1 specifies `.app` bundle distribution and drag-to-Applications install.  
-- **Manual update-only workflow:** Rejected because Sparkle auto-update is part of shell ownership in TRD-1.
+- Using an unconstrained agentic loop without explicit stages was rejected because it conflicts with the documented pipeline contract.  
+- Skipping intermediate verification stages to reduce latency was rejected because correctness and auditability take precedence.
 
-## Biometric gate and Keychain-backed secret storage
+## Failure repair must be failure-type-aware and capped
 **Status:** Accepted  
-**Context:** TRD-1 assigns identity and authentication responsibilities to the shell, specifically including biometric gating, Keychain secret storage, and session lifecycle management.  
-**Decision:** User authentication and secret persistence are implemented using macOS-native biometric access controls and Keychain storage, managed by the Swift shell as part of session lifecycle handling.  
-**Consequences:** Secret handling is coupled to platform-native security APIs. Credentials and session state must flow through shell-controlled mechanisms. Backend access to secrets must remain mediated.  
+**Context:** The build pipeline specifies a fix loop that is failure-type-aware and runs pytest with up to 20 attempts. The repository also includes `FAILURE_TAXONOMY.md`, indicating standardized failure categorization.  
+**Decision:** Drive ForgeAgent repair behavior using explicit failure categorization and cap automated pytest repair attempts at 20.  
+**Consequences:** Repair logic must classify failures before selecting a remediation strategy. Infinite or open-ended retry loops are prohibited. Integrations should align with the repository’s failure taxonomy rather than inventing incompatible ad hoc categories.  
 **Rejected alternatives:**  
-- **Filesystem-based encrypted secret storage:** Rejected because Keychain ownership is explicitly specified.  
-- **Password-only local gate without biometrics:** Rejected because the shell’s identity model explicitly includes a biometric gate.
+- Retrying blindly until success was rejected because it wastes resources and obscures root cause.  
+- Using a single generic fix strategy for all failures was rejected because the documented pipeline requires failure-type-aware handling.
 
-## Shell-centered orchestration of subsystems
+## State transitions must be checkpointed exhaustively
 **Status:** Accepted  
-**Context:** TRD-1 describes the shell as the container that orchestrates all subsystems, while the product architecture separates subsystem implementation responsibilities.  
-**Decision:** The Swift shell acts as the top-level orchestrator for application lifecycle, process startup, authentication gating, secure backend connectivity, and presentation of backend-driven workflow state to the user.  
-**Consequences:** Application lifecycle control remains centralized in the shell. Backend services are subordinate to shell-managed startup and connection policies. UI-visible state transitions must be coordinated through shell orchestration.  
+**Context:** The README states that every state transition is checkpointed, including per-PR stages such as `branch_opened → code_generated → tests_passed → committed → ci_passed`. Gate decisions are also expected to be persisted.  
+**Decision:** Persist a checkpoint for every ForgeAgent state transition and for every gate decision, including the documented per-PR lifecycle states.  
+**Consequences:** The subsystem must expose durable state progression suitable for recovery, audit, and operator inspection. Transitions cannot be implicit or in-memory only. Workflow code must emit checkpoints as part of state mutation rather than as best-effort logging.  
 **Rejected alternatives:**  
-- **Backend-led application lifecycle:** Rejected because orchestration ownership is assigned to the shell.  
-- **Peer processes with no primary orchestrator:** Rejected because TRD-1 defines the shell as the native container coordinating subsystems.
+- Checkpointing only major milestones was rejected because the requirement is to checkpoint every transition.  
+- Relying on logs instead of structured checkpoints was rejected because logs are insufficient for deterministic recovery and lifecycle tracking.
 
-## Autonomous workflow is PR-oriented rather than chat-oriented
+## Operator approval is mandatory before merge
 **Status:** Accepted  
-**Context:** The README explicitly states the product is not a chat interface or code autocomplete tool, but a directed build agent that turns specifications and intent into ordered pull requests.  
-**Decision:** The product experience and backend workflow are centered on specification-driven planning and creation of typed GitHub pull requests, not conversational assistance or inline completion.  
-**Consequences:** UX and system design should optimize for plan execution, confidence assessment, decomposition, review gating, and PR delivery. Chat-centric interaction models are out of scope unless separately specified.  
+**Context:** The build pipeline includes a final gate where the operator approves or corrects before merge. ForgeAgent can automate generation and validation, but merge authority remains gated by a human decision point.  
+**Decision:** Require an explicit operator approval or correction step before any ForgeAgent-produced change is considered merge-ready.  
+**Consequences:** Full end-to-end autonomous merge is out of scope for this subsystem. Workflow completion must distinguish between “technically ready” and “approved for merge.” UI and backend state models must support pending-approval and correction flows.  
 **Rejected alternatives:**  
-- **General-purpose chat assistant UX:** Rejected because the README explicitly says the product is not a chat interface.  
-- **IDE autocomplete/copilot workflow:** Rejected because the README explicitly says it is not code autocomplete.
+- Automatically merging after CI success was rejected because it violates the documented operator gate.  
+- Making operator review optional was rejected because the gate is part of the required pipeline.
 
-## Intent is decomposed into ordered PRD plans and typed pull requests
+## CI workflow generation must target the documented runners
 **Status:** Accepted  
-**Context:** The product description defines a staged autonomous workflow: assess confidence, decompose intent into an ordered PRD plan, then decompose each PRD into a sequence of typed pull requests.  
-**Decision:** Work execution follows a hierarchical decomposition model from user intent to PRD plan to a sequence of typed pull requests representing logical units of implementation.  
-**Consequences:** Planning and execution components must preserve ordering and logical-unit boundaries. Delivery is incremental and reviewable at PR granularity rather than monolithic changesets.  
+**Context:** The pipeline documentation specifies `crafted-ci.yml` on `ubuntu-latest` and `crafted-ci-macos.yml` for Swift. `src/ci_workflow.py` is the generator for these workflows. ForgeAgent must emit CI consistent with platform responsibilities.  
+**Decision:** Generate CI workflows through `src/ci_workflow.py` using `crafted-ci.yml` on `ubuntu-latest` for general pipeline execution and `crafted-ci-macos.yml` for Swift-related execution.  
+**Consequences:** CI generation logic must preserve this split between Linux and macOS responsibilities. ForgeAgent must not emit a single undifferentiated workflow that ignores Swift platform needs. Changes to runner targeting require an architectural decision, not a local implementation shortcut.  
 **Rejected alternatives:**  
-- **Single-shot repository-wide implementation:** Rejected because the documented workflow is staged and PR-oriented.  
-- **Unstructured task list execution:** Rejected because the product specifies ordered PRD planning and typed PR decomposition.
+- Running all CI exclusively on Ubuntu was rejected because Swift/macOS work requires a macOS workflow.  
+- Running everything exclusively on macOS was rejected because it is unnecessary for the full pipeline and would increase cost and queue time.
 
-## Two-model consensus generation with Claude arbitration
+## ForgeAgent must respect the Swift application shell boundary
 **Status:** Accepted  
-**Context:** The README states that the system uses a two-model consensus engine with Claude and GPT-4o in parallel, and Claude arbitrates every result.  
-**Decision:** Implementation generation is performed using two model providers in parallel, and final arbitration of results is performed by Claude within the consensus workflow.  
-**Consequences:** Provider integration, consensus logic, and result selection must support parallel multi-model operation and an explicit arbitration stage. Single-model generation is not the primary architecture.  
+**Context:** The repository contains a separate Swift/SwiftUI application shell in `Crafted/` with tests in `CraftedTests/`, and TRD-1 defines a specific Root View decision tree for onboarding and application flow. ForgeAgent may interact with this codebase but must not violate the app shell’s architectural contract.  
+**Decision:** Treat the Swift application shell and its documented Root View decision tree as a separate bounded architecture that ForgeAgent may modify only in ways consistent with the documented state-driven navigation model.  
+**Consequences:** Agent-generated Swift changes must preserve onboarding-state-driven root navigation and should not introduce alternate top-level flow control that conflicts with the specified tree. Backend concerns must not leak into the Swift shell structure arbitrarily.  
 **Rejected alternatives:**  
-- **Single-provider generation pipeline:** Rejected because the product description specifies a two-model consensus engine.  
-- **Symmetric voting without designated arbiter:** Rejected because Claude is explicitly defined as the arbitrator.
-
-## Quality gates include self-correction, lint gate, iterative fix loop, CI, and draft PR output
-**Status:** Accepted  
-**Context:** The README defines the generation pipeline as including self-correction, lint gating, iterative fixing, CI execution, and opening a draft pull request for review.  
-**Decision:** Generated work passes through a structured quality pipeline consisting of self-correction, lint validation, iterative remediation, CI-related validation, and creation of a draft GitHub pull request for human review.  
-**Consequences:** The pipeline is multi-stage and quality-gated before delivery. PR creation is downstream of automated validation stages. Reviewability and correction are first-class design goals.  
-**Rejected alternatives:**  
-- **Direct PR creation immediately after generation:** Rejected because the product description includes multiple validation and correction gates before PR opening.  
-- **One-pass generation without iterative fixing:** Rejected because an iterative fix loop is explicitly specified.
-
-## Human review gates merge progression while the agent continues sequential work
-**Status:** Accepted  
-**Context:** The README describes a review-driven workflow where the user reviews and merges each PR while the agent builds the next one.  
-**Decision:** The system operates with human-gated review and merge decisions for pull requests, while supporting continued preparation of subsequent logical units in sequence.  
-**Consequences:** Workflow state management must account for in-review, approved, and merged transitions. The system is designed for incremental autonomous progress under human governance rather than fully unattended merge authority.  
-**Rejected alternatives:**  
-- **Fully autonomous merge without review:** Rejected because the README places review and merge in the user’s control.  
-- **Strict stop-until-merge behavior with no subsequent work preparation:** Rejected because the product description says the agent builds the next PR while the user reads the last one.
+- Allowing ForgeAgent to redesign root navigation opportunistically was rejected because TRD-1 already specifies the root decision model.  
+- Treating the Swift app as just another file tree without architectural constraints was rejected because it has explicit UI flow requirements.
