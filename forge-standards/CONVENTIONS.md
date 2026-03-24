@@ -1,25 +1,17 @@
 # Code Conventions
 
-This document defines coding conventions, naming rules, and code patterns derived from the repository guidance and the referenced technical requirements. The TRDs are the source of truth; these conventions standardize implementation style across all subsystems.
+This document defines coding conventions, naming rules, and code patterns derived from the provided TRD materials and repository guidance. The TRDs are the source of truth; this file consolidates implementation conventions implied by those materials.
 
 ## File and Directory Naming (exact `src/` layout)
 
-### Core architecture layout
+### Top-level implementation layout
 
-The codebase is organized as a two-process system:
+The codebase uses a two-process architecture:
 
-- Swift shell:
-  - UI
-  - authentication
-  - Keychain/secrets handling
-  - XPC / local process coordination
-- Python backend:
-  - consensus engine
-  - generation pipeline
-  - provider integrations
-  - repository and pull request automation
+- A native macOS shell implemented in Swift
+- A backend implemented in Python
 
-Use directory names that reflect the owning subsystem and mirror the architecture boundaries.
+Directory structure must preserve subsystem ownership and process boundaries.
 
 ### Required source layout
 
@@ -32,88 +24,73 @@ src/
   trustlock/
   mcp/
   rewind/
-```
-
-Additional implementation directories must follow the same pattern:
-
-- lowercase
-- concise
-- subsystem-scoped
-- no spaces
-- no hyphens unless already required by external tooling
-- prefer nouns for subsystem folders
-
-### SDK and tests
-
-```text
+tests/
+  cal/
+  dtl/
+  trustflow/
+  vtz/
+  trustlock/
+  mcp/
+  rewind/
 sdk/
   connector/
-
-tests/
-  <subsystem>/
 ```
 
-Rules:
+### Directory naming rules
 
-- `tests/<subsystem>/` must mirror `src/` structure exactly.
-- Test file locations must correspond to implementation ownership.
-- Shared test helpers belong in a clearly named common test utility area only if used by multiple subsystem suites.
+- Use lowercase directory names only.
+- Use the exact subsystem names defined by standards:
+  - `cal`
+  - `dtl`
+  - `trustflow`
+  - `vtz`
+  - `trustlock`
+  - `mcp`
+  - `rewind`
+- Tests must mirror the `src/` structure exactly.
+- SDK code must live under `sdk/connector/`.
 
 ### File naming rules
 
-#### Python
+#### Python files
 
-Use:
+- Use `snake_case.py`.
+- File names should reflect the primary type or responsibility in the file.
+- Prefer singular names for modules that define a primary abstraction.
+- Examples:
+  - `consensus_engine.py`
+  - `provider_adapter.py`
+  - `pipeline_runner.py`
+  - `github_client.py`
+  - `socket_protocol.py`
+  - `audit_stream.py`
 
-- `snake_case.py` for module files
-- descriptive, subsystem-specific names
-- one primary responsibility per file
+#### Swift files
 
-Examples:
+- Use `PascalCase.swift`.
+- Name files after the primary type defined in the file.
+- SwiftUI view files must be named after the view type.
+- Examples:
+  - `AuthenticatedSocketClient.swift`
+  - `KeychainStore.swift`
+  - `IntentPanel.swift`
+  - `PullRequestCard.swift`
 
-- `consensus_engine.py`
-- `provider_adapter.py`
-- `json_socket_client.py`
-- `pr_plan_builder.py`
+#### Test files
 
-Avoid:
+- Python tests should use `test_<module_name>.py`.
+- Test directories must mirror production directories exactly.
+- Examples:
+  - `tests/cal/test_socket_protocol.py`
+  - `tests/trustflow/test_audit_stream.py`
 
-- vague names like `utils.py`, `helpers.py`, `misc.py`
-- overloaded files containing unrelated classes
+### File organization rules
 
-#### Swift
-
-Use:
-
-- `PascalCase.swift` for type-oriented files
-- filename must match the primary type or view name
-- one primary public type per file
-
-Examples:
-
-- `SessionCoordinator.swift`
-- `AuthenticatedSocketClient.swift`
-- `IntentAssessmentView.swift`
-
-For SwiftUI:
-
-- views end with `View`
-- cards end with `Card`
-- panels end with `Panel`
-- coordinators end with `Coordinator`
-- stores/models should reflect role precisely
-
-#### Protocol and interface files
-
-Name files after the protocol or interface they define:
-
-- `ProviderAdapter.swift`
-- `ConsensusEngineProtocol.swift`
-- `CredentialStore.py` only if the file centers on that abstraction
-
-### Generated and derived artifacts
-
-Do not place generated code in source directories unless explicitly required by the owning TRD. Generated outputs, fixtures, replay data, and temporary artifacts must be isolated into clearly named non-source locations.
+- One primary type per file.
+- Closely related helper types may exist in the same file only when they are private or tightly scoped to the primary type.
+- Do not mix unrelated subsystems in a single file.
+- Do not place shell-owned concerns in backend subsystem directories.
+- Do not place backend-owned concerns in shell UI or auth files.
 
 ---
 
@@ -121,683 +98,799 @@ Do not place generated code in source directories unless explicitly required by 
 
 ### General naming rules
 
-Use names that describe domain behavior, not implementation trivia.
-
-Prefer:
-
-- `IntentClassifier`
-- `PullRequestPlanner`
-- `AuthenticatedChannel`
-- `ReplaySession`
-
-Avoid:
-
-- `Manager` unless it truly manages lifecycle or coordination
-- `Processor` unless the type performs staged transformation work
-- `Thing`, `Data`, `Object`, `Util`
+- Name according to responsibility, not implementation detail.
+- Prefer explicit names over abbreviated names.
+- Avoid product-specific branding in identifiers.
+- Use names that reflect the TRD-defined role, interface, state machine, or contract.
 
 ### Python naming
 
 #### Classes
 
-Use `PascalCase`.
+- Use `PascalCase`.
+- Class names should be nouns or noun phrases.
+- Use suffixes consistently by role:
+  - `Engine` for orchestration or decision logic
+  - `Adapter` for provider integrations
+  - `Client` for external service communication
+  - `Runner` for pipeline execution
+  - `Validator` for contract or policy validation
+  - `Manager` only when coordinating multiple owned resources
+  - `Error` for exceptions
 
 Examples:
 
 - `ConsensusEngine`
 - `ProviderAdapter`
 - `GitHubClient`
-- `TrustLabelEvaluator`
+- `PipelineRunner`
+- `PolicyValidator`
 
 #### Functions and methods
 
-Use `snake_case`.
+- Use `snake_case`.
+- Function names must start with a verb.
+- Boolean-returning functions should use predicates:
+  - `is_...`
+  - `has_...`
+  - `can_...`
+  - `should_...`
 
 Examples:
 
-- `assess_intent_confidence`
-- `build_pr_sequence`
-- `validate_trust_label`
-- `emit_audit_event`
-
-Boolean-returning functions should read as predicates:
-
+- `build_pr_plan`
+- `run_consensus`
+- `open_draft_pull_request`
 - `is_authenticated`
-- `has_required_scope`
-- `can_open_pull_request`
 - `should_retry`
-
-Avoid ambiguous boolean names like:
-
-- `check_auth`
-- `process_valid`
 
 #### Constants
 
-Use `UPPER_SNAKE_CASE`.
+- Use `UPPER_SNAKE_CASE`.
+- Constants must be immutable configuration values, protocol markers, or limits.
 
 Examples:
 
 - `MAX_RETRY_ATTEMPTS`
 - `SOCKET_READ_TIMEOUT_SECONDS`
-- `DEFAULT_CONFIDENCE_THRESHOLD`
+- `LINE_DELIMITED_JSON_VERSION`
 
 ### Swift naming
 
 #### Types
 
-Use `PascalCase`.
+- Use `PascalCase`.
+- Protocols should be noun-based and capability-oriented.
+- Do not prefix names unnecessarily.
 
 Examples:
 
-- `AuthSessionStore`
-- `KeychainCredentialStore`
-- `UnixSocketTransport`
-- `PipelineStatusView`
+- `SocketClient`
+- `KeychainStore`
+- `AuthState`
+- `IntentPanel`
+- `PullRequestCard`
 
 #### Properties and methods
 
-Use `camelCase`.
+- Use `camelCase`.
+- Methods should begin with verbs.
+- Boolean properties should read naturally:
+  - `isAuthenticated`
+  - `hasValidSession`
+  - `canSubmitIntent`
+
+#### Enums
+
+- Use `PascalCase` for enum names.
+- Use `camelCase` for cases.
+- Enum case names should model domain states or outcomes directly.
 
 Examples:
 
-- `currentSession`
-- `isAuthenticated`
-- `openDraftPullRequest()`
-- `validateEnvelope()`
+- `AuthState.signedOut`
+- `PipelineStatus.running`
+- `ConfidenceLevel.high`
 
-Boolean properties should use:
+### Acronyms and initialisms
 
-- `is...`
-- `has...`
-- `can...`
-- `should...`
+- Treat acronyms as words for readability.
+- In Swift type names, use standard casing:
+  - `XpcClient`
+  - `JsonMessage`
+- In Python, use standard `snake_case`:
+  - `xpc_client.py`
+  - `json_message.py`
 
-Examples:
+### Naming by ownership
 
-- `isConnected`
-- `hasValidToken`
-- `canProceed`
-- `shouldShowRecoveryBanner`
+Use names that make process ownership obvious.
 
-#### Protocols
+#### Shell-owned names
 
-Use role-based names. Do not prefix all protocols mechanically. Prefer semantic names such as:
+For UI, auth, secrets, local IPC, and native integration:
 
-- `CredentialStore`
-- `SocketTransport`
-- `AuditEmitter`
+- `AuthSession`
+- `KeychainCredentialStore`
+- `UnixSocketBridge`
+- `XpcService`
+- `IntentViewModel`
 
-Use `...Providing`, `...Serving`, or `...Coordinating` only when they improve clarity:
+#### Backend-owned names
 
-- `TokenProviding`
-- `PlanCoordinating`
+For consensus, generation, planning, repair, CI, and remote operations:
 
-### Naming by lifecycle role
-
-Use consistent suffixes where meaningful:
-
-- `...Client` for external service consumers
-- `...Adapter` for provider normalization layers
-- `...Engine` for core decision or orchestration logic
-- `...Coordinator` for cross-component flow control
-- `...Store` for state and persistence ownership
-- `...Validator` for rule enforcement
-- `...Emitter` for audit/event output
-- `...Parser` for structured input parsing
-- `...Builder` for deterministic object construction
-- `...ViewModel` only where an MVVM boundary is explicit
-- `...Error` for typed failures
-- `...Result` for structured operation outcomes
+- `ConsensusEngine`
+- `GenerationPipeline`
+- `FixLoopRunner`
+- `CiGate`
+- `PullRequestPlanner`
 
 ---
 
 ## Error and Exception Patterns
 
-### General principles
+### General error model
 
-Errors must be:
+All errors must follow TRD-defined contracts. Do not invent undocumented error semantics.
 
-- typed where possible
-- explicit
-- stable at subsystem boundaries
-- safe to log
-- mapped to documented interface contracts
+Use errors to communicate:
 
-Do not invent ad hoc error formats for cross-process, security-relevant, or externally surfaced APIs.
+- contract violations
+- authentication failures
+- authorization failures
+- protocol violations
+- validation failures
+- external dependency failures
+- retryable operational failures
+- terminal pipeline failures
 
-### Error naming
+### Python exception rules
 
-Use domain-specific error names.
+#### Exception naming
+
+- Custom exceptions must end with `Error`.
+- Name exceptions by failure domain, not generic outcome.
 
 Examples:
 
 - `AuthenticationError`
-- `SocketProtocolError`
-- `ConsensusFailure`
-- `TrustPolicyViolation`
-- `ReplayIntegrityError`
+- `AuthorizationError`
+- `ProtocolError`
+- `ValidationError`
+- `ConsensusError`
+- `PipelineError`
+- `ProviderError`
+- `GitHubError`
+- `SecurityPolicyError`
 
-Avoid generic names like:
+#### Exception hierarchy
 
-- `GeneralError`
-- `SystemError`
-- `UnknownFailure` unless required as a terminal fallback case
+- Define subsystem-local base exceptions where appropriate.
+- Catch broad exceptions only at process boundaries, adapters, or top-level orchestration points.
+- Raise specific exceptions internally.
 
-### Python error patterns
-
-#### Exception classes
-
-Use `PascalCase` and suffix with `Error`.
-
-Examples:
-
-- `ProviderTimeoutError`
-- `PlanValidationError`
-- `CredentialAccessError`
-
-Create subsystem-root exception hierarchies where useful:
+Example pattern:
 
 ```python
-class ConsensusError(Exception):
+class PipelineError(Exception):
     pass
 
-class ArbitrationError(ConsensusError):
+
+class ValidationError(PipelineError):
+    pass
+
+
+class RetryLimitExceededError(PipelineError):
     pass
 ```
 
-#### Raising exceptions
+#### Error messages
 
-- Raise the most specific exception available.
-- Preserve causal chains.
-- Include structured context when useful.
-- Do not leak secrets, tokens, prompts, or untrusted raw content in exception messages.
+- Error messages must be explicit and actionable.
+- Include the failed operation and violated condition.
+- Do not include secrets, tokens, raw credentials, or sensitive payloads.
+- Do not log generated code content unless the TRD explicitly permits it.
 
-Prefer:
-
-```python
-raise ProviderTimeoutError("provider response exceeded timeout")
-```
-
-When wrapping:
+Preferred pattern:
 
 ```python
-raise PlanValidationError("invalid PR dependency graph") from exc
+raise ValidationError("pull request plan is missing required typed steps")
 ```
 
-#### Error return objects
+Avoid:
 
-Where a TRD defines line-delimited JSON or structured inter-process responses, use explicit error envelopes rather than free-form strings.
+```python
+raise Exception("bad input")
+```
 
-Error payloads should include only documented fields, for example:
+### Swift error rules
 
-- machine-readable code
-- human-readable message
-- retryability if defined
-- correlation or trace identifier if defined
+- Use typed `Error` conforming types.
+- Prefer enums for finite domain errors.
+- Use associated values only when they add structured context.
+- Preserve user-safe and log-safe separation.
 
-### Swift error patterns
-
-#### Error types
-
-Use enums for finite error domains:
+Example pattern:
 
 ```swift
-enum AuthenticationError: Error {
+enum AuthError: Error {
     case missingCredential
     case invalidSession
-    case accessDenied
+    case socketHandshakeFailed
 }
 ```
 
-Use structs only when an error requires attached structured context and that pattern is already established in the subsystem.
+### Boundary handling
 
-#### Propagation
+Handle and translate errors at subsystem boundaries.
 
-- Throw typed errors from subsystem APIs.
-- Map lower-level errors to boundary-safe domain errors.
-- Never surface raw storage, transport, or provider internals directly to UI or socket boundaries unless the TRD explicitly permits it.
+#### Required boundary translations
 
-#### User-facing error handling
+- Native shell ↔ backend socket boundary:
+  - transport errors
+  - authentication errors
+  - protocol framing errors
+  - JSON decode/encode errors
+- Backend ↔ provider boundary:
+  - provider API errors
+  - malformed provider responses
+  - timeout and retry exhaustion
+- Backend ↔ remote repository boundary:
+  - authentication failures
+  - rate limiting
+  - branch or PR creation failures
 
-UI text must be:
+### Retry behavior
 
-- actionable
-- concise
-- non-sensitive
+- Only retry explicitly retryable failures.
+- Retry logic must be centralized in adapters, clients, or runners responsible for external communication.
+- Never retry:
+  - schema violations
+  - authentication failures unless token refresh is part of the TRD-defined flow
+  - local validation failures
+  - policy denials
 
-Internal logs may contain technical detail, but never secrets or unsafe raw generated content.
+### Logging and errors
 
-### Logging and audit alignment
-
-Errors that cross trust, credential, policy, replay, or audit boundaries must be recorded through the approved audit path for that subsystem.
-
-Do not:
-
-- log bearer tokens
-- log private keys
-- log full secrets from Keychain or equivalent storage
-- log unredacted generated code if policy forbids it
-- log untrusted payloads without labeling or sanitization requirements defined by the owning subsystem
+- Log structured context, not secrets.
+- Use stable field names for operation, subsystem, outcome, and correlation identifiers.
+- Errors exposed to UI must be sanitized.
+- Internal logs may include technical detail but must still exclude protected material.
 
 ---
 
 ## Per-Subsystem Naming Rules
 
-## `src/cal/` — Conversation Abstraction Layer
-
-Purpose: abstraction over conversational/model interactions and related message flow.
-
-Naming rules:
-
-- files use `snake_case.py`
-- core abstractions use names like:
-  - `ConversationSession`
-  - `MessageEnvelope`
-  - `ProviderAdapter`
-  - `ConsensusEngine`
-- adapter implementations should be provider-neutral in shared layers and provider-specific in leaf modules
-- line-delimited JSON transport helpers should include `json`, `socket`, or `transport` in the name where relevant
-- message schema types should use nouns:
-  - `PromptFrame`
-  - `ResponseChunk`
-  - `ConsensusDecision`
-
-Avoid embedding provider names into shared interfaces.
-
-Preferred suffixes:
-
-- `...Adapter`
-- `...Engine`
-- `...Envelope`
-- `...Session`
-- `...Transport`
-
-## `src/dtl/` — Data Trust Label components
-
-Purpose: labeling, classification, and trust-state handling for data.
-
-Naming rules:
-
-- names must communicate trust semantics clearly
-- label types use nouns such as:
-  - `TrustLabel`
-  - `DataClassification`
-  - `LabelPolicy`
-  - `LabelEvaluator`
-- functions that assess trust should use predicate or decision names:
-  - `is_trusted`
-  - `requires_review`
-  - `assign_trust_label`
-  - `validate_label_transition`
-- files should distinguish:
-  - schema/model definitions
-  - policy evaluation
-  - transition validation
-
-Preferred suffixes:
-
-- `...Label`
-- `...Policy`
-- `...Evaluator`
-- `...Classifier`
-- `...TransitionValidator`
-
-## `src/trustflow/` — TrustFlow audit stream components
-
-Purpose: append-only audit/event stream and trust-relevant telemetry.
-
-Naming rules:
-
-- event types must be explicit and immutable in meaning
-- use names like:
-  - `AuditEvent`
-  - `TrustEvent`
-  - `EventEnvelope`
-  - `AuditEmitter`
-  - `EventStreamWriter`
-- sequence/order concepts should be named consistently:
-  - `sequence_id`
-  - `event_index`
-  - `stream_position`
-- replayable event data should distinguish envelope from payload:
-  - `AuditEventEnvelope`
-  - `AuditEventPayload`
-
-Preferred suffixes:
-
-- `...Event`
-- `...Envelope`
-- `...Emitter`
-- `...Writer`
-- `...Reader`
-
-## `src/vtz/` — Virtual Trust Zone enforcement
-
-Purpose: policy enforcement and isolation boundaries.
-
-Naming rules:
-
-- names must imply enforcement, boundary checking, or scoped execution control
-- use terms like:
-  - `TrustZone`
-  - `ZonePolicy`
-  - `BoundaryGuard`
-  - `ExecutionConstraint`
-  - `PolicyEnforcer`
-- gate functions should be imperative or predicate-based:
-  - `enforce_zone_policy`
-  - `validate_boundary_crossing`
-  - `is_execution_permitted`
-
-Avoid vague names like `security_check`; be specific about zone or policy intent.
-
-Preferred suffixes:
-
-- `...Guard`
-- `...Policy`
-- `...Enforcer`
-- `...Constraint`
-- `...Boundary`
-
-## `src/trustlock/` — Cryptographic machine identity
-
-Purpose: machine identity, hardware-rooted attestation, and cryptographic binding.
-
-Naming rules:
-
-- cryptographic and identity terms must be precise
-- use names like:
-  - `MachineIdentity`
-  - `AttestationRecord`
-  - `IdentityBinding`
-  - `KeyMaterialHandle`
-  - `AttestationVerifier`
-- storage handles and references should indicate indirection, not raw secret ownership
-- methods involving keys should describe operation, not implementation detail:
-  - `create_attestation`
-  - `verify_identity_binding`
-  - `load_key_handle`
-
-Do not name variables or fields as if they contain raw secret material unless they actually do and the owning TRD permits that representation.
-
-Preferred suffixes:
-
-- `...Identity`
-- `...Attestation`
-- `...Binding`
-- `...Verifier`
-- `...Handle`
-
-## `src/mcp/` — MCP Policy Engine
-
-Purpose: policy evaluation, rule application, and decision outputs.
-
-Naming rules:
-
-- policy constructs should be named deterministically
-- use names like:
-  - `PolicyRule`
-  - `PolicyDecision`
-  - `RuleEvaluator`
-  - `DecisionContext`
-  - `PolicyEngine`
-- functions should reflect evaluation semantics:
-  - `evaluate_policy`
-  - `resolve_rule_set`
-  - `build_decision_context`
-- result objects should separate input context from final decision
+## `cal` naming rules
 
-Preferred suffixes:
+Conversation Abstraction Layer components must use names that reflect message transport, framing, session semantics, and abstraction boundaries.
 
-- `...Rule`
-- `...Decision`
-- `...Evaluator`
-- `...Context`
-- `...Engine`
+### Preferred names
 
-## `src/rewind/` — replay engine
+- `ConversationSession`
+- `MessageEnvelope`
+- `SocketProtocol`
+- `TransportClient`
+- `TransportServer`
+- `SessionState`
+- `RequestContext`
 
-Purpose: deterministic replay, reconstruction, and trace verification.
+### File patterns
 
-Naming rules:
+- `conversation_session.py`
+- `message_envelope.py`
+- `socket_protocol.py`
 
-- replay terms must differentiate live execution from reconstruction
-- use names like:
-  - `ReplaySession`
-  - `ReplayCursor`
-  - `TraceSnapshot`
-  - `ReplayVerifier`
-  - `TimelineReconstructor`
-- position and ordering names should be stable and unambiguous:
-  - `cursor`
-  - `offset`
-  - `frame_index`
-  - `timeline_position`
-- methods should express replay semantics:
-  - `replay_next_frame`
-  - `reconstruct_timeline`
-  - `verify_replay_integrity`
+### Function patterns
 
-Preferred suffixes:
+- `send_message`
+- `receive_message`
+- `encode_envelope`
+- `decode_envelope`
+- `open_session`
+- `close_session`
 
-- `...Replay`
-- `...Session`
-- `...Cursor`
-- `...Verifier`
-- `...Snapshot`
+### Avoid
 
-## `sdk/connector/` — Connector SDK
+- vague names like `handler.py`, `utils.py`, `misc.py`
+- names tied to a specific provider when the layer is abstraction-focused
 
-Purpose: external integration SDK for connectors into the platform.
+---
 
-Naming rules:
+## `dtl` naming rules
 
-- public SDK APIs must favor clarity and stability over brevity
-- types should be externally understandable:
-  - `ConnectorClient`
-  - `ConnectorSession`
-  - `ConnectorRequest`
-  - `ConnectorResponse`
-  - `ConnectorConfiguration`
-- avoid internal shorthand in public API names
-- versioned interfaces should use explicit version suffixes only when required by compatibility policy
+Data Trust Label components must use names that communicate labeling, provenance, trust level, and policy-aware data classification.
 
-Preferred suffixes:
+### Preferred names
 
-- `...Client`
-- `...Session`
-- `...Request`
-- `...Response`
-- `...Configuration`
+- `TrustLabel`
+- `DataClassification`
+- `ProvenanceRecord`
+- `LabelValidator`
+- `TrustLevel`
+- `ContentOrigin`
 
-## Swift shell conventions
+### File patterns
 
-Applies to UI, auth, secrets, local IPC, and shell-side orchestration.
+- `trust_label.py`
+- `provenance_record.py`
+- `label_validator.py`
 
-### UI naming
+### Function patterns
 
-For SwiftUI and presentation components:
+- `assign_label`
+- `validate_label`
+- `derive_trust_level`
+- `record_provenance`
 
-- screens/views: `...View`
-- reusable tiles/cards: `...Card`
-- side or modal panels: `...Panel`
-- flow owners: `...Coordinator`
-- observable state holders: `...Store` or `...ViewModel` according to existing subsystem style
+### Avoid
 
-Examples:
+- generic names like `tag`, `meta`, or `info` where trust semantics are intended
 
-- `IntentAssessmentView`
-- `PipelineStatusCard`
-- `ReviewGatePanel`
+---
 
-### Authentication and secrets
+## `trustflow` naming rules
 
-Names must reflect ownership and sensitivity:
+TrustFlow audit stream components must use names that communicate append-only auditing, event chronology, and verifiable flow records.
 
-- `AuthSession`
-- `CredentialStore`
-- `KeychainCredentialStore`
-- `SessionTokenRef`
+### Preferred names
 
-Prefer `Ref`, `Handle`, or `Store` for indirect secret access rather than implying in-memory raw secret ownership.
+- `AuditStream`
+- `AuditEvent`
+- `EventRecord`
+- `FlowTrace`
+- `AuditSink`
+- `AuditEmitter`
 
-### IPC and transport
+### File patterns
 
-For Unix socket and line-delimited JSON communication:
+- `audit_stream.py`
+- `audit_event.py`
+- `flow_trace.py`
 
-- `SocketTransport`
-- `AuthenticatedSocketClient`
-- `JsonLineEncoder`
-- `JsonLineDecoder`
-- `EnvelopeValidator`
+### Function patterns
 
-Use `Envelope` for framed cross-process messages and `Message` for semantic content carried inside envelopes where that distinction exists.
+- `append_event`
+- `emit_audit_record`
+- `flush_stream`
+- `load_event_range`
+- `verify_event_chain`
 
-## Python backend conventions
+### Avoid
 
-Applies to consensus, pipeline, planning, generation, provider access, repository automation, and CI coordination.
+- names implying mutable history rewriting unless explicitly part of replay behavior in `rewind`
 
-### Planning and decomposition
+---
 
-Use clear stage-oriented names:
+## `vtz` naming rules
 
-- `IntentAssessor`
-- `PrdPlanBuilder`
-- `PullRequestPlanner`
-- `DependencyGraphValidator`
+Virtual Trust Zone enforcement components must use names that communicate isolation, enforcement, boundaries, and execution restrictions.
 
-Functions should describe deterministic steps:
+### Preferred names
 
-- `assess_intent_confidence`
-- `decompose_prd`
-- `order_pull_requests`
-- `validate_plan_dependencies`
+- `TrustZone`
+- `ZonePolicy`
+- `ExecutionBoundary`
+- `IsolationGuard`
+- `EnforcementDecision`
+- `BoundaryValidator`
 
-### Consensus and provider orchestration
+### File patterns
 
-Use role-true names:
+- `trust_zone.py`
+- `zone_policy.py`
+- `isolation_guard.py`
+
+### Function patterns
+
+- `enforce_boundary`
+- `validate_isolation`
+- `deny_execution`
+- `check_zone_policy`
+
+### Avoid
+
+- ambiguous security names like `secure_mode` when a specific policy or boundary concept exists
+
+---
+
+## `trustlock` naming rules
+
+Cryptographic machine identity components must use names that communicate machine identity, attestation, anchoring, and key material custody.
+
+### Preferred names
+
+- `MachineIdentity`
+- `IdentityAttestation`
+- `KeyAnchor`
+- `AttestationValidator`
+- `IdentityToken`
+- `KeyCustodyRecord`
+
+### File patterns
+
+- `machine_identity.py`
+- `identity_attestation.py`
+- `attestation_validator.py`
+
+### Function patterns
+
+- `create_attestation`
+- `validate_attestation`
+- `load_machine_identity`
+- `rotate_identity_token`
+
+### Avoid
+
+- names exposing implementation secrets
+- generic `key_manager` if the actual concern is identity anchoring or attestation
+
+---
+
+## `mcp` naming rules
+
+MCP Policy Engine components must use names that communicate policy evaluation, decisioning, rule enforcement, and policy scope.
+
+### Preferred names
+
+- `PolicyEngine`
+- `PolicyRule`
+- `PolicyDecision`
+- `PolicyScope`
+- `RuleSet`
+- `DecisionContext`
+
+### File patterns
+
+- `policy_engine.py`
+- `policy_rule.py`
+- `decision_context.py`
+
+### Function patterns
+
+- `evaluate_policy`
+- `apply_rule_set`
+- `build_decision_context`
+- `deny_by_policy`
+
+### Avoid
+
+- naming policies as generic configuration when they are executable decision logic
+
+---
+
+## `rewind` naming rules
+
+Replay engine components must use names that communicate replay, event reconstruction, deterministic restoration, and historical inspection.
+
+### Preferred names
+
+- `ReplayEngine`
+- `ReplaySession`
+- `EventSnapshot`
+- `ReconstructionPlan`
+- `PlaybackCursor`
+- `StateRestorer`
+
+### File patterns
+
+- `replay_engine.py`
+- `replay_session.py`
+- `event_snapshot.py`
+
+### Function patterns
+
+- `replay_events`
+- `restore_state`
+- `advance_cursor`
+- `build_reconstruction_plan`
+
+### Avoid
+
+- names implying mutation of canonical history
+- `undo` unless the TRD explicitly defines user-facing undo semantics
+
+---
+
+## SDK connector naming rules
+
+Connector SDK code must use names that communicate integration boundaries and external consumer APIs.
+
+### Preferred names
+
+- `ConnectorClient`
+- `ConnectorSession`
+- `ConnectorConfig`
+- `ConnectorRequest`
+- `ConnectorResponse`
+- `ConnectorError`
+
+### File patterns
+
+- `connector_client.py`
+- `connector_session.py`
+- `connector_config.py`
+
+### Function patterns
+
+- `connect`
+- `disconnect`
+- `send_request`
+- `parse_response`
+
+---
+
+## Architecture-driven naming conventions
+
+### Shell process conventions
+
+Swift shell code owns:
+
+- UI
+- authentication
+- secret storage
+- Keychain access
+- XPC
+- authenticated Unix socket communication
+
+Names in this layer must reflect native ownership and user-facing state.
+
+Preferred patterns:
+
+- `AuthCoordinator`
+- `SessionController`
+- `KeychainStore`
+- `SocketBridge`
+- `IntentPanel`
+- `ReviewQueueView`
+
+### Backend process conventions
+
+Python backend code owns:
+
+- consensus
+- planning
+- generation
+- self-correction
+- lint gate
+- iterative fix loop
+- CI execution
+- remote repository operations
+
+Preferred patterns:
 
 - `ConsensusEngine`
-- `ArbitrationDecision`
-- `ParallelGenerationCoordinator`
-- `ProviderAdapter`
+- `ArbitrationResult`
+- `PrdPlanner`
+- `PullRequestPlan`
+- `GenerationPass`
+- `LintGate`
+- `FixLoopRunner`
+- `CiRunner`
+- `DraftPullRequestPublisher`
 
-Provider-specific modules should be leaf implementations under provider-scoped files, while shared interfaces remain provider-neutral.
+---
 
-### Repository and pull request automation
+## Interface and protocol conventions
 
-Use repository domain terminology consistently:
+### JSON protocol naming
 
-- `RepositoryWorkspace`
-- `BranchStrategy`
-- `PullRequestDraft`
-- `CiGateResult`
-- `LintGateResult`
+The processes communicate over an authenticated Unix socket using line-delimited JSON.
 
-Methods should be action-oriented:
+For protocol objects:
 
-- `create_feature_branch`
-- `open_draft_pull_request`
-- `run_ci_gate`
-- `apply_fix_iteration`
+- message types must be nouns or imperative event labels
+- payload fields must be `snake_case` in Python-owned protocol definitions
+- version fields must be explicit
+- identifiers must be stable and machine-readable
 
-## Testing conventions
+Preferred names:
 
-### Layout
+- `message_type`
+- `request_id`
+- `correlation_id`
+- `session_id`
+- `protocol_version`
+- `payload`
+- `error_code`
+- `error_message`
 
-Tests must mirror implementation structure exactly under `tests/`.
+### Protocol type naming
+
+- `RequestEnvelope`
+- `ResponseEnvelope`
+- `ErrorEnvelope`
+- `HandshakeRequest`
+- `HandshakeResponse`
+
+### Serialization conventions
+
+- Use explicit serializer/deserializer names.
+- Avoid implicit magic conversion in boundary code.
 
 Examples:
 
-```text
-src/mcp/policy_engine.py
-tests/mcp/test_policy_engine.py
+- `to_json_dict`
+- `from_json_dict`
+- `encode_line`
+- `decode_line`
 
-src/rewind/replay_session.py
-tests/rewind/test_replay_session.py
-```
+---
 
-### Test naming
+## State and status naming
 
-Use:
+Use nouns for stored state and adjectives or participles for statuses only when they represent transient processing phases.
 
-- `test_<behavior>.py` for Python test modules
-- `test_<expected_behavior>` for test functions
+### Preferred examples
+
+- `auth_state`
+- `pipeline_status`
+- `review_state`
+- `session_state`
+- `trust_level`
+
+### Status value examples
+
+- `pending`
+- `running`
+- `completed`
+- `failed`
+- `denied`
+- `authenticated`
+- `unauthenticated`
+
+Avoid mixing state-machine terms and UI copy in the same enum or constant set.
+
+---
+
+## Code pattern conventions
+
+### Separation of concerns
+
+- UI code must not contain backend generation logic.
+- Secret handling must remain in the native shell-owned layer.
+- Backend code must not assume direct access to shell-managed secrets.
+- Provider-specific logic must remain behind adapters.
+- Consensus and arbitration logic must remain separate from transport and UI.
+
+### Adapter pattern
+
+Use adapters for all provider and external service integrations.
+
+Naming pattern:
+
+- `<Provider>Adapter`
+- `<Service>Client`
 
 Examples:
 
-- `test_evaluate_policy_denies_untrusted_input`
-- `test_replay_next_frame_advances_cursor`
-- `test_open_draft_pull_request_retries_on_transient_failure`
+- `ModelProviderAdapter`
+- `RepositoryClient`
+
+### Engine pattern
+
+Use `Engine` for deterministic orchestration or multi-step decision logic driven by TRD-defined workflows.
+
+Examples:
+
+- `ConsensusEngine`
+- `ReplayEngine`
+- `PolicyEngine`
+
+### Runner pattern
+
+Use `Runner` for executable pipelines, loops, or staged processing flows.
+
+Examples:
+
+- `PipelineRunner`
+- `FixLoopRunner`
+- `CiRunner`
+
+### Validator pattern
+
+Use `Validator` for schema, policy, state, or contract checks that do not own side effects beyond reporting validity.
+
+Examples:
+
+- `LabelValidator`
+- `BoundaryValidator`
+- `AttestationValidator`
+
+### Record / Envelope / Context pattern
+
+Use these suffixes consistently:
+
+- `Record` for persisted or auditable facts
+- `Envelope` for transport wrappers
+- `Context` for evaluation or request-scoped inputs
+
+Examples:
+
+- `AuditRecord`
+- `MessageEnvelope`
+- `DecisionContext`
+
+---
+
+## Test naming conventions
+
+### Test structure
+
+- Tests must mirror `src/` exactly by subsystem.
+- Keep test modules named after the production module under test.
+
+### Test function naming
+
+Use descriptive names with `test_` prefix.
+
+Preferred patterns:
+
+- `test_<unit>_<expected_behavior>`
+- `test_<unit>_<condition>_<outcome>`
+
+Examples:
+
+- `test_consensus_engine_returns_arbitrated_result`
+- `test_socket_protocol_rejects_invalid_handshake`
+- `test_policy_engine_denies_untrusted_content`
 
 ### Test class naming
 
-If test classes are used, name them after the subject under test:
+If grouping tests in classes, use:
 
-- `TestConsensusEngine`
-- `TestPolicyDecision`
-- `TestReplayVerifier`
-
-### Behavior focus
-
-Tests should reflect documented contracts:
-
-- interface behavior
-- error contracts
-- security controls
-- deterministic replay requirements
-- policy decisions
-- transport framing and validation
-
-Avoid naming tests after implementation details unless verifying a required internal invariant.
-
-## Cross-boundary schema conventions
-
-For messages crossing process or subsystem boundaries:
-
-- use explicit envelope names
-- version schemas only when required by compatibility rules
-- keep field names stable and machine-readable
-- prefer singular nouns for single values and plural nouns for collections
+- `Test<ClassName>`
+- `Test<Subsystem><Behavior>`
 
 Examples:
 
-- `message_id`
-- `request_id`
-- `correlation_id`
-- `event_type`
-- `stream_position`
+- `TestConsensusEngine`
+- `TestAuditStreamAppend`
 
-Boolean fields should read as predicates:
+### Security-sensitive tests
 
-- `is_retryable`
-- `has_more`
-- `is_authenticated`
+Where security rules apply, test names must clearly describe the denied or constrained behavior.
 
-Timestamp fields should include unit or format semantics where necessary:
+Examples:
 
-- `created_at`
-- `expires_at`
-- `timeout_seconds`
+- `test_keychain_store_never_logs_secret_values`
+- `test_protocol_rejects_unauthenticated_socket_client`
+- `test_pipeline_does_not_execute_generated_code`
+
+---
 
 ## Forbidden naming patterns
 
 Do not use:
 
-- hardcoded product names in identifiers, filenames, or types unless required by existing immutable external interfaces
-- `misc`, `stuff`, `temp`, `new`, `old`
-- meaningless abbreviations not already established by subsystem naming
-- overloaded `utils` modules as a dumping ground
-- secret-implying names for handles or references
-- provider-specific names in shared abstractions
+- `utils`
+- `helpers`
+- `common`
+- `misc`
+- `thing`
+- `data` as a primary domain type name without qualification
+- `manager` when a narrower role exists
+- `handle` / `process` / `do` without a specific object
+- hardcoded product branding in reusable subsystem code
 
-## Consistency rule
+Replace vague names with role-specific names drawn from the subsystem vocabulary.
 
-When modifying an existing subsystem:
+---
 
-1. Follow the owning TRD first.
-2. Match the subsystem’s existing naming style.
-3. Preserve boundary contracts and error vocabulary.
-4. Prefer extending established patterns over introducing new ones.
-5. Keep names explicit, deterministic, and safe for security-reviewed code.
+## Documentation and code comment conventions
+
+- Comments must explain why, not restate what.
+- Public types and functions should use names clear enough to reduce comment volume.
+- Security-sensitive code should document invariants and forbidden behavior.
+- Any behavior mandated by a TRD should be referenced in implementation documentation by TRD identifier if local documentation is needed, but naming should remain domain-based and generic.
+
+---
+
+## Final rules
+
+- Follow the owning TRD before following convenience.
+- Preserve process ownership boundaries in names and file placement.
+- Prefer explicit, typed, contract-driven code over implicit behavior.
+- Name by domain role, failure mode, and state-machine meaning.
+- Keep subsystem vocabulary consistent across source, tests, protocol objects, and logs.
