@@ -51,10 +51,10 @@ on:
       - "*.xcodeproj/**"
 
 # FP-6: Cancel stale runs when a new push arrives on the same branch.
-# The agent's fix loop can push multiple commits quickly; stale runs
-# confuse the CI monitor into treating old failures as current ones.
+# Scope to PR number (or branch) so concurrent PRs don't cancel each other.
+# cancel-in-progress: true only cancels prior runs on the SAME PR — not others.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 # Least-privilege: deny all at workflow level; jobs declare what they need.
