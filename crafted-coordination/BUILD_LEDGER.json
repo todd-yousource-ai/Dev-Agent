@@ -1,0 +1,156 @@
+{
+  "build_id": "crafteddevagent-f5b1c99b",
+  "subsystem": "CraftedDevAgent",
+  "intent": "We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture. You should apply Max impl_files per PR: 8\u201310. Beyond that, split into multiple PRs. Max acceptance criteria: 8\u201310. More than that is a scope problem.",
+  "scope_statement": "Build the complete Crafted Dev Agent \u2014 a native macOS two-process AI coding agent comprising a Swift/SwiftUI shell (UI, Touch ID, Keychain, XPC) and a Python backend (consensus engine, build pipeline, GitHub integration, document store, multi-agent coordination, holistic review, TRD workflow, recovery/state management, CI pipeline, self-healing). The system is fully specified across 16 TRDs (TRD-1 through TRD-17) plus supporting documents. This scope encompasses all subsystems: the macOS application shell, consensus engine with dual-LLM parallel generation, confidence-gated build pipeline with pr_type routing, multi-agent build ledger, GitHub integration layer, holistic code review, TRD development workflow (FOUNDER/ENGINEER/CONSULTANT modes), UI/UX design system with health dashboard, Mac CI runner infrastructure, document store with FAISS vector retrieval, security threat model controls, backend runtime startup/shutdown, recovery and state management with build memory and build rules, code quality CI pipeline, and self-healing observability loop. Gaps in TRD-18 (Crafted Connect), Figma pipeline internals, EmailNotifier, WebhookReceiver, and ConsensusEngine.generate_single() will be resolved via the PRD process using best practices during build execution.\n\nClarifications:\n  - Use the PRD process to resolve any issues using best practices.\n  - Use the PRD process to resolve any issues using best practices.\n  - Use the PRD process to resolve any issues using best practices.\n  - Use the PRD process to resolve any issues using best practices.\n  - Use the PRD process to resolve any issues using best practices.\n\nOperator on 'Given the massive scope (16+ TRDs, Swift + Python, ~60 sourc':\nfull scope in a single PRD planning cycle\n\nOperator on 'For the five identified gaps (Crafted Connect SDK, Figma bac':\ngenerate specification PRDs first\n\nOperator on 'Should the initial build target a specific milestone (e.g., ':\ncomplete the complete system. Select teh most elegant order to develop the product and the code\n\nOperator on 'The current repo already has src/ files (agent.py, build_dir':\nselect the best solution",
+  "created_at": 1774472237.505119,
+  "updated_at": 1774472237.50524,
+  "updated_by": "todd-gould",
+  "prd_plan": [
+    {
+      "prd_id": "PRD-001",
+      "title": "Foundational Architecture, Repository Alignment, and Build Strategy",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-002",
+      "title": "Gap Specification Pack: Crafted Connect, Figma Pipeline Internals, EmailNotifier, WebhookReceiver, and ConsensusEngine.generate_single()",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-003",
+      "title": "Security and Trust Boundary Implementation Framework",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-004",
+      "title": "Backend Runtime Lifecycle: Startup, Handshake, Command Routing, Degraded-State, and Shutdown",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-005",
+      "title": "Swift Shell Core: App Lifecycle, Authentication, Keychain, XPC Bridge, and Process Management",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-006",
+      "title": "Document Store, FAISS Vector Retrieval, and Context Integrity Pipeline",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-007",
+      "title": "Consensus Engine and Dual-Provider Orchestration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-008",
+      "title": "GitHub Integration Layer, Repository Bootstrap, and CI Status Services",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-009",
+      "title": "Build Pipeline Orchestration: Scope-to-PR Execution Engine",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-010",
+      "title": "Recovery, State Management, Build Memory, Build Rules, and Context Persistence",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-011",
+      "title": "Code Quality Pipeline, Local Validation Gates, and GitHub Actions Workflow Generation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-012",
+      "title": "Multi-Agent Coordination, Build Ledger, and Team Knowledge Sharing",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-013",
+      "title": "Holistic Code Review Workflow and Fix PR Generation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-014",
+      "title": "macOS UI Foundation: Build Stream, Navigation, Context Panel, and Native App Experience",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-015",
+      "title": "TRD Development Workflow: FOUNDER, ENGINEER, and CONSULTANT Modes",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-016",
+      "title": "Self-Healing Observability, Detection, Classification, and Autonomous Remediation Engine",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-017",
+      "title": "Health Dashboard, Diagnosis UX, Remediation Stream, and In-App Issue Reporting",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-018",
+      "title": "Figma-to-Build Design Ingestion and Sketch Interpretation Flow",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-019",
+      "title": "Mac CI Runner Infrastructure, Swift Validation, Signing, Notarization, and Release Artifacts",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-020",
+      "title": "End-to-End System Validation, EmailNotifier Implementation, Operational Runbook, and Release Readiness",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    }
+  ],
+  "pr_entries": {},
+  "knowledge_notes": [],
+  "version": 1,
+  "schema_version": 3,
+  "agent_version": "39.38.0"
+}
