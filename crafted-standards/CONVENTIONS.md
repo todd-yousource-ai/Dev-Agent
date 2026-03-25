@@ -1,858 +1,242 @@
 # Code Conventions
 
-This document defines repository-wide coding conventions derived from the technical requirements and operational notes in the provided TRD materials. These conventions are mandatory for all code, tests, interfaces, and supporting assets.
+## File and Directory Naming
 
-The repository is a two-process native macOS system:
+1. **Use `snake_case` for all Python file and directory names.**
+   - Required for backend modules under `src/`.
+   - Example: `src/build_director.py`, `src/consensus.py`.
 
-- a **Swift process** for UI, authentication, Keychain access, and XPC/system-facing concerns
-- a **Python process** for orchestration, consensus, generation pipeline, and source-control platform operations
+2. **Name Python modules after their primary responsibility, not after generic helpers.**
+   - Use role-based names such as `build_director.py` for `BuildPipeline` and `consensus.py` for `ConsensusEngine`.
+   - Do not create vague module names like `utils.py`, `helpers.py`, or `common.py` in this subsystem.
 
-All implementation must follow the owning TRD for the subsystem being modified. Where a subsystem boundary exists, naming and behavior must make that boundary explicit.
+3. **Place importable Python source under `src/`.**
+   - New CraftedDevAgent Python modules must live in `src/` unless the file is one of the repo-root exceptions listed below.
 
----
+4. **Keep these files at repository root with no directory prefix when present.**
+   - `README.md`
+   - `CODEOWNERS`
+   - `LICENSE`
+   - `.gitignore`
+   - `.editorconfig`
+   - `VERSION`
+   - `Makefile`
+   - `pyproject.toml`
 
-## General Principles
+5. **Do not relocate root-required files into subdirectories.**
+   - If code generates, updates, or validates any of the files in Rule 4, it must target the basename at repo root.
 
-- Treat the TRDs as the source of truth for:
-  - interfaces
-  - error contracts
-  - state machines
-  - security controls
-  - testing requirements
-  - performance requirements
-- Do not invent protocol fields, lifecycle states, or security behavior.
-- Do not hardcode product identity into symbols, file names, constants, log prefixes, or comments unless required by an external protocol.
-- Keep the Swift and Python responsibilities strictly separated.
-- Generated code must never be executed by either process.
-- Inter-process communication must remain authenticated and line-delimited JSON over the defined Unix socket boundary.
-- Security-sensitive changes must align with the security TRD before implementation.
+6. **Use the mandated CI workflow filenames exactly.**
+   - Ubuntu workflow: `crafted-ci.yml`
+   - macOS Swift workflow: `crafted-ci-macos.yml`
 
----
+7. **Treat `conftest.py` as a repository-level CI support file when created by workflow setup.**
+   - Do not manually rename the file created by `ci_workflow.ensure()`.
+   - Preserve its role for enabling `src/` imports in tests.
 
-## File and Directory Naming (exact `src/` layout)
+8. **Use branch names in this exact format.**
+   - `forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}`
+   - Example: `forge-agent/build/e17/crafted-dev-agent/pr-042-add-path-validation`
 
-Use a top-level `src/` split by runtime/language boundary.
+9. **Keep the literal prefix `forge-agent/build/` unchanged.**
+   - Do not substitute `crafted-agent`, `crafteddevagent`, or any other prefix.
 
-```text
-src/
-├── swift/
-│   ├── app/
-│   ├── auth/
-│   ├── keychain/
-│   ├── ipc/
-│   ├── xpc/
-│   ├── models/
-│   ├── viewmodels/
-│   ├── views/
-│   ├── components/
-│   ├── state/
-│   ├── services/
-│   ├── security/
-│   ├── logging/
-│   ├── utilities/
-│   └── testsupport/
-└── python/
-    ├── api/
-    ├── consensus/
-    ├── providers/
-    ├── pipeline/
-    ├── github/
-    ├── ipc/
-    ├── models/
-    ├── services/
-    ├── security/
-    ├── logging/
-    ├── utils/
-    └── testsupport/
-```
+10. **Use lowercase, hyphen-separated slugs for `{subsystem_slug}` and `{title_slug}` in branch names.**
+    - Example: `crafted-dev-agent`, `add-ci-validation`.
 
-If the repository already uses a different root split, preserve the existing physical layout but apply the same naming rules and subsystem separation.
+11. **Zero-pad pull request numbers to 3 digits in branch names.**
+    - Example: `pr-007-fix-import-order`, not `pr-7-fix-import-order`.
 
-### Directory Rules
+12. **Use macOS accessibility identifiers in this exact shape for interactive UI elements.**
+    - Format: `{module}-{component}-{role}-{context?}`
+    - Apply with `.accessibilityIdentifier(...)`.
 
-- Directory names use **lowercase snake_case** in Python areas.
-- Directory names use **lowercase** or **lowercase snake_case** in Swift support areas where they map to filesystem folders, but contained type names remain Swift-standard PascalCase.
-- Group files by subsystem, not by vague technical category.
-- Do not create folders named `misc`, `helpers`, `common`, or `stuff`.
-- Shared schema/model definitions must live in `models/` within the owning process unless the TRD defines a different boundary.
-- IPC message definitions must live under `ipc/` in each process.
+13. **Use lowercase, hyphen-separated accessibility identifier segments.**
+    - Examples:
+      - `auth-touchid-button`
+      - `settings-anthropic-key-field`
+      - `navigator-project-row-{projectId}`
 
-### File Naming Rules
-
-#### Swift files
-- One primary type per file.
-- File name must exactly match the primary type name.
-
-Examples:
-- `SessionManager.swift`
-- `AuthenticatedSocketClient.swift`
-- `KeychainCredentialStore.swift`
-- `PullRequestCardView.swift`
-
-#### Python files
-- File names use **snake_case** and reflect the primary class, module, or function role.
-
-Examples:
-- `consensus_engine.py`
-- `provider_adapter.py`
-- `pull_request_service.py`
-- `line_delimited_json_protocol.py`
-
-#### Test files
-- Swift tests:
-  - `TypeNameTests.swift`
-  - `SubsystemNameIntegrationTests.swift`
-- Python tests:
-  - `test_<module_name>.py`
-  - `test_<subsystem>_integration.py`
-
-Examples:
-- `SessionManagerTests.swift`
-- `AuthenticatedSocketClientIntegrationTests.swift`
-- `test_consensus_engine.py`
-- `test_github_merge_flow_integration.py`
+14. **When an accessibility identifier references a runtime entity, append the entity identifier as the trailing segment.**
+    - Examples:
+      - `navigator-project-row-{projectId}`
+      - `stream-gate-yes-button-{gateId}`
 
 ---
 
 ## Class and Function Naming
 
-### Swift Naming
+1. **Use `PascalCase` for classes.**
+   - Examples: `ConsensusEngine`, `BuildPipeline`.
 
-Use standard Swift API Design Guidelines.
+2. **Use `snake_case` for functions and methods.**
+   - Example: `validate_write_path(...)`.
 
-#### Types
-- Use **PascalCase** for:
-  - classes
-  - structs
-  - enums
-  - protocols
-  - actors
-  - typealiases
+3. **Name classes after concrete subsystem roles.**
+   - Preferred patterns: `*Engine`, `*Pipeline`, `*Director`.
+   - Match the module responsibility.
+   - Example: `BuildPipeline` in `build_director.py`.
 
-Examples:
-- `ConsensusRequest`
-- `AuthenticationState`
-- `SocketMessageEnvelope`
-- `KeychainCredentialStore`
+4. **Name functions with an imperative verb that describes the side effect or computation.**
+   - Examples: `validate_write_path`, `ensure`, `is_docs_pr`.
 
-#### Functions and methods
-- Use **lowerCamelCase**.
-- Start with a verb when the function performs an action.
-- Start with `is`, `has`, `can`, or `should` for booleans.
-- Prefer argument labels that read naturally at call sites.
+5. **Prefix boolean-returning helper functions with `is_`, `has_`, or `should_` when the return value is a predicate.**
+   - Example: `is_docs_pr`.
 
-Examples:
-- `loadSession()`
-- `storeCredential(_:for:)`
-- `connect(to:)`
-- `sendMessage(_:)`
-- `markReadyForReview(pullRequestID:)`
+6. **Name constants in `UPPER_SNAKE_CASE`.**
+   - Examples: `GENERATION_SYSTEM`, `SWIFT_GENERATION_SYSTEM`, `UI_ADDENDUM`.
 
-#### Properties
-- Use **lowerCamelCase**.
-- Nouns for stored values.
-- Boolean properties must read as predicates.
+7. **Use descriptive field names for external service settings in UI identifiers and related code.**
+   - Example naming family:
+     - `settings-anthropic-key-field`
+     - `settings-anthropic-key-test-button`
+     - `settings-anthropic-key-reveal-button`
 
-Examples:
-- `sessionToken`
-- `socketPath`
-- `isAuthenticated`
-- `hasValidCredential`
-
-#### Protocols
-- Name protocols by capability or role.
-- Prefer nouns or `-ing` only when the protocol models a continuous behavior.
-
-Examples:
-- `CredentialStore`
-- `SocketAuthenticating`
-- `PullRequestManaging`
-
-Do not use:
-- `CredentialStoreProtocol`
-- `ManagerProtocol`
-
-#### Enums
-- Enum type names use PascalCase.
-- Enum cases use lowerCamelCase.
-- State enums must be explicit and finite.
-
-Examples:
-- `AuthenticationState.idle`
-- `AuthenticationState.authenticating`
-- `AuthenticationState.authenticated`
-- `AuthenticationState.failed`
-
-### Python Naming
-
-Follow PEP 8, with repository-specific rules below.
-
-#### Classes
-- Use **PascalCase**.
-
-Examples:
-- `ConsensusEngine`
-- `ProviderAdapter`
-- `PullRequestService`
-- `AuthenticatedSocketServer`
-
-#### Functions and methods
-- Use **snake_case**.
-- Use verbs for actions.
-- Use `is_`, `has_`, `can_`, `should_` prefixes for booleans where useful.
-
-Examples:
-- `build_consensus()`
-- `validate_message()`
-- `store_credential_reference()`
-- `is_draft_pull_request()`
-
-#### Variables
-- Use **snake_case**.
-- Avoid abbreviations except well-known protocol terms.
-
-Preferred:
-- `pull_request_number`
-- `repository_owner`
-- `line_delimited_payload`
-
-Avoid:
-- `pr_num`
-- `repo_own`
-- `ld_payload`
-
-#### Constants
-- Use **UPPER_SNAKE_CASE**.
-
-Examples:
-- `MAX_MESSAGE_BYTES`
-- `DEFAULT_SOCKET_TIMEOUT_SECONDS`
-- `GITHUB_GRAPHQL_ENDPOINT`
-
-#### Modules
-- Use **snake_case** and make the name describe the domain behavior.
-
-Examples:
-- `draft_pull_request_lifecycle.py`
-- `mergeability_validator.py`
+8. **Do not abbreviate core subsystem concepts in public class or function names.**
+   - Use `consensus`, `build`, `pipeline`, `validate`, `workflow`.
+   - Avoid opaque names unless they are established product terms.
 
 ---
 
 ## Error and Exception Patterns
 
-Errors must follow subsystem contracts defined by the owning TRD. Name errors so that the source, scope, and handling expectation are obvious.
+1. **Validate paths before every write operation with `validate_write_path`.**
+   - Required pattern:
+   ```python
+   from path_security import validate_write_path
 
-### Cross-Language Error Principles
+   safe_path = validate_write_path(user_supplied_path)
+   ```
+   - Call this before opening, writing, renaming, replacing, or generating any file from a user-influenced path.
 
-- Errors must be typed and categorized.
-- Never swallow an error that changes security, state machine correctness, or external side effects.
-- Preserve the original cause when wrapping errors.
-- Messages must be actionable and safe:
-  - no secrets
-  - no tokens
-  - no raw credentials
-  - no sensitive payload dumps
-- User-facing messages and diagnostic messages must be separated where the architecture supports it.
-- IPC and network errors must include enough structured context for retry and telemetry decisions.
+2. **Never write directly to a user-supplied path string.**
+   - Always write to the sanitized result returned by `validate_write_path(...)`.
 
-### Swift Error Conventions
+3. **Apply path validation even when the path appears to target the repository.**
+   - Do not skip validation for relative paths, generated filenames, or PR-derived filenames.
 
-- Prefer `enum` types conforming to `Error` for domain errors.
-- Name error enums as `<Subsystem>Error`.
+4. **Treat path validation as mandatory for workflow files, generated docs, test support files, and root files.**
+   - This includes writes to:
+     - `crafted-ci.yml`
+     - `crafted-ci-macos.yml`
+     - `conftest.py`
+     - all root-required basenames listed above
 
-Examples:
-- `AuthenticationError`
-- `KeychainError`
-- `IPCError`
-- `PullRequestError`
+5. **If a write path originates from branch, PR, title, or subsystem metadata, validate it before composing file output.**
+   - This includes derived names influenced by `{engineer_id}`, `{subsystem_slug}`, `{title_slug}`, or PR metadata.
 
-- Use specific cases, not catch-all strings.
+6. **Do not implement custom path traversal checks when writing files.**
+   - Use `path_security.validate_write_path` instead of ad hoc string checks.
 
-Example:
-```swift
-enum IPCError: Error {
-    case unauthenticatedPeer
-    case invalidMessageFormat
-    case messageTooLarge
-    case connectionClosed
-}
-```
-
-- If an error wraps an underlying system/framework error, include the associated value.
-
-Example:
-```swift
-enum KeychainError: Error {
-    case itemNotFound
-    case accessDenied
-    case unexpectedStatus(OSStatus)
-}
-```
-
-- Functions that can fail must either:
-  - `throw` typed errors, or
-  - return a TRD-defined result type
-
-Do not:
-- return `nil` for meaningful failures unless the absence is explicitly non-error by contract
-- use generic `NSError` in domain code unless bridging from an Apple API boundary
-
-### Python Exception Conventions
-
-- Define custom exception classes per subsystem.
-- Name exceptions as `<Subsystem>Error` or more specific derivatives.
-
-Examples:
-- `ConsensusError`
-- `ProviderError`
-- `PipelineError`
-- `GitHubApiError`
-- `PullRequestLifecycleError`
-
-- Build inheritance trees only where handling semantics require it.
-
-Example:
-```python
-class GitHubError(Exception):
-    pass
-
-class GitHubApiError(GitHubError):
-    pass
-
-class DraftPullRequestStateError(GitHubError):
-    pass
-```
-
-- Raise exceptions with concise, structured messages.
-- Attach machine-usable context as attributes when needed for retry or reporting logic.
-
-Example:
-```python
-class GitHubApiError(Exception):
-    def __init__(self, message: str, status_code: int | None = None, retryable: bool = False):
-        super().__init__(message)
-        self.status_code = status_code
-        self.retryable = retryable
-```
-
-### IPC Error Handling
-
-- Treat all inbound messages as untrusted until validated.
-- Validation failures must map to explicit protocol or authentication errors.
-- Do not continue processing after:
-  - authentication failure
-  - schema validation failure
-  - framing corruption
-  - message size violation
-- Use names that distinguish transport failures from payload failures.
-
-Preferred:
-- `SocketConnectionError`
-- `MessageFramingError`
-- `MessageValidationError`
-- `PeerAuthenticationError`
-
-### External API Error Handling
-
-For source-control platform interactions:
-
-- Separate:
-  - transport failure
-  - authentication/authorization failure
-  - rate limit failure
-  - validation failure
-  - unsupported API behavior
-  - workflow state conflict
-- Encode API-specific lifecycle constraints explicitly in names.
-
-Examples:
-- `DraftPullRequestConversionError`
-- `MergeabilityPollingTimeoutError`
-- `BranchUpdateConflictError`
-
-- Where known API behavior differs between REST and GraphQL, name the method and exception to reflect the actual supported mechanism.
-
-Preferred:
-- `mark_ready_for_review_via_graphql()`
-- `GraphQLMutationError`
-
-Avoid:
-- `update_pull_request()` when the implementation actually depends on a specific mutation lifecycle
+7. **When sanitization returns a safe fallback path, continue using the returned path rather than the original input.**
+   - Do not log and then revert to the original path.
 
 ---
 
-## Per-Subsystem Naming Rules
+## Import and Module Organisation
 
-## Swift Shell Subsystems
+1. **Put standard library imports first, third-party imports second, and local imports last.**
+   - Keep these groups separated.
 
-### App and Process Boundary
+2. **Import `validate_write_path` directly from `path_security` at the call site module that performs writes.**
+   - Required form:
+   ```python
+   from path_security import validate_write_path
+   ```
 
-Use names that make process ownership explicit.
+3. **Keep module filenames aligned with their primary exported class or subsystem role.**
+   - Examples:
+     - `src/consensus.py` → `ConsensusEngine`
+     - `src/build_director.py` → `BuildPipeline`
 
-Preferred:
-- `ShellApplication`
-- `BackendProcessLauncher`
-- `BackendConnectionMonitor`
+4. **Do not create a generic shared module for unrelated behavior.**
+   - If logic belongs to path safety, keep it with path safety usage.
+   - If logic belongs to build orchestration, keep it in the build-oriented module.
 
-Avoid ambiguous names:
-- `AppCore`
-- `MainManager`
+5. **Assume `src/` is the import root in tests and CI.**
+   - Do not add alternate import path hacks when `conftest.py` created by `ci_workflow.ensure()` already supports `src/` imports.
 
-If a type exists only in the Swift process, do not name it as if it were shared runtime infrastructure.
-
-### Authentication
-
-Authentication code must clearly distinguish:
-- operator sign-in/session state
-- backend peer authentication
-- stored credential state
-
-Preferred names:
-- `UserSession`
-- `AuthenticationState`
-- `SessionTokenProvider`
-- `PeerAuthenticator`
-
-Avoid:
-- `AuthThing`
-- `TokenManager` if it handles multiple unrelated credential forms
-
-### Keychain and Secrets
-
-Anything that stores, reads, rotates, or deletes secrets must be explicit.
-
-Preferred:
-- `KeychainCredentialStore`
-- `SecretReference`
-- `CredentialAccessPolicy`
-- `StoredCredentialRecord`
-
-Rules:
-- Files under `keychain/` or `security/` must include `Keychain`, `Credential`, `Secret`, `Security`, or the precise security domain in the type name.
-- Never use `DataStore` or `Cache` for secret persistence types.
-
-### IPC / Unix Socket / XPC
-
-Distinguish transport, framing, authentication, and message schema.
-
-Preferred:
-- `AuthenticatedSocketClient`
-- `SocketMessageFramer`
-- `LineDelimitedJSONEncoder`
-- `IPCMessageEnvelope`
-- `BackendXPCBridge`
-
-Avoid:
-- `SocketHelper`
-- `MessageUtils`
-
-When a type implements the line-delimited JSON protocol, include at least one of:
-- `LineDelimited`
-- `JSONProtocol`
-- `MessageFramer`
-- `Envelope`
-
-### UI, Views, and ViewModels
-
-Use suffixes consistently.
-
-#### Views
-- SwiftUI view types must end in `View`.
-
-Examples:
-- `AuthenticationPanelView`
-- `PullRequestCardView`
-- `BuildStatusView`
-
-#### View models
-- View model types must end in `ViewModel`.
-
-Examples:
-- `AuthenticationPanelViewModel`
-- `RepositoryStateViewModel`
-
-#### Reusable UI components
-- Components may end in `View`, `Button`, `Panel`, `Card`, or `Row` according to UI role.
-
-Examples:
-- `RepositoryCardView`
-- `PrimaryActionButton`
-- `StatusRow`
-
-Do not use:
-- `ThingView`
-- `DataCard` unless the domain noun is explicit
-
-### State and Models
-
-- State-holder types must end in `State` when modeling mutable app or workflow state.
-- Immutable message or schema types should use domain nouns such as `Request`, `Response`, `Envelope`, `Descriptor`, `Record`, or `Snapshot`.
-
-Examples:
-- `ApplicationState`
-- `PipelineState`
-- `RepositorySnapshot`
-- `AuthRequest`
-- `AuthResponse`
+6. **Do not rename or duplicate CI support imports solely to work around missing `src/` configuration.**
+   - Keep the `src/` layout and rely on the ensured `conftest.py`.
 
 ---
 
-## Python Backend Subsystems
+## Comment and Documentation Rules
 
-### Consensus and Provider Orchestration
+1. **Document naming-sensitive conventions with exact literal formats.**
+   - When documenting branch names, workflow files, accessibility identifiers, or root-file requirements, include the exact required string pattern.
 
-Consensus-related types must use the exact domain vocabulary.
+2. **When documenting accessibility identifiers, use the canonical format exactly.**
+   - Required format:
+   ```text
+   {module}-{component}-{role}-{context?}
+   ```
 
-Preferred:
-- `ConsensusEngine`
-- `ConsensusRequest`
-- `ConsensusResult`
-- `ProviderAdapter`
-- `ProviderResponseAggregator`
+3. **When adding examples for accessibility identifiers, use lowercase hyphen-separated examples that match production style.**
+   - Examples:
+     - `auth-passcode-button`
+     - `stream-gate-stop-button-{gateId}`
 
-Avoid:
-- `ModelManager`
-- `AIService`
-- `Brain`
+4. **Do not document outdated docs-PR keyword logic as active behavior.**
+   - The `_docs_keywords` list is explicitly from v5.0 and removed in v6.0.
+   - Do not introduce or rely on `_is_docs_pr` keyword matching unless a newer TRD reintroduces it.
 
-Methods should describe orchestration stages clearly.
+5. **When comments mention files that must be at repo root, refer to them by basename.**
+   - Do not describe them as “under config/” or another directory.
 
-Examples:
-- `build_consensus()`
-- `collect_provider_responses()`
-- `score_candidate_outputs()`
-- `select_consensus_result()`
+6. **Keep comments tied to enforced behavior, not aspirations.**
+   - Good: “Validate all write paths with `validate_write_path` before writing.”
+   - Bad: “Consider adding path safety here later.”
 
-### Pipeline and Generation
-
-Pipeline naming must reflect ordered stages and non-execution constraints.
-
-Preferred:
-- `PipelineStage`
-- `GenerationPipeline`
-- `PatchAssemblyStage`
-- `ValidationStage`
-- `ArtifactBundle`
-
-Rules:
-- Names involving generated outputs should use `artifact`, `patch`, `bundle`, `result`, or `output`.
-- Do not use `runner`, `executor`, or `sandbox` unless the TRD explicitly defines such a component.
-- Avoid names suggesting generated code is executed.
-
-### Source-Control Platform Integration
-
-This subsystem has special naming requirements because API behavior is lifecycle-sensitive.
-
-#### Services and clients
-Preferred:
-- `GitHubRestClient`
-- `GitHubGraphQLClient`
-- `PullRequestService`
-- `DraftPullRequestService`
-- `MergeabilityPoller`
-
-If the implementation depends on API modality, include `Rest` or `GraphQL` in the type/function name.
-
-#### Pull request lifecycle methods
-Use names that match actual platform behavior.
-
-Preferred:
-- `create_draft_pull_request()`
-- `mark_ready_for_review()`
-- `poll_mergeability_state()`
-- `merge_pull_request()`
-- `update_pull_request_branch()`
-
-If converting draft to ready for review, prefer names that indicate the supported GraphQL path where relevant:
-- `mark_ready_for_review_via_graphql()`
-
-Do not name a method as though REST supports a state transition if that transition actually requires GraphQL.
-
-#### GraphQL operations
-- Name wrappers after the mutation/query intent, not generic transport verbs.
-
-Examples:
-- `mark_pull_request_ready_for_review_mutation()`
-- `pull_request_mergeability_query()`
-
-#### API result objects
-- Use names like:
-  - `PullRequestDescriptor`
-  - `MergeabilityState`
-  - `RepositoryRef`
-  - `WorkflowRunSummary`
-
-Avoid generic names like:
-- `Data`
-- `Info`
-- `ResponseObject`
-
-### IPC and Protocol Handling in Python
-
-Use names that distinguish:
-- transport server/client
-- message framing
-- schema validation
-- peer authentication
-
-Preferred:
-- `AuthenticatedSocketServer`
-- `LineDelimitedJsonProtocol`
-- `MessageEnvelopeParser`
-- `PeerAuthenticationValidator`
-
-Note: if using JSON in a class name in Python, `Json` is acceptable in type names; module names remain `json`.
-
-### Security
-
-Security code must be unmistakable by file and symbol name.
-
-Preferred:
-- `content_safety_validator.py`
-- `credential_redactor.py`
-- `external_input_classifier.py`
-- `secret_exposure_guard.py`
-
-Avoid:
-- `filters.py`
-- `checks.py`
-
-All code that validates external or generated content should use names containing one of:
-- `validator`
-- `guard`
-- `policy`
-- `classifier`
-- `sanitizer`
-
-### Logging and Telemetry
-
-Logging modules must indicate whether they format, redact, emit, or correlate events.
-
-Preferred:
-- `structured_logger.py`
-- `log_redactor.py`
-- `event_emitter.py`
-- `trace_context.py`
-
-Avoid:
-- `logger_utils.py`
+7. **If a module enforces a naming convention, include one canonical example in the docstring or adjacent comment.**
+   - Example branch comment:
+   ```text
+   forge-agent/build/e17/crafted-dev-agent/pr-042-add-path-validation
+   ```
 
 ---
 
-## Interface and Message Naming
+## CraftedDevAgent-Specific Patterns
 
-### JSON / IPC Fields
+1. **Use the compatibility-preserving branch prefix exactly as specified for all automation that creates branches.**
+   - Always emit:
+   ```text
+   forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}
+   ```
 
-Use stable, explicit field names.
+2. **Set `.accessibilityIdentifier(...)` on every interactive macOS UI element in the subsystem.**
+   - Buttons, fields, rows, and similar controls must have identifiers following the required format.
 
-Preferred field naming:
-- JSON fields: `snake_case`
-- enum values: lowercase snake_case unless the protocol requires another form
+3. **Use role-specific suffixes in accessibility identifiers for interactive controls.**
+   - Prefer explicit roles such as:
+     - `button`
+     - `field`
+     - `row`
+     - `card`
 
-Examples:
-```json
-{
-  "message_type": "auth_request",
-  "request_id": "req_123",
-  "session_token": "...",
-  "payload": {}
-}
-```
+4. **For grouped settings controls, keep the same module and component prefix across related elements.**
+   - Example family:
+     - `settings-anthropic-key-field`
+     - `settings-anthropic-key-test-button`
+     - `settings-anthropic-key-reveal-button`
 
-Avoid:
-- mixed casing in the same schema
-- single-letter keys except where external protocols require them
+5. **For list or stream items, include the domain object identifier in the accessibility identifier.**
+   - Example family:
+     - `stream-gate-card-{gateId}`
+     - `stream-gate-yes-button-{gateId}`
+     - `stream-gate-skip-button-{gateId}`
 
-### Requests and Responses
+6. **Use `crafted-ci.yml` for Ubuntu CI logic and `crafted-ci-macos.yml` for macOS Swift CI logic; do not merge them under a renamed workflow file.**
 
-Use symmetrical names.
+7. **When ensuring CI support for tests, allow `ci_workflow.ensure()` to create and commit `conftest.py` for `src/` imports.**
+   - Do not replace this mechanism with a differently named bootstrap file.
 
-Preferred:
-- `AuthRequest` / `AuthResponse`
-- `ConsensusRequest` / `ConsensusResponse`
-- `PullRequestCreateRequest` / `PullRequestCreateResponse`
+8. **Keep backend source responsibilities aligned with the architecture context examples.**
+   - `src/consensus.py` owns consensus engine concerns.
+   - `src/build_director.py` owns build pipeline concerns.
 
-For event-style messages, use:
-- `...Event`
-- `...Notification`
-- `...Snapshot`
+9. **Do not revive removed documentation-PR detection heuristics in CraftedDevAgent code paths.**
+   - Specifically, do not add title-keyword checks derived from the removed v5.0 `_docs_keywords` behavior.
 
-Choose one based on semantics and use it consistently.
-
----
-
-## State Machine Naming
-
-Where the TRD defines a state machine:
-
-- The enum/type name must end in `State`.
-- Transition functions must use verbs like:
-  - `begin...`
-  - `complete...`
-  - `fail...`
-  - `transitionTo...`
-- Boolean guards must read as state predicates.
-
-Examples:
-- `PipelineState`
-- `beginAuthentication()`
-- `completeMerge()`
-- `failValidation(with:)`
-- `canRetry`
-
-Do not model TRD-defined states with freeform strings when an enum or constrained type is possible.
-
----
-
-## Asynchronous Code Naming
-
-### Swift
-- Async functions should still use verb-first names without `async` suffix unless needed for overload disambiguation.
-- Completion handlers, where used, should be named `completion`.
-- Methods that update UI-bound state should indicate that effect when not obvious.
-
-Examples:
-- `loadRepositoryState() async`
-- `refreshPullRequests() async`
-- `updateAuthenticationState()`
-
-### Python
-- Coroutine functions use `async def` and standard snake_case names.
-- Do not suffix every coroutine with `_async`; only use it when needed to distinguish from a synchronous variant.
-
-Preferred:
-- `poll_mergeability_state()`
-- `stream_protocol_messages()`
-
-Avoid:
-- `poll_mergeability_state_async()`
-
----
-
-## Test Naming Conventions
-
-### Test function names
-
-#### Swift
-- Use descriptive test names that encode scenario and expectation.
-
-Examples:
-- `testConnectRejectsUnauthenticatedPeer()`
-- `testStoreCredentialReturnsItemNotFoundWhenMissing()`
-- `testMarkReadyForReviewUsesGraphQLMutation()`
-
-#### Python
-- Use `test_<scenario>_<expected_behavior>()`.
-
-Examples:
-- `test_create_draft_pull_request_sets_draft_flag()`
-- `test_mark_ready_for_review_uses_graphql_mutation()`
-- `test_invalid_message_fails_schema_validation()`
-
-### Test class names
-
-#### Swift
-- `<TypeName>Tests`
-- `<SubsystemName>IntegrationTests`
-
-#### Python
-- `Test<TypeName>`
-- `Test<SubsystemName>Integration`
-
-### Fixture naming
-
-- Use `fixture_` prefix for reusable Python fixtures where not managed by framework decorators alone.
-- Use `Mock`, `Stub`, `Fake`, or `Spy` suffixes according to test-double behavior.
-
-Examples:
-- `ProviderAdapterStub`
-- `KeychainStoreFake`
-- `SocketClientSpy`
-
-Do not use `TestData1`, `DummyThing`, or `Obj`.
-
----
-
-## Naming Rules for External API Behavior Learned in Production
-
-The source-control platform integration must encode known platform behavior in both naming and implementation.
-
-### Draft pull request lifecycle
-
-- Opening pull requests as draft must be reflected explicitly:
-  - `create_draft_pull_request()`
-  - `DraftPullRequestService`
-- Conversion from draft to ready for review must not be represented as a generic PATCH update when the actual supported path is GraphQL.
-- Use names that preserve this distinction:
-  - `mark_ready_for_review_via_graphql()`
-  - `MarkReadyForReviewMutation`
-  - `DraftPullRequestConversionError`
-
-### Silent no-op behavior
-
-When an API is known to accept a request but ignore a field without error:
-- method names must not imply guaranteed state mutation unless verification follows
-- postcondition checks must be explicit in code structure
-
-Preferred helper names:
-- `verify_pull_request_ready_state()`
-- `assert_postcondition()`
-- `refresh_pull_request_state()`
-
-Avoid:
-- `set_pull_request_draft_status()` if the backing API path does not reliably enforce the change
-
----
-
-## Forbidden Naming Patterns
-
-Do not introduce any of the following unless required by an external dependency:
-
-- `Helper`, `Utils`, `Common`, `Misc`
-- `Manager` without a specific domain prefix
-- `Thing`, `Stuff`, `Data`, `Info`
-- `Handler` when the behavior is actually validation, transport, or state orchestration
-- `Service` for every class by default; use it only when the type truly models a service boundary
-- abbreviations such as:
-  - `cfg`
-  - `msg`
-  - `authn` / `authz` in public APIs
-  - `pr` in public type names unless the surrounding module is already strictly pull-request scoped
-
-Allowed exceptions:
-- established protocol or platform abbreviations in localized contexts, such as:
-  - `IPC`
-  - `XPC`
-  - `JSON`
-  - `URL`
-  - `ID`
-
----
-
-## Documentation and Comment Conventions
-
-- Comments must explain **why**, not restate **what** obvious code does.
-- Security-sensitive code must document the relevant invariant or trust boundary.
-- External API workarounds must include a short comment describing the observed behavior and the chosen compliant path.
-- Reference the owning TRD section in comments or docstrings when behavior is non-obvious or contract-sensitive.
-- Do not include marketing names or branding language in code comments or internal documentation.
-
-Examples of good comment intent:
-- why a GraphQL mutation is required for a lifecycle transition
-- why generated content is validated but never executed
-- why a message is rejected before deserialization into a richer type
-
----
-
-## Summary
-
-Every symbol name should make these things obvious:
-
-- which process owns it
-- which subsystem it belongs to
-- whether it is transport, model, state, UI, security, or API logic
-- whether it is draft/ready lifecycle specific
-- whether it handles secrets or untrusted external input
-- whether it validates, stores, transforms, polls, or mutates
-
-If a name could fit in three subsystems, it is too vague. If a name hides a security boundary or API constraint, it is incorrect.
+10. **Whenever CraftedDevAgent writes generated files from user, PR, or automation input, perform path validation first and write only to the validated path.**
+    - This rule applies to code generation, workflow generation, root file updates, and test bootstrap creation.
