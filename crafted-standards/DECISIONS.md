@@ -1,172 +1,101 @@
 # DECISIONS.md
 
-## Native macOS agent with a two-process architecture
+## [Use the documented repository layout as the only supported baseline]
 **Status:** Accepted  
-**Context:** The product is defined as a native macOS AI coding agent. The repository guidance states the architecture is split into a Swift shell and a Python backend, with clear ownership boundaries between UI/auth/secrets and intelligence/generation/GitHub operations.  
-**Decision:** Implement the system as two cooperating local processes:
-- A Swift native macOS shell responsible for UI, authentication, Keychain access, and local IPC orchestration.
-- A Python backend responsible for consensus, generation pipeline, and GitHub operations.  
-**Consequences:** This constrains component boundaries, ownership of secrets, and implementation language choices. Swift-facing concerns must remain in the shell; generation and orchestration logic must remain in the backend. Cross-process contracts become a primary system interface and must be treated as stable.  
+**Context:** CraftedDevAgent operates in a repository with prescribed top-level directories and explicit separation of concerns. The TRDs define `forge-docs/` as the source of truth for requirements and `forge-standards/` as the location for architectural and implementation constraints. The README also defines a fixed repository layout that implementation must respect.  
+**Decision:** Treat the documented repository layout as normative. Read requirements from `forge-docs/` before implementation work, and store subsystem-wide standards and design constraints in `forge-standards/`. Do not invent alternate top-level layout conventions for this subsystem.  
+**Consequences:** Implementation, tooling, and documentation must assume the standard repository shape. Code that discovers documents, standards, or project roots must target this structure. Changes that depend on moving TRDs, PRDs, or standards files are out of scope unless the repository standard is revised first.  
 **Rejected alternatives:**  
-- **Single-process application:** Rejected because the TRD-derived architecture explicitly separates UI/secrets from model orchestration and automation logic.  
-- **All-Swift or all-Python implementation:** Rejected because subsystem ownership is explicitly divided by responsibility and platform fit.
+- Auto-discover arbitrary document locations across the repo — rejected because it weakens source-of-truth guarantees and increases ambiguity.  
+- Co-locate standards inside `src/` — rejected because standards are repository-level governance, not runtime code.  
+- Support multiple repository layouts simultaneously — rejected because it increases complexity and undermines deterministic agent behavior.
 
-## Swift shell owns UI, authentication, Keychain, and local IPC
+## [Read critical control files before modifying subsystem behavior]
 **Status:** Accepted  
-**Context:** Repository instructions assign UI, authentication, Keychain, and XPC/socket-related shell responsibilities to the Swift process. The shell is the trusted local host for operator interaction and secret custody.  
-**Decision:** Place all user interface, user-facing session/auth flows, and secure local secret access in the Swift shell. The shell is the authority for secret retrieval and user-mediated control surfaces.  
-**Consequences:** The Python backend must not independently own macOS-native secret storage or UI responsibilities. Any backend operation requiring credentials depends on shell-mediated access or provisioning. This narrows the trusted surface for sensitive data handling.  
+**Context:** Several files are identified as critical because they define security boundaries, orchestration behavior, GitHub I/O, and CI generation. Uninformed changes to these files can affect every generated PR or bypass required safeguards.  
+**Decision:** Treat `src/consensus.py`, `src/build_director.py`, `src/github_tools.py`, `src/path_security.py`, and `src/ci_workflow.py` as mandatory review targets before modifying related behavior. Require implementers to inspect the relevant critical file before changing generation loops, orchestration, GitHub operations, path handling, or CI workflow generation.  
+**Consequences:** Design and implementation work must account for existing logic in these files instead of layering duplicate behavior elsewhere. Changes in these areas require higher scrutiny and must preserve the documented responsibilities of each file.  
 **Rejected alternatives:**  
-- **Backend-owned secrets:** Rejected because secret custody is explicitly assigned to the Swift shell.  
-- **Cross-platform UI hosted in Python:** Rejected because the product is specified as native macOS with Swift-owned UI.
+- Permit changes without first reading the critical files if tests pass — rejected because behavioral coupling and security implications are broader than test coverage.  
+- Duplicate logic in new modules to avoid touching critical files — rejected because it creates inconsistent control paths and hidden bypasses.  
+- Collapse all critical responsibilities into one file — rejected because it would increase complexity and reduce maintainability.
 
-## Python backend owns intelligence, generation pipeline, and GitHub operations
+## [Enforce allowed repository root directories for all write operations]
 **Status:** Accepted  
-**Context:** Repository guidance explicitly assigns consensus, generation, and GitHub tasks to the Python backend. The product behavior described in the README depends on backend orchestration across multiple generation and validation stages.  
-**Decision:** Centralize planning execution, model orchestration, typed PR generation workflow, self-correction, lint/fix loops, and GitHub API operations in the Python backend.  
-**Consequences:** GitHub logic, generation workflows, and model-provider abstractions must be implemented in Python. The shell must remain a controller/presenter rather than duplicating backend behavior.  
+**Context:** GitHub integration lessons learned show that commits to unexpected root directories fail silently or are blocked by path security guards. The subsystem relies on an explicit allowlist of valid repository roots, including dot-prefixed roots such as `.github`.  
+**Decision:** Allow writes only under explicitly approved repository roots. At minimum, support `src`, `tests`, `docs`, `scripts`, `.github`, `tools`, `schemas`, `contracts`, and `configs` as valid standard-project roots, and require explicit allowlisting for any additional root.  
+**Consequences:** All file creation, modification, and commit preparation paths must validate the root directory before proceeding. Features that need new top-level directories must update the allowlist intentionally rather than writing opportunistically. Dot-prefixed roots must be handled explicitly, not via generic path heuristics.  
 **Rejected alternatives:**  
-- **Split GitHub behavior across Swift and Python:** Rejected because ownership is explicitly assigned to the backend.  
-- **Move model orchestration into the shell:** Rejected because intelligence and pipeline responsibilities are specified for the backend.
+- Allow writes anywhere inside the repository if the path is relative — rejected because it weakens the security boundary and permits unintended top-level sprawl.  
+- Block all dot-prefixed roots — rejected because CI workflow files under `.github` are required.  
+- Infer allowed roots dynamically from existing files — rejected because repository drift or malicious paths could expand the write surface unintentionally.
 
-## Inter-process communication uses an authenticated Unix socket with line-delimited JSON
+## [Route every writable path through path security validation]
 **Status:** Accepted  
-**Context:** The product definition states that the Swift shell and Python backend communicate through an authenticated Unix socket using line-delimited JSON messages. This is a core integration contract between the two processes.  
-**Decision:** Use an authenticated local Unix socket as the transport and encode messages as line-delimited JSON records.  
-**Consequences:** All cross-process requests and events must fit a JSON message protocol and stream framing model. Authentication of the local channel is mandatory. Any alternative IPC mechanism must not replace this without changing the governing specification.  
+**Context:** `src/path_security.py` is defined as the security boundary, and every write path must pass through it. This boundary prevents invalid roots, path traversal, and other unsafe filesystem actions.  
+**Decision:** Require every file write, update, rename, delete, or commit candidate path to be validated through the path security layer before use. Do not permit direct filesystem writes that bypass `src/path_security.py`.  
+**Consequences:** All modules performing file operations must depend on the central path security mechanism. Convenience helpers, GitHub utilities, and workflow generators must call the same validation path. Any implementation that writes directly to the filesystem without validation is non-compliant.  
 **Rejected alternatives:**  
-- **XPC as the sole transport:** Rejected because the product definition specifically names an authenticated Unix socket with line-delimited JSON as the communication mechanism.  
-- **HTTP/gRPC loopback server:** Rejected because it introduces an unneeded protocol surface not specified by the TRD-derived system description.  
-- **Binary custom protocol:** Rejected because line-delimited JSON is the specified wire format.
+- Validate paths independently in each module — rejected because duplicated security logic diverges and creates bypass risks.  
+- Validate only before GitHub commit operations — rejected because unsafe local writes can still corrupt state before commit time.  
+- Rely on OS path normalization alone — rejected because normalization does not enforce repository policy or root allowlists.
 
-## Never execute generated code
+## [Centralize all GitHub I/O in the GitHub tools layer]
 **Status:** Accepted  
-**Context:** The repository guidance explicitly states that neither the Swift process nor the Python process ever executes generated code. This is a foundational security constraint for the agent.  
-**Decision:** Prohibit execution of generated code by any system component. Generated artifacts may be analyzed, linted, tested through repository-controlled tooling where applicable, and proposed in pull requests, but the agent itself does not execute arbitrary generated output as code.  
-**Consequences:** Design choices for validation, testing, and correction must avoid runtime execution of generated code as an agent action. Tooling and pipeline stages must respect this non-execution boundary.  
+**Context:** `src/github_tools.py` owns GitHub I/O, including path validation integration, rate limiting, and SHA protocol handling. Splitting these concerns across modules would risk inconsistent repository updates and API misuse.  
+**Decision:** Perform all GitHub reads and writes through `src/github_tools.py` or interfaces directly backed by it. Do not call the GitHub API from ad hoc modules for repository content mutation or retrieval that affects agent execution state.  
+**Consequences:** GitHub-related concerns such as SHA handling, retries, throttling, and path validation remain consistent. New features requiring GitHub access must extend the shared tools layer rather than introducing parallel clients.  
 **Rejected alternatives:**  
-- **Sandboxed execution of generated code:** Rejected because the governing product guidance says generated code is never executed.  
-- **Optional operator-enabled execution mode:** Rejected because the prohibition is stated as universal, not configurable.
+- Allow each feature module to instantiate its own GitHub client — rejected because it duplicates rate-limit and SHA semantics and makes failures inconsistent.  
+- Use raw HTTP requests directly from orchestration code — rejected because it bypasses shared safeguards and increases coupling.  
+- Restrict `github_tools.py` to writes only — rejected because read/write symmetry is needed for coherent repository state management.
 
-## Technical Requirement Documents are the source of truth
+## [Preserve a staged build pipeline with explicit validation and fix loop]
 **Status:** Accepted  
-**Context:** Repository guidance states that the 16 TRDs in `forge-docs/` completely specify the product and that code must match them. Agents are instructed not to invent requirements.  
-**Decision:** Treat the TRDs as authoritative for interfaces, error contracts, state machines, security controls, testing requirements, and performance requirements. Implementation decisions must be derived from those documents rather than ad hoc interpretation.  
-**Consequences:** Engineering changes require tracing to the relevant TRD. Unspecified behavior should not be invented. Documentation and code reviews must validate conformance to TRD-owned subsystem requirements.  
+**Context:** The build pipeline includes a validation sequence of `ast.parse`, `ruff`, and import checks, followed by a failure-type-aware pytest fix loop capped at 20 attempts. This staged approach structures code generation and remediation.  
+**Decision:** Implement and preserve the build pipeline as discrete stages, including syntax validation, linting, import validation, and a bounded test-fix loop with failure-aware remediation. Do not collapse these checks into a single opaque execution step.  
+**Consequences:** Pipeline code must expose stage boundaries and execute validation in the prescribed order. Remediation logic must remain bounded and strategy-driven rather than open-ended. Diagnostic output and checkpoints can refer to stable stage names.  
 **Rejected alternatives:**  
-- **README or agent guidance as primary spec:** Rejected because those documents point back to the TRDs as authoritative.  
-- **Implementation-defined behavior filling gaps freely:** Rejected because the explicit instruction is to avoid inventing requirements.
+- Run only pytest and infer all failures from test output — rejected because syntax, lint, and import failures should be caught earlier and more cheaply.  
+- Keep retrying until tests pass — rejected because it creates unbounded execution and unpredictable behavior.  
+- Merge all validation into one generic “verify” function — rejected because it obscures failure modes and complicates targeted recovery.
 
-## Security requirements are governed centrally by TRD-11
+## [Cap per-stage cyclomatic complexity at 15]
 **Status:** Accepted  
-**Context:** Repository instructions state that TRD-11 governs all components and must be consulted for any work involving credentials, external content, generated code, or CI.  
-**Decision:** Apply a centralized security model defined by TRD-11 across all subsystems, regardless of implementation language or ownership. Security-relevant changes must be evaluated against that governing document first.  
-**Consequences:** Security controls cannot be decided independently per subsystem. Changes involving secrets, remote APIs, generated content, or automation pipelines must satisfy the same shared security constraints.  
+**Context:** The README explicitly states that every stage has a maximum cyclomatic complexity of 15, and `src/build_director.py` enforces this limit strictly. This is a design constraint to keep orchestration understandable and maintainable.  
+**Decision:** Keep every build-pipeline stage and equivalent orchestration unit at cyclomatic complexity 15 or lower. Refactor branching logic into helpers rather than allowing stage controllers to exceed the limit.  
+**Consequences:** Stage implementations must remain compositional and narrowly scoped. Complex decision trees need decomposition into helper functions or strategy objects. Code review must reject stage logic that exceeds the limit even if functionally correct.  
 **Rejected alternatives:**  
-- **Per-subsystem security policies:** Rejected because security is specified as governed centrally across all components.  
-- **Security review only for backend changes:** Rejected because the guidance explicitly applies across the system.
+- Allow higher complexity in orchestration code because it is “centralized” — rejected because central code is exactly where maintainability risk is highest.  
+- Apply the limit only to new code — rejected because all stage logic must remain governed uniformly.  
+- Measure only file-level complexity — rejected because the constraint is explicitly stage-level.
 
-## The product is a directed build agent, not a chat interface or code autocomplete tool
+## [Checkpoint every pipeline state transition]
 **Status:** Accepted  
-**Context:** The README explicitly distinguishes the product from chat interfaces, autocomplete tools, and copilots. It is described as a directed build agent that takes repository specifications and intent, then produces pull requests autonomously.  
-**Decision:** Design user flows, system behavior, and subsystem interfaces around directed repository transformation and PR production rather than open-ended conversational interaction or inline completion.  
-**Consequences:** UX, workflow, and backend orchestration must optimize for scoped intent intake, planning, execution, PR generation, and operator gating. Conversational features or editor-autocomplete behaviors are out of scope unless explicitly specified elsewhere.  
+**Context:** The pipeline requires that every state transition be checkpointed, including per-PR states such as `branch_opened`, `code_generated`, `tests_passed`, `committed`, and `ci_passed`. Checkpointing provides recoverability, auditability, and controlled resumption.  
+**Decision:** Persist a checkpoint at every defined pipeline state transition, including all per-PR milestone states. Do not advance stages solely in memory without recording the transition.  
+**Consequences:** Orchestration must model explicit states rather than implicit progress. Resume, retry, and audit flows can rely on recorded checkpoints. New stages or transitions must define corresponding checkpoint behavior as part of their implementation.  
 **Rejected alternatives:**  
-- **Chat-first agent UX:** Rejected because the product definition explicitly says it is not a chat interface.  
-- **Autocomplete/copilot behavior:** Rejected because the product is defined around repository-level build execution and pull-request output.
+- Checkpoint only at major milestones such as commit and CI pass — rejected because intermediate failure recovery would be lossy.  
+- Keep pipeline state only in process memory — rejected because crashes and restarts would lose execution context.  
+- Infer previous state from repository contents — rejected because repository state alone does not reliably encode orchestration progress.
 
-## Operator provides repository, TRDs, and plain-language intent as the primary input model
+## [Require an explicit operator gate before merge]
 **Status:** Accepted  
-**Context:** The README describes the operator supplying a repository, a set of TRDs, and a plain-language intent, after which the agent proceeds through confidence assessment, planning, generation, and PR creation.  
-**Decision:** Use repository context, loaded technical specifications, and operator intent as the canonical inputs to the build workflow.  
-**Consequences:** Input handling, planning, and execution subsystems must be optimized for spec-grounded repository work rather than generic prompt-only tasking. The system must maintain traceability from intent and TRDs into generated PRs.  
+**Context:** The pipeline defines a gate stage where the operator approves or corrects before merge. This ensures human oversight after generation, testing, and CI completion.  
+**Decision:** Do not auto-merge generated changes. Require an explicit operator approval or correction step before merge is considered complete.  
+**Consequences:** The subsystem must support a paused pre-merge state and expose artifacts needed for human review. Automation may prepare a PR and gather evidence, but final merge remains gated by operator action.  
 **Rejected alternatives:**  
-- **Prompt-only task execution without repository/spec grounding:** Rejected because the product workflow is explicitly anchored in repository state and technical specifications.  
-- **Fully autonomous goal discovery:** Rejected because the operator-supplied intent is the stated starting point.
+- Auto-merge once tests and CI pass — rejected because technical correctness alone does not satisfy intent, risk, or governance review.  
+- Require approval only for failed or risky changes — rejected because the documented pipeline defines a universal gate.  
+- Treat PR creation as implicit approval — rejected because creation and approval are distinct control points.
 
-## Assess confidence in scope before committing to execution
+## [Generate CI workflows for both standard and macOS-specific paths]
 **Status:** Accepted  
-**Context:** The README states that the agent assesses its confidence in the requested scope before committing to it. This indicates a gate before execution begins.  
-**Decision:** Insert a pre-execution confidence assessment stage that evaluates whether the requested intent is sufficiently understood and bounded before the agent commits to building.  
-**Consequences:** The system must support refusal, deferral, or decomposition behavior when scope confidence is inadequate. Downstream planning depends on this gate.  
+**Context:** The documented pipeline requires `crafted-ci.yml` on `ubuntu-latest` and `crafted-ci-macos.yml` for Swift. `src/ci_workflow.py` is responsible for generating these workflows.  
+**Decision:** Generate and maintain CI workflows that cover both the standard Linux path and the macOS-specific path when applicable, using `.github` as an explicitly allowed root. Do not limit workflow generation to a single generic CI configuration.  
+**Consequences:** CI generation logic must account for at least two workflow targets and write them through the approved path security boundary into `.github`. Repositories with Swift or macOS requirements must receive the macOS workflow rather than relying on Linux-only validation.  
 **Rejected alternatives:**  
-- **Immediate execution on every user request:** Rejected because the documented workflow includes a confidence assessment before commitment.  
-- **Manual-only operator triage with no model-based confidence stage:** Rejected because confidence assessment is part of the product behavior.
-
-## Decompose intent into an ordered PRD plan before generating pull requests
-**Status:** Accepted  
-**Context:** The README states that the system decomposes operator intent into an ordered PRD plan, then further decomposes each PRD into a sequence of typed pull requests. This establishes a staged planning hierarchy.  
-**Decision:** Use a two-level planning structure:
-1. Convert intent into an ordered PRD plan.
-2. Convert each PRD into one or more typed pull requests for implementation.  
-**Consequences:** Planning is explicit, hierarchical, and ordered. Subsystems must preserve plan sequencing and traceability from intent to PRD to PR.  
-**Rejected alternatives:**  
-- **Direct generation of code changes from intent:** Rejected because the documented workflow requires intermediate PRD planning.  
-- **Single undifferentiated task list:** Rejected because the product specifies typed, ordered decomposition.
-
-## Open one pull request per logical unit of work
-**Status:** Accepted  
-**Context:** The README states that the agent opens GitHub pull requests “one per logical unit.” This implies a granularity rule for change packaging.  
-**Decision:** Package implementation output into pull requests aligned with logical work units rather than batching unrelated changes together.  
-**Consequences:** Planning and generation must identify logical boundaries and maintain them through PR creation. This improves reviewability and sequencing but constrains batching optimization.  
-**Rejected alternatives:**  
-- **Single large PR for all requested work:** Rejected because the documented behavior is one PR per logical unit.  
-- **File-by-file PR fragmentation:** Rejected because the unit is logical work, not arbitrary technical slicing.
-
-## Use a two-model consensus engine with Claude and GPT-4o, with Claude arbitrating every result
-**Status:** Accepted  
-**Context:** The README defines the generation strategy as a two-model consensus engine using Claude and GPT-4o in parallel, with Claude arbitrating every result.  
-**Decision:** Implement generation and evaluation around two providers operating in parallel, with Claude acting as the arbiter for final result selection or reconciliation.  
-**Consequences:** Provider abstraction, consensus orchestration, and arbitration logic must support two distinct model outputs and a final adjudication step. Single-model operation would not satisfy the specified behavior.  
-**Rejected alternatives:**  
-- **Single-provider generation:** Rejected because the product explicitly uses two-model consensus.  
-- **Symmetric voting with no designated arbiter:** Rejected because Claude is specifically assigned arbitration responsibility.  
-- **GPT-4o as arbiter:** Rejected because the product description names Claude as the arbiter.
-
-## Generate implementation and tests in parallel across providers
-**Status:** Accepted  
-**Context:** The README states that the system generates implementation and tests using two LLM providers in parallel. This indicates both concurrency and inclusion of tests as first-class generated artifacts.  
-**Decision:** Run parallel provider generation for both implementation changes and corresponding tests as part of each typed pull request workflow.  
-**Consequences:** The pipeline must support concurrent provider requests and handle reconciliation across code and test outputs. Test generation is required, not optional.  
-**Rejected alternatives:**  
-- **Implementation-first, tests-later manual addition:** Rejected because tests are part of the described generation workflow.  
-- **Sequential provider execution:** Rejected because provider generation is explicitly parallelized.
-
-## Apply a self-correction pass, lint gate, and iterative fix loop before PR output
-**Status:** Accepted  
-**Context:** The README describes the agent performing a self-correction pass, a lint gate, and an iterative fix loop as part of the build workflow. These are explicit quality-control stages.  
-**Decision:** Insert mandatory post-generation quality stages consisting of:
-- self-correction,
-- lint validation,
-- iterative issue-fixing loops before finalizing pull requests.  
-**Consequences:** PRs are not emitted directly from first-pass generation. The backend pipeline must support repeated refinement and validation cycles.  
-**Rejected alternatives:**  
-- **First-pass output with no correction loop:** Rejected because the documented workflow includes correction and lint gating.  
-- **Human-only review as the sole quality control:** Rejected because automated self-correction and iterative fixes are specified.
-
-## Operator gates, reviews, and merges; the agent continues building sequentially
-**Status:** Accepted  
-**Context:** The README states that the operator gates, reviews, and merges each PR while the agent builds the next PR in parallel with review of the previous one.  
-**Decision:** Keep merge authority and final review with the operator, while allowing the agent to continue preparing subsequent logical-unit PRs within the planned sequence.  
-**Consequences:** Human oversight remains mandatory at the merge boundary. The system must support pipelined preparation of subsequent work without taking final merge actions autonomously.  
-**Rejected alternatives:**  
-- **Fully autonomous merge by the agent:** Rejected because review and merge are operator-controlled.  
-- **Strictly serial build-review-build execution:** Rejected because the product explicitly overlaps next-PR building with operator review of the previous PR.
-
-## GitHub pull requests are opened as drafts first
-**Status:** Accepted  
-**Context:** The GitHub integration lessons learned document states that the agent opens every PR as a draft so CI can run before the operator sees it.  
-**Decision:** Create all GitHub pull requests initially in draft state.  
-**Consequences:** PR lifecycle logic must include draft handling and later promotion to review-ready state. CI behavior and operator-facing review timing depend on this.  
-**Rejected alternatives:**  
-- **Open PRs as ready-for-review immediately:** Rejected because the documented operating model intentionally uses drafts to allow CI to run first.  
-- **No PR creation until all checks are complete locally:** Rejected because the described lifecycle uses draft PRs as the vehicle for CI.
-
-## Convert draft pull requests to ready-for-review using GraphQL, not REST PATCH
-**Status:** Accepted  
-**Context:** The GitHub integration lessons learned document records a production-discovered API behavior: REST `PATCH /repos/{owner}/{repo}/pulls/{number}` with `{"draft": false}` silently fails to convert draft PRs, while the GraphQL `markPullRequestReadyForReview` mutation is the supported path.  
-**Decision:** Use the GitHub GraphQL `markPullRequestReadyForReview` mutation to transition draft pull requests to ready-for-review status. Do not rely on REST PATCH with a `draft` field for this transition.  
-**Consequences:** GitHub integration must include GraphQL support for PR lifecycle transitions even if other operations use REST. API client behavior must account for silent REST non-effect in this case.  
-**Rejected alternatives:**  
-- **REST PATCH with `draft: false`:** Rejected because it is documented to return 200 while leaving the PR in draft state.  
-- **Manual operator conversion in GitHub UI:** Rejected because the pipeline requires reliable automated lifecycle progression.
+- Use a single universal CI workflow for all languages and platforms — rejected because macOS/Swift requirements need dedicated execution environments.  
+- Generate workflows outside `.github` — rejected because GitHub Actions requires the standard workflow location.  
+- Skip CI generation and assume repositories bring their own workflows — rejected because the subsystem’s pipeline explicitly includes generated CI artifacts.
