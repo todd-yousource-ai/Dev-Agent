@@ -4,13 +4,13 @@
   "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture. You should apply Max impl_files per PR: 8\u201310. Beyond that, split into multiple PRs. Max acceptance criteria: 8\u201310. More than that is a scope problem.",
   "scope_statement": "Build the complete Crafted Dev Agent \u2014 a native macOS two-process AI coding agent consisting of a Swift shell (UI, Touch ID, Keychain, XPC) and a Python backend (consensus engine, build pipeline, GitHub integration, document store, multi-agent coordination, holistic review, TRD workflow, recovery/state management, CI pipeline, build memory, build rules). The system transforms plain-language build intents into tested, CI-passing GitHub pull requests using dual-LLM parallel generation with Claude arbitration. This is a full-system build decomposed into multiple PRDs covering all 16 TRDs plus the identified gap components (CommandRouter, EmailNotifier, generate_single(), SCOPE_SYSTEM prompt, and Crafted Connect SDK stub), with each PRD producing 8-10 implementation-file PRs and 8-10 acceptance criteria per PR.\n\nClarifications:\n  - This should be resolved through the PRD process using best practices\n  - This should be resolved through the PRD process using best practices\n  - This should be resolved through the PRD process using best practices\n  - This should be resolved through the PRD process using best practices\n  - This should be resolved through the PRD process using best practices\n\nOperator on 'Should the initial PRD decomposition prioritize the Python b':\nboth tracks be developed in parallel\n\nOperator on 'For the five identified gap components (CommandRouter, Email':\nbundled into the PRDs of their parent subsystem\n\nOperator on 'TRD-8 references Figma MCP Server and TRD-18 Crafted Connect':\nfull implementations be attempted\n\nOperator on 'The regression test suite (test_regression_taxonomy.py, 35 t':\nThe PRDs should be develop in order that allow for the most graceful software development for the product",
   "created_at": 1774544676.0630982,
-  "updated_at": 1774544676.063375,
+  "updated_at": 1774545648.94798,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
       "prd_id": "PRD-001",
       "title": "Core Backend Runtime, Startup Handshake, Command Routing, and Scope Gate Foundations",
-      "status": "pending",
+      "status": "in_progress",
       "engineer_id": "",
       "pr_ids": []
     },
@@ -115,7 +115,7 @@
   ],
   "pr_entries": {},
   "knowledge_notes": [],
-  "version": 1,
+  "version": 2,
   "schema_version": 3,
   "agent_version": "39.48.0"
 }
