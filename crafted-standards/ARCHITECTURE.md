@@ -1,436 +1,448 @@
-# Architecture
+# Architecture - CraftedDevAgent
 
-## System Overview
+## What This Subsystem Does
 
-**Product:** Crafted Dev Agent / Crafted  
-**Platform:** Native macOS application  
-**Minimum macOS:** 13.0 (Ventura)
+CraftedDevAgent is the native macOS AI coding agent subsystem responsible for turning a plain-language build intent into an operator-gated sequence of pull requests.
 
-Crafted is a native macOS AI coding agent that builds software autonomously from specifications. The architecture is explicitly **two-process**:
+At a high level, it:
 
-1. **Swift shell**
-   - UI
-   - authentication
-   - Keychain secret storage
-   - orchestration
-   - XPC-related ownership per repository guidance
-
-2. **Python backend**
-   - consensus
-   - pipeline execution
-   - GitHub operations
-   - intelligence and generation
-
-Per the repository documents, the two processes communicate over an **authenticated Unix socket** using **line-delimited JSON**. The documents also state a core execution constraint: **neither process ever executes generated code**.
-
-At the product level, Crafted accepts:
-- a repository
-- technical specifications (TRDs)
-- operator intent in plain language
-
-It then performs a directed build workflow:
-- assesses confidence in scope
-- decomposes intent into an ordered PRD plan
-- decomposes each PRD into typed pull requests
+- accepts build intent and repository context
+- decomposes work into an ordered PR plan
+- performs scope assessment and confidence gating
 - generates implementation and tests using two LLM providers in parallel
-- runs self-correction
-- runs a lint gate
-- runs an iterative fix loop
+- uses Claude as the arbitration layer in consensus
+- applies a self-correction pass
+- runs lint and a bounded local fix loop
 - executes CI
-- opens a draft pull request for operator review
+- blocks on operator approval before merge
+- persists cross-run learning in build memory and build rules
+- reports status and gating state over XPC to the macOS UI
 
-The shell is the native container that packages, installs, authenticates, and orchestrates all subsystems. TRD-1 defines it as foundational and states it owns:
-- installation and distribution
-- identity and authentication
-- biometric gate
-- Keychain secret storage
-- session lifecycle
-
-The overall architecture is constrained by the repository instruction set:
-- the 16 TRDs are the source of truth
-- code must match the TRDs
-- TRD-11 governs all security-relevant components
-- requirements must not be invented beyond the documents
-
-## Subsystem Map
-
-### 1. macOS Application Shell
-
-**Source:** TRD-1  
-**Technology:** Swift 5.9+, SwiftUI  
-**Role:** Native macOS container and orchestrator for the product
-
-**Documented responsibilities:**
-- package and install the application
-- provide the native UI shell
-- own authentication
-- own biometric gate
-- store secrets in Keychain
-- manage session lifecycle
-- orchestrate subsystems
-
-**Explicit ownership from repository documents:**
-- UI
-- auth
-- Keychain
-- orchestration
-- XPC ownership appears in repository-level architecture guidance
-
-### 2. SwiftUI Views, Cards, Panels
-
-**Source:** CLAUDE.md references TRD-8 for these components  
-**Role:** Presentation subsystem within the Swift shell
-
-**Documented boundary evidence:**
-- SwiftUI views, cards, and panels are grouped as a distinct implementation area
-- They belong to the Swift side of the architecture
-
-### 3. Identity and Authentication
-
-**Source:** TRD-1  
-**Role:** Establish and manage operator identity and access within the shell
-
-**Documented responsibilities:**
-- identity and authentication
-- biometric gate
-- session lifecycle
-
-**Observed identity fields from loaded content:**
-- `display_name` stored in `UserDefaults`
-- `engineer_id` stored in Keychain as `SecretKey.engineerId`
-- `github_username` fetched from GitHub `/user` endpoint on first auth
-
-### 4. Secret Storage
-
-**Source:** TRD-1, repository identity text  
-**Role:** Secure storage of secrets in the Swift shell
-
-**Documented responsibilities:**
-- Keychain secret storage
-- App private key retrieval for GitHub App JWT generation is referenced in the lessons-learned document
-
-### 5. Interprocess Communication Layer
-
-**Source:** AGENTS.md, CLAUDE.md, loaded headings  
-**Role:** Communication channel between Swift shell and Python backend
-
-**Documented properties:**
-- authenticated Unix socket
-- line-delimited JSON protocol
-
-**Observed implementation references from loaded content:**
-- `Crafted/XPCBridge.swift`
-- `src/xpc_server.py`
-
-**Observed failure modes from loaded content:**
-- deadlock in the credential delivery path
-- Swift shell crashed before sending credentials
-- XPC connection failed to establish
-
-### 6. Python Backend
-
-**Source:** AGENTS.md, CLAUDE.md  
-**Technology:** Python 3.12 (bundled)  
-**Role:** Non-UI execution engine
-
-**Documented responsibilities:**
-- consensus
-- pipeline
-- GitHub operations
-- intelligence
-- generation
-
-### 7. Consensus Engine
-
-**Source:** README, CLAUDE.md snippet  
-**Role:** Multi-model generation and arbitration subsystem
-
-**Documented behavior:**
-- uses two LLM providers in parallel
-- README names the strategy as a two-model consensus engine
-- Claude + GPT-4o are used, with Claude arbitrating every result
-
-### 8. Provider Adapter Layer
-
-**Source:** CLAUDE.md snippet  
-**Role:** Integration layer for model providers used by the consensus engine
-
-**Documented evidence:**
-- `ConsensusEngine, ProviderAdapter` are grouped as a subsystem area in repository guidance
-
-### 9. Planning and Decomposition Pipeline
-
-**Source:** README  
-**Role:** Convert operator intent into executable implementation units
-
-**Documented stages:**
-- confidence assessment in scope
-- PRD plan decomposition
-- decomposition of each PRD into typed pull requests
-
-### 10. Generation, Self-Correction, and Fix Loop Pipeline
-
-**Source:** README  
-**Role:** Produce code and tests, then refine them until pipeline gates pass
-
-**Documented stages:**
-- implementation generation
-- test generation
-- self-correction pass
-- lint gate
-- iterative fix loop
-
-### 11. GitHub Integration
-
-**Source:** AGENTS.md, CLAUDE.md, GitHub Integration Lessons Learned, README  
-**Role:** Repository, pull request, and GitHub API operations
-
-**Documented responsibilities:**
-- GitHub operations are owned by the Python backend
-- open draft pull requests
-- fetch `/user` on first auth for `github_username`
-
-**Documented GitHub API behaviors from lessons learned:**
-- draft PRs must be converted to ready-for-review using GraphQL `markPullRequestReadyForReview`
-- REST PATCH with `{"draft": false}` is ignored
-- merging a draft PR returns 405
-
-**Observed GitHub content handling steps from loaded content:**
-- fetch file content from GitHub
-- read current file from GitHub to get content and SHA
-
-**Observed GitHub App auth step:**
-- generate JWT using App private key from Keychain
-
-### 12. CI Integration
-
-**Source:** README, loaded headings  
-**Role:** Verification pipeline executed before operator review and merge progression
-
-**Documented behavior:**
-- CI is executed before a pull request is opened for review
-
-**Observed CI jobs/workflows from loaded content:**
-- `Forge CI — Python / test`
-- `Forge CI — macOS / unit-test`
-- `Forge CI — macOS / xpc-integration-test`
-- `Crafted CI (ubuntu) — main Python test job`
-- `Crafted CI — macOS (Swift) — only triggers for Swift files`
-
-### 13. Installation, Distribution, and Update Subsystem
-
-**Source:** TRD-1  
-**Role:** Package and distribute the shell as a macOS application
-
-**Documented responsibilities:**
-- `.app` bundle
-- drag-to-Applications installation
-- Sparkle auto-update
-
-### 14. Build and Release Packaging
-
-**Source:** TRD-1, loaded headings  
-**Role:** Produce signed application artifacts for macOS distribution
-
-**Observed packaging/signing evidence:**
-- `Developer ID Application: YouSource.ai ({TEAM_ID})`
-- `$GITHUB_WORKSPACE/build/Release/Crafted.app`
-
-### 15. Review / Operator Command Surface
-
-**Source:** loaded headings from documentation  
-**Role:** Operator-facing command and review controls
-
-**Observed commands and options:**
-- `/ledger note <text>`
-- `/review start`
-- `/review exclude`
-- `adjust scope`
-- `exclude files`
-- `exclude security in src/vendor/`
-- `exclude src/legacy/`
-- `exclude src/old_api.py`
-- `select lenses`
-
-These are documented as operator controls, not autonomous hidden behavior.
+This subsystem is explicitly human-gated. Gates wait indefinitely for operator input; there is no auto-approve behavior.
 
 ## Component Boundaries
 
-### macOS Application Shell must never
-- own intelligence, generation, or GitHub operations, which repository documents assign to the Python backend
-- execute generated code
-- infer requirements outside the TRDs
+The subsystem boundary is defined by the files and responsibilities called out in the Forge architecture context.
 
-### SwiftUI presentation components must never
-- become the source of truth for authentication, secret storage, or backend pipeline logic
-- bypass shell-owned auth and session controls
-- execute generated code
+### In-scope components
 
-### Identity and Authentication subsystem must never
-- move secret storage responsibility out of the shell/Keychain boundary
-- rely on unstated identity fields beyond those documented
-- treat session or biometric gates as backend responsibilities
+#### `src/build_director.py`
+Owns build pipeline orchestration, including:
 
-### Secret Storage subsystem must never
-- expose raw secrets to components not documented as secret owners
-- relocate private key material outside Keychain-backed storage described by the shell documents
+- ordered execution of build stages
+- confidence gate handling
+- PR type routing
+- stage progression and operator-facing gate behavior
 
-### IPC layer must never
-- operate without authentication
-- deviate from line-delimited JSON over the documented Unix socket transport
-- collapse the process boundary between shell and backend
-- execute generated code in transit or as part of message handling
+It contains the scope stage behavior documented as:
 
-### Python Backend must never
-- assume ownership of UI, native authentication, biometric gate, or Keychain storage
-- bypass the shell for secrets that the shell owns
-- execute generated code
+- `SCOPE_SYSTEM` returns `confidence` (0–100) and `coverage_gaps`
+- `_stage_scope` gates at `_CONFIDENCE_THRESHOLD = 85`
+- below threshold, the operator is shown gaps and offered:
+  - proceed
+  - answer
+  - cancel
+- if the operator answers gaps, exactly one re-scope pass is allowed; there is no iterative loop
 
-### Consensus Engine must never
-- substitute a single-model flow for the documented two-model consensus process where the README specifies parallel generation and arbitration
-- bypass arbitration behavior described in the product README
+#### `src/consensus.py`
+Owns multi-model generation and arbitration, including:
 
-### Provider Adapter layer must never
-- redefine product behavior outside provider integration concerns
-- bypass consensus/orchestration contracts established by the backend
+- `ConsensusEngine`
+- generation system prompts:
+  - `GENERATION_SYSTEM`
+  - `SWIFT_GENERATION_SYSTEM`
+  - `UI_ADDENDUM`
 
-### Planning and Decomposition Pipeline must never
-- skip the documented progression from intent → PRD plan → typed pull requests
-- present the product as chat or autocomplete; README explicitly says it is not those things
+This component is responsible for parallel provider usage and arbitration behavior referenced in the platform overview.
 
-### Generation / Self-Correction / Fix Loop pipeline must never
-- bypass self-correction, lint gating, iterative fixing, or CI where the README lists them as pipeline stages
-- execute generated code
+#### `src/github_tools.py`
+Owns all GitHub interactions via:
 
-### GitHub Integration must never
-- attempt unsupported draft-state transitions through the documented non-working REST field update
-- merge draft PRs directly
-- take ownership of local auth or Keychain responsibilities assigned to the shell
+- `GitHubTool`
+- `WebhookReceiver`
 
-### CI Integration must never
-- be treated as optional in the documented PR production path, since README places CI before draft PR review
-- collapse Python and macOS test concerns into a single undocumented job model
+Boundary rule: all GitHub operations must go through `GitHubTool`. Direct GitHub API use is out of bounds.
 
-### Installation / Distribution / Update subsystem must never
-- own backend intelligence or GitHub workflow logic
-- bypass the native `.app`/drag-to-Applications/Sparkle packaging responsibilities documented in TRD-1
+#### `src/build_ledger.py`
+Owns per-PR stage checkpointing and progress durability.
 
-### Build and Release Packaging must never
-- produce unsigned or differently attributed release artifacts beyond the documented signing context present in loaded materials
-- redefine install/update policy independently of the shell specification
+This boundary exists to enforce the invariant that completed work is not re-run after a crash.
 
-### Operator Command Surface must never
-- silently mutate scope outside the explicit operator commands shown in the documents
-- hide exclusions or lens selections from the operator, since the loaded content presents these as explicit commands
+#### Build memory and rules persistence
+Persistent learning artifacts are in scope:
 
-## Key Data Flows
+- `workspace/{engineer_id}/build_memory.json`
+- `Mac-Docs/build_rules.md`
 
-### 1. Operator intent to pull request
+These are durable system memory, not temporary caches.
 
-1. Operator provides:
-   - repository
-   - TRDs
-   - plain-language intent
-2. System assesses confidence in the scope
-3. System decomposes intent into an ordered PRD plan
-4. Each PRD is decomposed into typed pull requests
-5. Python backend performs generation using two model providers in parallel
-6. Consensus/arbitration is applied
-7. Self-correction runs
-8. Lint gate runs
-9. Iterative fix loop runs
-10. CI executes
-11. GitHub integration opens a **draft PR**
-12. Operator reviews, gates, and merges
+#### Document store integration
+The subsystem uses document-store-backed repository and product context, including automatic loading of `build_rules.md` and specific document retrieval such as `PRODUCT_CONTEXT.md`.
 
-### 2. Shell-to-backend startup and credential path
+#### XPC protocol integration
+The subsystem emits and consumes the documented XPC message types used by the native macOS application shell and UI.
 
-1. Swift shell starts and orchestrates backend lifecycle
-2. Python backend is started with a socket path and nonce per loaded test/startup references
-3. Shell and backend communicate over an authenticated Unix socket
-4. Messages use line-delimited JSON
-5. Credential delivery traverses this boundary
+### Out-of-scope behavior
 
-**Documented failure sensitivity:**
-- deadlock in credential delivery
-- shell crash before credential send
-- connection establishment failure
+The subsystem does **not**:
 
-### 3. Authentication and identity flow
+- execute generated code through `eval`, `exec`, or subprocess of generated content
+- bypass operator gates
+- write files without path validation
+- place external document context into the system prompt
+- clear build memory or build rules automatically
+- call GitHub APIs outside `GitHubTool`
+- treat unknown XPC message types as exceptions
 
-1. Shell owns authentication and biometric gate
-2. Shell manages session lifecycle
-3. Secret material is stored in Keychain
-4. Identity-related values are persisted/fetched as documented:
-   - `display_name` in `UserDefaults`
-   - `engineer_id` in Keychain
-   - `github_username` from GitHub `/user` on first auth
+## Data Flow
 
-### 4. GitHub App/API flow
+The subsystem’s data flow follows the documented pipeline and protocol boundaries.
 
-1. App private key is retrieved from Keychain
-2. JWT is generated using the App private key
-3. GitHub API operations are executed by the backend
-4. PRs are opened as draft
-5. Draft → ready-for-review transition uses GraphQL mutation
-6. Draft PR merge is not attempted directly because documented behavior returns 405
+### 1. Session initialization over XPC
 
-### 5. Installation and update flow
+The agent communicates over nonce-authenticated, line-delimited JSON XPC messages with a maximum size of 16MB per message.
 
-1. Product is delivered as a macOS `.app` bundle
-2. User installs via drag-to-Applications
-3. Auto-update is provided by Sparkle
+Initialization includes a `ready` message:
 
-### 6. CI verification flow
+```json
+{ "agent_version": "...", "min_swift_version": "...", "capabilities": [], "doc_store_status": "..." }
+```
 
-1. Generated changes enter verification gates
-2. CI runs Python and macOS test workflows as applicable
-3. Draft PR is opened after CI execution in the documented product flow
+Credentials are supplied as:
 
-## Critical Invariants
+```json
+{ "anthropic_api_key": "...", "openai_api_key": "...", "github_token": "...", "engineer_id": "..." }
+```
 
-1. **Two-process architecture is mandatory.**  
-   The system is split into a Swift shell and Python backend.
+These credentials are sensitive and must never appear in logs, error messages, or generated code.
 
-2. **Responsibility split is mandatory.**  
-   - Swift owns UI, authentication, Keychain, orchestration.
-   - Python owns consensus, pipeline, GitHub operations, intelligence, generation.
+### 2. Build intent and context ingestion
 
-3. **IPC must be authenticated.**  
-   Communication between the two processes uses an authenticated Unix socket.
+Inputs include:
 
-4. **IPC message framing is fixed.**  
-   Messages are line-delimited JSON.
+- plain-language build intent
+- repository context
+- external documents
+- PR comments
+- CI output
 
-5. **Generated code must never be executed.**  
-   This prohibition applies to both processes.
+All such external input is untrusted and must be validated.
 
-6. **The shell is the security and identity anchor.**  
-   Authentication, biometric gating, Keychain storage, and session lifecycle remain shell-owned.
+Document-store context is used primarily for generation. A specific rule applies:
 
-7. **The backend is the execution engine for intelligence and GitHub actions.**  
-   These concerns do not migrate into the shell.
+- context from external documents goes in the **USER** prompt
+- never in the **SYSTEM** prompt
 
-8. **The product is a directed build agent, not a chat UI or code autocomplete tool.**  
-   This is an architectural product constraint stated in the README.
+### 3. Scope analysis and confidence gate
 
-9. **Draft pull requests are part of the normal workflow.**  
-   The system opens every PR as draft before operator review.
+The build director performs scope assessment using `SCOPE_SYSTEM`, which returns:
 
-10. **Draft PR state changes must follow documented GitHub behavior.**  
-    Converting draft → ready-for-review requires GraphQL `markPullRequestReadyForReview`; direct REST field mutation is not valid for this purpose.
+- `confidence` from 0 to 100
+- `coverage_gaps`
 
-11. **Draft PRs must not be merged directly.**  
-    The loaded GitHub behavior document states this returns 405.
+`_stage_scope` compares confidence to `_CONFIDENCE_THRESHOLD = 85`.
 
-12. **CI is part of the PR production path.**  
-    The README places CI before opening a draft PR for review.
+- if confidence is at or above threshold, the build proceeds
+- if below threshold, a gate is emitted to the operator with identified gaps and options to:
+  - proceed
+  - answer
+  - cancel
 
-13. **TRDs are authoritative.**  
-    The architecture, interfaces, error contracts, state machines, security controls, and performance requirements are defined in the TRDs and must not be invented outside them.
+If the operator supplies answers, the subsystem performs one re-scope pass only.
 
-14. **Security-relevant work is governed by TRD-11.**  
-    Repository instructions explicitly require TRD-11 for credentials, external content, generated code, or CI-related security work.
+### 4. PR decomposition and generation
 
-15. **Operator control must remain explicit.**  
-    Scope adjustments, exclusions, and lens selection are surfaced as explicit operator commands in the loaded documents.
+The build intent is decomposed into an ordered PR sequence.
+
+For each PR, the subsystem:
+
+- assembles generation context from repository state, documents, build memory, and build rules
+- invokes two LLM providers in parallel
+- arbitrates results through Claude via the consensus engine
+- generates implementation and tests
+
+The context manager trims context automatically at 30k tokens while preserving:
+
+- the spec-anchor first turn
+- the last 6 messages
+
+### 5. Correction, lint, and local fix loop
+
+After initial generation, the subsystem runs:
+
+- a self-correction pass
+- a lint gate
+- a bounded local fix loop
+
+Failure handling is strategy-driven:
+
+- primary signal: failure type
+- secondary signal: attempt count
+
+Documented strategies:
+
+- `assertion_error` → `test_driven` immediately
+- `import_error` / `runtime_error` → `converse` first, then `test_driven`
+- `attempt >= 8` → `nuclear` every 3rd attempt
+- maximum 20 local attempts, then move on
+
+There is no indefinite local retry behavior.
+
+### 6. CI execution and result handling
+
+The subsystem executes CI and consumes CI output as untrusted external input.
+
+CI polling behavior includes:
+
+- ETag caching on all polling endpoints
+- `403 primary` exponential backoff:
+  - 2s
+  - 4s
+  - 8s
+  - 16s
+  - 32s
+  - 64s
+- `429 secondary` respects `Retry-After`
+
+CI log output is automatically truncated to 8k characters using:
+
+- 70% head
+- 30% tail
+
+### 7. Operator gating and merge control
+
+The subsystem emits `gate_card` messages:
+
+```json
+{ "gate_type": "...", "options": [], "description": "..." }
+```
+
+A gate blocks indefinitely until the operator responds. There is no auto-approval path.
+
+### 8. Status streaming
+
+Progress is streamed via `build_card`:
+
+```json
+{ "card_type": "...", "stage": "...", "content": "...", "progress": "..." }
+```
+
+These messages feed `BuildStreamView`.
+
+Document embedding/indexing progress may be surfaced as `doc_status`:
+
+```json
+{ "doc_id": "...", "doc_name": "...", "status": "...", "chunk_count": 0, "embedded_count": 0 }
+```
+
+### 9. Persistence and crash recovery
+
+After every successful PR:
+
+- `build_memory.record_pr()` writes to `workspace/{engineer_id}/build_memory.json`
+
+After each build run, if 3 or more recurring failure patterns are found:
+
+- `Mac-Docs/build_rules.md` is updated
+
+Per-PR stage checkpoints are persisted so completed work is not re-run after a crash.
+
+## Key Invariants
+
+The subsystem must preserve the following invariants.
+
+### Security and trust boundaries
+
+- Fail closed on auth, crypto, and identity errors; never degrade silently.
+- No silent failure paths; every error must surface with context.
+- Secrets never appear in logs, error messages, or generated code.
+- All external input is untrusted and validated.
+- Generated code is never executed by the agent.
+- All file writes are path-validated via `path_security.validate_write_path()` before execution.
+- `SECURITY_REFUSAL` output is never bypassed by rephrasing; the system must stop, gate, and log.
+- Context from external documents goes in the USER prompt, never the SYSTEM prompt.
+
+### Human control
+
+- Gates wait indefinitely for operator input.
+- No auto-approve behavior exists anywhere in the pipeline.
+- Scope uncertainty below threshold is surfaced explicitly through a gate with operator options.
+
+### Protocol correctness
+
+- XPC wire format is line-delimited JSON.
+- XPC messages are nonce-authenticated.
+- XPC message size is capped at 16MB.
+- Unknown XPC message types are discarded and logged; they are never raised as exceptions.
+
+### Execution and recovery guarantees
+
+- Per-PR stage checkpoints prevent re-running completed work after a crash.
+- Build memory is persistent and is not automatically cleared.
+- Build rules are persistent and are not automatically cleared except when intentionally switching to a completely new codebase.
+- ContextManager auto-trims at 30k tokens while preserving the spec-anchor first turn and the last 6 messages.
+- Local repair attempts are bounded to 20.
+
+### GitHub and repository operations
+
+- All GitHub operations go through `GitHubTool`.
+- Paths are validated before any write.
+
+## Failure Modes
+
+### Scope confidence below threshold
+
+Condition:
+
+- `SCOPE_SYSTEM` returns `confidence < 85`
+
+Behavior:
+
+- surface `coverage_gaps`
+- emit a gate offering proceed, answer, or cancel
+- if operator answers, perform one re-scope pass only
+- do not enter an unbounded clarification loop
+
+### Auth, crypto, or identity failure
+
+Condition:
+
+- any authentication, cryptographic, or identity validation error
+
+Behavior:
+
+- fail closed
+- do not degrade functionality silently
+- surface the error with context
+- do not continue in a partially authenticated state
+
+### Security refusal
+
+Condition:
+
+- model or policy layer returns `SECURITY_REFUSAL`
+
+Behavior:
+
+- stop processing
+- gate
+- log
+- do not retry by paraphrasing or prompt rewording
+
+### Invalid or unsafe file write
+
+Condition:
+
+- write path is not validated by `path_security.validate_write_path()`
+
+Behavior:
+
+- do not perform the write
+- surface the failure with context
+
+### Unknown XPC message type
+
+Condition:
+
+- inbound XPC message type is not recognized
+
+Behavior:
+
+- discard message
+- log occurrence
+- do not raise an exception
+
+### Local build/test failure during correction loop
+
+Condition:
+
+- assertion, import, runtime, lint, or similar local failure during repair
+
+Behavior:
+
+- choose strategy via `failure_handler.py:_choose_strategy(failure_type, attempt, records)`
+- use failure type as the primary routing signal
+- use attempt count for escalation
+- stop after 20 attempts maximum
+
+Specific strategy mapping:
+
+- `assertion_error` → `test_driven` immediately
+- `import_error` / `runtime_error` → `converse` first, then `test_driven`
+- every 3rd attempt once `attempt >= 8` → `nuclear`
+
+### CI API throttling or access failure
+
+Condition:
+
+- polling endpoints return `403 primary` or `429 secondary`
+
+Behavior:
+
+- `403 primary` uses exponential backoff from 2s to 64s
+- `429 secondary` respects `Retry-After`
+- polling uses ETag caching
+
+### Oversized or long-running context
+
+Condition:
+
+- context grows beyond model budget
+
+Behavior:
+
+- ContextManager auto-trims at 30k tokens
+- preserve spec-anchor first turn
+- preserve last 6 messages
+
+### Crash or restart mid-PR
+
+Condition:
+
+- process terminates during PR processing
+
+Behavior:
+
+- recover from per-PR stage checkpoints
+- do not re-run already completed work
+
+## Dependencies
+
+### Internal code dependencies
+
+- `src/build_director.py`
+- `src/consensus.py`
+- `src/github_tools.py`
+- `src/build_ledger.py`
+- `failure_handler.py`
+- `path_security.validate_write_path()`
+- `build_memory.record_pr()`
+- `ContextManager`
+
+### Persistent data dependencies
+
+- `workspace/{engineer_id}/build_memory.json`
+- `Mac-Docs/build_rules.md`
+
+### Protocol dependencies
+
+- XPC line-delimited JSON transport
+- nonce authentication
+- XPC message schemas:
+  - `ready`
+  - `build_card`
+  - `gate_card`
+  - `credentials`
+  - `doc_status`
+
+### External service dependencies
+
+- Anthropic provider access
+- OpenAI provider access
+- GitHub access exclusively through `GitHubTool`
+- document store services for repository/product context and automatic `build_rules.md` loading
+
+### UI integration dependencies
+
+- `BuildStreamView` for streamed `build_card` updates
+- operator response path for `gate_card` blocking gates
