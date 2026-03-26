@@ -1,91 +1,119 @@
-# DECISIONS.md
-
-## Repository root writes must be constrained by an explicit allowlist
+## [Treat `forge-docs/` as the authoritative design input]
 **Status:** Accepted  
-**Context:** CraftedApp performs automated repository writes and GitHub commits. Prior lessons learned show that commits to unexpected root directories either fail silently or are blocked by path security guards. Dot-prefixed roots such as `.github` are especially prone to rejection unless explicitly permitted.  
-**Decision:** Enforce an explicit root-directory allowlist for all file creation, update, and commit operations. At minimum, permit writes only under `src`, `tests`, `docs`, `scripts`, `.github`, `tools`, `schemas`, `contracts`, and `configs` unless the allowlist is deliberately extended. Require every write path to pass through the path security boundary before any filesystem or GitHub I/O occurs.  
-**Consequences:** CraftedApp cannot write arbitrary files anywhere in the repository. New top-level directories require a deliberate allowlist change before use. CI workflow generation under `.github` must be treated as a first-class allowed case rather than a special bypass. Implementation must route all path decisions through the security layer and must not perform direct unchecked writes.  
+**Context:** CraftedApp implementation is constrained by TRDs and PRDs stored under `forge-docs/`. The repository structure explicitly identifies this directory as the source of truth and requires it to be read before building.  
+**Decision:** Read and conform to the relevant documents in `forge-docs/` before changing CraftedApp behavior, interfaces, workflows, or repository structure. Treat `forge-docs/` as authoritative over inferred behavior from partial code inspection.  
+**Consequences:** Implementation work in CraftedApp must be traceable to documented requirements. Changes that conflict with TRDs must be rejected or preceded by document updates. Ad hoc implementation based only on current code is not permitted when it diverges from documented design.  
 **Rejected alternatives:**  
-- Allow writes anywhere inside the repo if the path is relative — rejected because relative-path checks are insufficient against invalid roots and inconsistent tooling behavior.  
-- Special-case `.github` outside normal validation — rejected because it weakens the security boundary and creates inconsistent path handling.  
-- Validate paths only at commit time — rejected because unsafe paths must be blocked before filesystem mutation, not after.
+- **Treat source code as the only source of truth:** Rejected because the repository explicitly defines TRDs/PRDs as the governing design inputs.  
+- **Use README summaries without consulting TRDs:** Rejected because summaries omit subsystem-specific constraints and edge cases.  
+- **Allow undocumented behavior changes for speed:** Rejected because it breaks design traceability and increases drift from intended architecture.
 
-## All repository mutations must traverse the path security boundary
+## [Preserve the documented repository layout]
 **Status:** Accepted  
-**Context:** The subsystem has designated security-critical files, and `src/path_security.py` is identified as the write boundary for the system. Automated generation, patching, and GitHub operations all depend on trustworthy path validation.  
-**Decision:** Route every repository mutation through the path security module, including local file writes, generated CI workflows, patch application, and GitHub content updates. Prohibit direct filesystem writes or GitHub update calls that bypass this boundary.  
-**Consequences:** Implementations must centralize mutation logic and may need adapters around lower-level tools. Security behavior becomes auditable and consistent. Refactors that introduce convenience write helpers must still delegate to the path security layer.  
+**Context:** The repository layout is explicitly defined, including `forge-docs/` for requirements and `forge-standards/` for governing standards such as `DECISIONS.md`. CraftedApp must fit within this structure rather than inventing local conventions.  
+**Decision:** Keep CraftedApp files and documentation within the documented repository layout and place design-governing artifacts in `forge-standards/` when they are cross-cutting standards. Do not relocate or duplicate authoritative documents into subsystem-specific ad hoc locations.  
+**Consequences:** CraftedApp implementation must align with the existing repository contract, reducing ambiguity for agents and operators. New files must respect the established top-level structure. Documentation sprawl and shadow standards are disallowed.  
 **Rejected alternatives:**  
-- Permit direct local writes while validating only remote GitHub operations — rejected because local state can become unsafe before push.  
-- Duplicate path validation in each module — rejected because duplicated security logic drifts and creates inconsistent enforcement.  
-- Trust upstream generators to emit safe paths — rejected because generators are not security boundaries.
+- **Create a CraftedApp-local standards directory:** Rejected because it fragments governance and conflicts with the defined role of `forge-standards/`.  
+- **Embed design decisions only in code comments:** Rejected because architecture decisions must be discoverable and durable outside implementation files.  
+- **Reorganize top-level directories for subsystem convenience:** Rejected because it would break repository-wide conventions and tooling expectations.
 
-## Pipeline orchestration stages must remain below cyclomatic complexity 15
+## [Honor critical-file boundaries when modifying CraftedApp-adjacent flows]
 **Status:** Accepted  
-**Context:** The build pipeline explicitly limits complexity to 15 per stage, and `src/build_director.py` is identified as a critical orchestration file where this rule is strictly enforced. The subsystem must remain maintainable under iterative agent-driven changes.  
-**Decision:** Keep each pipeline stage and orchestration unit at cyclomatic complexity 15 or lower. Split branching behavior into smaller helpers or strategy components rather than accumulating conditional logic inside stage handlers.  
-**Consequences:** The subsystem must favor composition over large controller methods. Failure-handling, stage transitions, and branch-specific behavior will be decomposed into discrete units. Code reviews must treat complexity growth in orchestration as a design violation, not merely a style issue.  
+**Context:** Several files are identified as critical because they define core generation, orchestration, GitHub I/O, path security, and CI workflow generation. Changes in these files have system-wide effects beyond any single subsystem.  
+**Decision:** Treat modifications to `src/consensus.py`, `src/build_director.py`, `src/github_tools.py`, `src/path_security.py`, and `src/ci_workflow.py` as architectural changes requiring explicit review against their stated responsibilities before implementing CraftedApp behavior that depends on them.  
+**Consequences:** CraftedApp must prefer extension through existing interfaces over casual edits to critical infrastructure. Any required changes in these files must be narrowly scoped and justified by subsystem needs. This constrains local implementation shortcuts that would alter global behavior.  
 **Rejected alternatives:**  
-- Allow higher complexity in orchestration because it centralizes pipeline logic — rejected because centralization without decomposition makes agent-modified flow brittle and hard to verify.  
-- Enforce complexity only at file level — rejected because large complex functions can hide inside compliant files.  
-- Rely on reviewers without a hard cap — rejected because the pipeline already defines the cap as a structural constraint.
+- **Modify critical files freely when tests pass:** Rejected because their impact extends beyond local test coverage.  
+- **Duplicate logic in CraftedApp to avoid touching critical files:** Rejected because it creates divergence in security, orchestration, and GitHub behavior.  
+- **Bypass critical-file review for small changes:** Rejected because small changes in these files can have broad architectural consequences.
 
-## Every pipeline state transition must be checkpointed
+## [Enforce the root-directory allowlist for all repository writes]
 **Status:** Accepted  
-**Context:** The pipeline definition requires checkpointing every state transition, including per-PR stages such as `branch_opened`, `code_generated`, `tests_passed`, `committed`, and `ci_passed`. Automated workflows need durable progress tracking and recoverability.  
-**Decision:** Persist a checkpoint at every stage transition and at each required per-PR milestone. Treat checkpoint creation as part of the transition contract rather than optional logging.  
-**Consequences:** Recovery, retries, and auditability depend on checkpoint data being complete and current. Stage handlers must not advance process state without recording the transition. Any redesign of state names or ordering must preserve explicit durable checkpoints.  
+**Context:** GitHub integration lessons learned specify that writes outside explicitly allowed roots fail silently or are blocked by path security. Standard valid roots include `src`, `tests`, `docs`, `scripts`, `.github`, `tools`, `schemas`, `contracts`, and `configs`. Dot-prefixed roots such as `.github` require explicit allowlisting.  
+**Decision:** Restrict CraftedApp-created or modified files to explicitly allowed repository roots and ensure any dot-prefixed root, especially `.github`, is explicitly allowlisted before writing. Do not assume path validators will accept undeclared roots.  
+**Consequences:** CraftedApp cannot emit files into arbitrary top-level locations. New root directories require explicit security and integration approval before use. CI and automation files under `.github` must be treated as a special-case allowed root, not an implicit exception.  
 **Rejected alternatives:**  
-- Checkpoint only major stages — rejected because per-PR progress must be resumable and auditable at finer granularity.  
-- Use transient logs instead of durable checkpoints — rejected because logs do not provide reliable recovery semantics.  
-- Checkpoint only on failure — rejected because successful transitions are equally necessary for resume and traceability.
+- **Permit writes to any existing path in the repo:** Rejected because path security is based on allowlists, not existence checks alone.  
+- **Infer safety from successful local filesystem writes:** Rejected because GitHub/path-security enforcement may still reject or silently ignore such paths.  
+- **Handle `.github` like any non-dot root without explicit allowlisting:** Rejected because dot-prefixed roots are specifically called out as requiring explicit allowance.
 
-## Gate decisions must require explicit operator approval or correction before merge
+## [Route every write through path security validation]
 **Status:** Accepted  
-**Context:** The pipeline includes a final gate where the operator approves or corrects before merge. Automated generation and testing do not eliminate the need for human control over final integration.  
-**Decision:** Require an explicit gate decision by an operator before merge. Do not permit the subsystem to auto-merge solely on the basis of generated code, test success, or CI pass status.  
-**Consequences:** Merge automation must stop at a human approval boundary. UI, CLI, or API flows must expose pending gate state and accept explicit approval or correction actions. Delivery latency may increase, but final control remains with the operator.  
+**Context:** `src/path_security.py` is identified as the security boundary, and every write path must pass through it. CraftedApp must not create alternate write mechanisms that bypass this control.  
+**Decision:** Validate every CraftedApp file write, update, move, or generated artifact path through the shared path security boundary before execution. Do not implement direct write paths that circumvent `src/path_security.py`.  
+**Consequences:** CraftedApp file operations are constrained by centralized validation rules. Convenience writes, temporary shortcuts, and subsystem-specific path exceptions are prohibited unless added through the shared security layer. This improves consistency and reduces security regressions.  
 **Rejected alternatives:**  
-- Auto-merge when tests and CI pass — rejected because the pipeline defines operator gating as mandatory.  
-- Make human review configurable per repository — rejected because this weakens a core control for the subsystem.  
-- Allow silent timeout-based approval — rejected because absence of intervention is not equivalent to an explicit gate decision.
+- **Perform local path checks inside CraftedApp only:** Rejected because it duplicates and weakens the shared security boundary.  
+- **Bypass validation for generated files considered “safe”:** Rejected because generated output can still target unsafe or disallowed locations.  
+- **Validate only on commit rather than on write intent:** Rejected because earlier validation prevents unsafe operations sooner and matches the documented boundary.
 
-## CI workflow generation must produce platform-appropriate crafted workflows
+## [Centralize GitHub I/O through shared GitHub tooling]
 **Status:** Accepted  
-**Context:** The build pipeline defines generated workflows `crafted-ci.yml` on `ubuntu-latest` and `crafted-ci-macos.yml` for Swift. Workflow generation is handled by a critical file and must align with repository path constraints.  
-**Decision:** Generate CI workflows under `.github` using the crafted workflow naming convention. Use `crafted-ci.yml` targeting `ubuntu-latest` for standard workflows and `crafted-ci-macos.yml` when Swift or macOS-specific execution is required.  
-**Consequences:** Workflow generation logic must distinguish platform/runtime needs and write only to approved CI paths. Repositories that need macOS execution must receive a separate crafted macOS workflow rather than overloading the default Linux workflow. Naming and placement become contractually stable for downstream tooling.  
+**Context:** `src/github_tools.py` owns GitHub I/O, including path validation, rate limiting, and SHA protocol handling. CraftedApp must not implement competing repository-write behavior.  
+**Decision:** Perform all CraftedApp GitHub reads and writes through the shared GitHub tooling and honor its path validation, rate limiting, and SHA-handling semantics. Do not introduce direct API calls that bypass this layer.  
+**Consequences:** CraftedApp behavior will remain consistent with repository-wide GitHub safety and concurrency rules. Implementation options that need lower-level API access must first extend the shared tooling rather than bypass it.  
 **Rejected alternatives:**  
-- Generate a single generic workflow for all stacks — rejected because Swift/macOS workloads require distinct runner behavior.  
-- Place generated workflows outside `.github` and copy them later — rejected because GitHub Actions only recognizes workflow files in the standard location and delayed copying complicates security validation.  
-- Use arbitrary workflow names per project — rejected because stable names are needed for orchestration and discovery.
+- **Call the GitHub API directly from CraftedApp for speed:** Rejected because it bypasses validated path handling and repository-wide safeguards.  
+- **Use separate GitHub helpers inside the subsystem:** Rejected because it duplicates protocol logic and risks inconsistent SHA/rate-limit handling.  
+- **Write locally and let another process sync remotely:** Rejected because it obscures responsibility for validation and repository state management.
 
-## Source-of-truth documentation must be read from forge-docs before implementation changes
+## [Maintain stage boundaries in the build pipeline]
 **Status:** Accepted  
-**Context:** The repository structure declares `forge-docs/` as the location where all TRDs and PRDs live and explicitly states they must be read before building. CraftedApp must conform to documented requirements rather than infer behavior from code alone.  
-**Decision:** Treat documents in `forge-docs/` as the authoritative source for subsystem behavior and implementation constraints. Require implementation changes to be aligned against relevant TRDs/PRDs before modifying code.  
-**Consequences:** Engineers and agents must consult documentation first, especially for critical subsystems and architectural behavior. Code that conflicts with documented decisions must be treated as suspect until reconciled. Implementation shortcuts based only on local code context are not acceptable.  
+**Context:** The build pipeline is explicitly staged, including parse/lint/import checks, a bounded fix loop, CI generation, testing, and gated merge progression. CraftedApp must integrate with this staged model rather than collapsing it.  
+**Decision:** Implement CraftedApp workflow behavior as explicit progression through the documented pipeline stages and do not skip validation, fix-loop, CI, or gate stages when producing repository changes.  
+**Consequences:** CraftedApp changes must remain observable and controllable at each stage. This constrains attempts to merge generation, validation, and commit logic into opaque monolithic execution. It also ensures CI artifacts and operator gates remain part of the flow.  
 **Rejected alternatives:**  
-- Treat code as the sole source of truth once implementation exists — rejected because the repository explicitly defines TRDs and PRDs as authoritative.  
-- Read documentation only for new features — rejected because maintenance changes can still violate documented constraints.  
-- Depend on inline comments instead of formal docs — rejected because comments do not replace repository-level design authority.
+- **Run a single end-to-end generation step without intermediate checkpoints:** Rejected because the pipeline requires stage visibility and recovery points.  
+- **Skip fix loops and rely only on CI:** Rejected because local correction before CI is an explicit part of the process.  
+- **Allow direct merge after local tests:** Rejected because the documented process includes CI and operator gating before merge.
 
-## Critical subsystem files must be treated as constrained modification zones
+## [Bound automated test-fix retries to 20 attempts]
 **Status:** Accepted  
-**Context:** Several files are identified as critical before modification, including `src/consensus.py`, `src/build_director.py`, `src/github_tools.py`, `src/path_security.py`, and `src/ci_workflow.py`. Changes in these files have broad system impact.  
-**Decision:** Apply heightened change discipline to critical files. Require modifications to preserve the documented responsibility of each file and prohibit incidental cross-cutting logic from being introduced into them without explicit design justification.  
-**Consequences:** Implementers must avoid opportunistic edits that expand scope within critical modules. Security, orchestration, GitHub I/O, consensus behavior, and CI generation remain clearly bounded. When new behavior affects these areas, dedicated helper modules or ADR-backed refactors should be preferred over uncontrolled growth in critical files.  
+**Context:** The pipeline defines a fix loop with pytest retries capped at 20 attempts and guided by failure type. CraftedApp must not introduce unbounded self-healing loops.  
+**Decision:** Limit CraftedApp automated test-fix iteration to no more than 20 attempts per run and require failure-type-aware handling within that bound. Stop and surface the issue when the bound is reached.  
+**Consequences:** CraftedApp avoids runaway repair cycles and preserves predictable runtime. Implementations must include explicit loop control and escalation behavior instead of indefinite retries.  
 **Rejected alternatives:**  
-- Treat all files uniformly during implementation — rejected because the repository explicitly marks these files as high-impact.  
-- Freely add unrelated helper logic into critical files for convenience — rejected because it accelerates erosion of architectural boundaries.  
-- Protect critical files by forbidding edits entirely — rejected because the subsystem must still evolve; discipline is required, not immutability.
+- **Retry until tests pass:** Rejected because it creates unbounded execution and hides persistent defects.  
+- **Use a smaller arbitrary retry count without regard to documented limit:** Rejected because the pipeline explicitly defines the allowed cap.  
+- **Disable automated fix retries entirely:** Rejected because the documented workflow includes a repair loop as a first-class stage.
 
-## Validation and fix loops must remain staged rather than collapsed into a single pass
+## [Enforce cyclomatic complexity limit of 15 per stage component]
 **Status:** Accepted  
-**Context:** The build pipeline defines separate validation steps including parsing, linting, import checks, and a bounded pytest fix loop with up to 20 attempts and failure-type-aware strategy. This staged design supports targeted remediation and observability.  
-**Decision:** Preserve validation as explicit staged checks and preserve the bounded fix loop as a distinct phase. Do not collapse parse, lint, import, and test remediation into a single opaque “verify and fix” operation.  
-**Consequences:** The subsystem must expose intermediate validation outcomes and tailor remediation to failure type. Retry logic must remain bounded, observable, and strategically differentiated rather than open-ended. Implementations will be easier to debug and safer to resume from checkpoints.  
+**Context:** The repository documentation states that every stage has a maximum cyclomatic complexity of 15, and `src/build_director.py` specifically has this limit strictly enforced. CraftedApp must conform to this implementation discipline.  
+**Decision:** Keep each CraftedApp pipeline stage function or equivalent orchestration component at cyclomatic complexity 15 or below. Refactor branching logic into smaller units rather than exceeding the limit.  
+**Consequences:** CraftedApp orchestration code must remain modular and reviewable. This constrains large controller methods and encourages decomposition of decision-heavy logic. Complexity reduction becomes a design requirement, not a post hoc cleanup task.  
 **Rejected alternatives:**  
-- Run one monolithic validation command and infer failures from aggregate output — rejected because it obscures failure type and weakens targeted recovery.  
-- Permit unbounded test-fix retries — rejected because the pipeline explicitly bounds attempts and unbounded loops are unsafe.  
-- Skip early parse/lint/import checks and rely on tests only — rejected because fast-fail validation reduces wasted fix-loop cycles and improves error isolation.
+- **Allow higher complexity in “temporary” orchestration code:** Rejected because orchestrators are long-lived and central to correctness.  
+- **Enforce complexity only at file level:** Rejected because the documented constraint applies per stage, not just per module aggregate.  
+- **Ignore complexity if tests cover branches:** Rejected because test coverage does not address maintainability and reviewability requirements.
+
+## [Checkpoint every state transition]
+**Status:** Accepted  
+**Context:** The build pipeline requires every state transition to be checkpointed, including per-PR states such as `branch_opened`, `code_generated`, `tests_passed`, `committed`, and `ci_passed`. CraftedApp must preserve this recoverability and traceability model.  
+**Decision:** Persist a checkpoint at every CraftedApp state transition and include the documented per-PR milestones where applicable. Do not collapse multiple transitions into a single untracked state update.  
+**Consequences:** CraftedApp execution must be resumable, auditable, and observable across failures or operator intervention. This constrains ephemeral in-memory-only workflow state and requires durable transition recording.  
+**Rejected alternatives:**  
+- **Checkpoint only major milestones such as commit and CI:** Rejected because the documented process requires every state transition to be tracked.  
+- **Use logs instead of explicit checkpoints:** Rejected because logs are insufficient for deterministic recovery and state resumption.  
+- **Store state only in memory during a run:** Rejected because crashes or restarts would lose required workflow history.
+
+## [Require an operator gate before merge]
+**Status:** Accepted  
+**Context:** The documented pipeline includes a gate where the operator approves or corrects before merge. CraftedApp must not fully automate past this control point.  
+**Decision:** Require explicit operator approval or correction before merging CraftedApp-produced changes. Do not implement unattended merge behavior that bypasses the gate.  
+**Consequences:** CraftedApp remains human-governed at the final integration boundary. This constrains full autonomy and requires clear presentation of pending merge decisions to an operator.  
+**Rejected alternatives:**  
+- **Auto-merge when tests and CI pass:** Rejected because the process explicitly reserves final authority to the operator.  
+- **Gate only on high-risk changes:** Rejected because the documented gate is a standard stage, not a conditional exception path.  
+- **Treat silent timeout as approval:** Rejected because approval must be explicit, not inferred.
+
+## [Generate and use CI workflows appropriate to platform]
+**Status:** Accepted  
+**Context:** The build pipeline specifies `crafted-ci.yml` on `ubuntu-latest` and `crafted-ci-macos.yml` for Swift. `src/ci_workflow.py` is the critical generator for these workflows. CraftedApp must honor the documented CI split.  
+**Decision:** Generate or update CI workflows through the shared CI workflow generator and use Linux CI for general workloads and macOS CI when the subsystem includes Swift-specific requirements. Do not handcraft divergent workflow files outside the defined pattern.  
+**Consequences:** CraftedApp CI remains consistent with platform requirements and repository conventions. Workflow changes must pass through the shared generator path, constraining bespoke YAML drift.  
+**Rejected alternatives:**  
+- **Use a single Ubuntu workflow for all languages:** Rejected because Swift/macOS support is explicitly called out as requiring macOS CI.  
+- **Hand-edit workflow YAML directly in each feature branch:** Rejected because `src/ci_workflow.py` is the designated generation point and direct edits increase drift.  
+- **Run only local tests without CI workflow generation:** Rejected because CI is a mandatory pipeline stage.
