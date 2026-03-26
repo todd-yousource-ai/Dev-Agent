@@ -1,113 +1,281 @@
 {
-  "build_id": "crafteddevagent-655b8015",
-  "subsystem": "CraftedDevAgent",
+  "build_id": "craftedapp-3efe2241",
+  "subsystem": "CraftedApp",
   "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture. You should apply Max impl_files per PR: 8\u201310. Beyond that, split into multiple PRs. Max acceptance criteria: 8\u201310. More than that is a scope problem.",
-  "scope_statement": "Build the complete Crafted Dev Agent \u2014 a native macOS two-process AI coding agent consisting of a Swift shell (UI, Touch ID, Keychain, XPC) and a Python backend (consensus engine, build pipeline, GitHub integration, document store, multi-agent coordination, holistic review, TRD workflow, recovery/state management, CI pipeline, build memory, build rules). The system transforms plain-language build intents into tested, CI-passing GitHub pull requests using dual-LLM parallel generation with Claude arbitration. This is a full-system build decomposed into multiple PRDs covering all 16 TRDs plus the identified gap components (CommandRouter, EmailNotifier, generate_single(), SCOPE_SYSTEM prompt, and Crafted Connect SDK stub), with each PRD producing 8-10 implementation-file PRs and 8-10 acceptance criteria per PR.\n\nClarifications:\n  - This should be resolved through the PRD process using best practices\n  - This should be resolved through the PRD process using best practices\n  - This should be resolved through the PRD process using best practices\n  - This should be resolved through the PRD process using best practices\n  - This should be resolved through the PRD process using best practices\n\nOperator on 'Should the initial PRD decomposition prioritize the Python b':\nboth tracks be developed in parallel\n\nOperator on 'For the five identified gap components (CommandRouter, Email':\nbundled into the PRDs of their parent subsystem\n\nOperator on 'TRD-8 references Figma MCP Server and TRD-18 Crafted Connect':\nfull implementations be attempted\n\nOperator on 'The regression test suite (test_regression_taxonomy.py, 35 t':\nThe PRDs should be develop in order that allow for the most graceful software development for the product",
-  "created_at": 1774544676.0630982,
-  "updated_at": 1774545648.94798,
+  "scope_statement": "Build the complete Crafted Dev Agent \u2014 a native macOS two-process AI coding agent consisting of a Swift shell (UI, Touch ID, Keychain, XPC) and a Python backend (consensus engine, build pipeline, GitHub integration, document store, multi-agent coordination, holistic review, TRD workflow, recovery/state management, CI pipeline, cross-run learning). The system is specified across 16 TRDs (TRD-1 through TRD-17) and must be decomposed into an ordered PRD plan respecting inter-TRD dependencies, with each PRD producing 8-10 implementation files per PR and 8-10 acceptance criteria per PR. Operator gap answers confirm that TRD-18 (Crafted Connect SDK), generate_single() on ConsensusEngine, existing test coverage, and cross-TRD build ordering should all be resolved during the PRD decomposition process using best practices and the Depends-on/Required-by fields in each TRD header.\n\nAmbiguity clarifications:\n  - This needs to be resolved using the PRD process using best practices.\n  - This needs to be resolved using the PRD process using best practices.\n  - TRD-18 was combined with TRD-17\n  - build the complete system\n\nOperator on 'Is this a greenfield build of the complete Crafted Dev Agent':\ngreenfield build. We have some code that manages automation and agent operations, that will be shared later. The intent is to build clean code though.\n\nOperator on 'Should the PRD plan include the Swift shell (TRD-1, TRD-8) a':\nit should include both so that a holistic product can be built\n\nOperator on 'For the TRD-18 Crafted Connect SDK gap: should a lightweight':\nTRD-18 was combined with TRD-17 and resolved using the PRD process using best practices.\n\nOperator on 'The 35 regression tests in test_regression_taxonomy.py (TRD-':\nThis needs to be resolved using the PRD process using best practices.",
+  "created_at": 1774553591.250897,
+  "updated_at": 1774553591.251046,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
       "prd_id": "PRD-001",
-      "title": "Core Backend Runtime, Startup Handshake, Command Routing, and Scope Gate Foundations",
-      "status": "in_progress",
+      "title": "Repository Skeleton, Forge Standards, and Project Scaffold",
+      "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-002",
-      "title": "Consensus Engine, Provider Adapters, Single-Provider Generation, and Prompt Systems",
+      "title": "Security Foundations \u2014 Path Validation, Branch Sanitization, and API Error Classification",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-003",
-      "title": "Document Store, Retrieval, Injection Defense, and Build Rules Context Loading",
+      "title": "Configuration, Audit Infrastructure, and Shared Contracts",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-004",
-      "title": "GitHub Integration, Branch/PR Lifecycle, CI Polling, and Repository Bootstrap",
+      "title": "LLM Provider Adapters \u2014 Claude and OpenAI with Retry and Telemetry",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-005",
-      "title": "Recovery, Thread State, Build Memory, Context Management, and Self-Improving Build Rules",
+      "title": "Consensus Engine \u2014 Parallel Generation, Comparative Evaluation, and Single-Provider API",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-006",
-      "title": "PR Planning, Build Pipeline Orchestration, Repo Context, Self-Correction, and Fix Loop",
+      "title": "GitHub Integration Layer \u2014 GitHubTool Core Operations",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-007",
-      "title": "Multi-Agent Coordination, Build Ledger, Conflict Tracking, and Journaled Collaboration",
+      "title": "Document Store \u2014 Parsing, Chunking, Embedding, and Injection Defense",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-008",
-      "title": "Holistic Code Review Workflow and Review-Fix PR Generation",
+      "title": "Thread State Store, Checkpoint Persistence, and Recovery Foundation",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-009",
-      "title": "TRD Development Workflow, Adaptive Interview Modes, and Build Handoff",
+      "title": "PRD Planner and PR Planner \u2014 Decomposition Engine",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-010",
-      "title": "Code Quality Pipeline, CI Workflow Generation, Regression Contracts, and Operational Notifications",
+      "title": "CI Workflow Generation, CI Checker, and Workflow Hardening",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-011",
-      "title": "Swift macOS Shell Foundation, Authentication, Keychain, and Process Management",
+      "title": "Lint Gate and Self-Correction Loop",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-012",
-      "title": "Swift XPC Bridge, Build Stream UI, Context Panels, and Native macOS Interaction Surfaces",
+      "title": "Failure Handler \u2014 Strategy Dispatch, Fix Scoring, and Classification",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-013",
-      "title": "Mac CI Runner, Swift Build Validation, Python Bundling, Signing, and Release Packaging",
+      "title": "Context Manager and Repository Context Fetcher",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-014",
-      "title": "Advanced Swift UI/UX System, Health Dashboard, Figma Pipeline, and Maintainer Flows",
+      "title": "Build Memory and Build Rules Engine \u2014 Cross-Run Learning",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
     },
     {
       "prd_id": "PRD-015",
-      "title": "Self-Healing Observability, Detection, Classification, and Remediation Loop",
+      "title": "Build Pipeline Orchestration \u2014 BuildDirector Core",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-016",
+      "title": "Multi-Agent Coordination \u2014 Build Ledger",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-017",
+      "title": "PR Review Ingester, Branch Scaffold, and Build Interface Map",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-018",
+      "title": "Repository Bootstrap and Notifier",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-019",
+      "title": "Python Backend Entry Point, Startup Sequence, and Command Router",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-020",
+      "title": "Holistic Code Review \u2014 ReviewDirector and Five Lenses",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-021",
+      "title": "TRD Development Workflow \u2014 TRDSession and Adaptive Language Layer",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-022",
+      "title": "Failure Taxonomy Documentation and Regression Test Suite (v39 Contract)",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-023",
+      "title": "Swift Shell \u2014 KeychainKit Module",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-024",
+      "title": "Swift Shell \u2014 AuthKit Module and Session State Machine",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-025",
+      "title": "Swift Shell \u2014 XPCBridge Module and Wire Protocol",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-026",
+      "title": "Swift Shell \u2014 ProcessManager Module and Backend Lifecycle",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-027",
+      "title": "Swift Shell \u2014 Settings Module, Onboarding Flow, and Schema Migration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-028",
+      "title": "Swift Shell \u2014 Document Import Module",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-029",
+      "title": "Swift Shell \u2014 AppShell, Three-Panel Layout, and Root View Hierarchy",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-030",
+      "title": "Swift Shell \u2014 Logging, Localization, and Auto-Update Infrastructure",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-031",
+      "title": "Mac CI Runner Workflow \u2014 crafted-ci-macos.yml",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-032",
+      "title": "Self-Healing Observability Loop \u2014 Detection and Classification",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-033",
+      "title": "Self-Healing Remediation Engine",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-034",
+      "title": "Swift Shell \u2014 Health Dashboard, Issue Reporting, and Diagnosis UI",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-035",
+      "title": "Integration Testing and Smoke Test Suite",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-036",
+      "title": "XPC Integration Test and End-to-End Startup Validation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-037",
+      "title": "Figma Design Pipeline Integration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-038",
+      "title": "CONSULTANT Mode UI and Client Summary Pipeline",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-039",
+      "title": "Operational Runbook, Security Checklist, and Final Build Validation",
       "status": "pending",
       "engineer_id": "",
       "pr_ids": []
@@ -115,7 +283,7 @@
   ],
   "pr_entries": {},
   "knowledge_notes": [],
-  "version": 2,
+  "version": 1,
   "schema_version": 3,
-  "agent_version": "39.48.0"
+  "agent_version": "39.59.0"
 }
