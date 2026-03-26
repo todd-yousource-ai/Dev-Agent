@@ -1,152 +1,108 @@
 # CONVENTIONS.md — CraftedApp Subsystem
 
+All conventions below are derived from the project's TRD documents. Every rule is mandatory unless explicitly marked optional.
+
 ---
 
-## Code Conventions
+## 1. File and Directory Naming
 
-### 1. File and Directory Naming
-
-1. **Python source files** live under `src/` and use `snake_case.py` naming.
+1. **Python source files** live under `src/` and use `snake_case.py`.
    - `src/consensus.py` — `ConsensusEngine`, `GENERATION_SYSTEM`, `SWIFT_GENERATION_SYSTEM`, `UI_ADDENDUM`
    - `src/build_director.py` — `BuildPipeline`
-   - `src/path_security.py` — `validate_write_path` and all path-sanitisation logic
-
-2. **CI workflow files** use the exact names `crafted-ci.yml` (Ubuntu) and `crafted-ci-macos.yml` (macOS Swift). Do not rename or add variant copies.
-
-3. **Repo-root files** — the following files must always be committed at the repository root with no directory prefix: `README.md`, `CODEOWNERS`, `LICENSE`, `.gitignore`, `.editorconfig`, `VERSION`, `Makefile`, `pyproject.toml`. Validate by basename, not by directory.
-
-4. **`conftest.py`** is auto-committed by `ci_workflow.ensure()` to guarantee `src/` is importable in tests. Never hand-edit the generated `conftest.py`; regenerate it through the CI helper instead.
-
-5. **Branch names** must follow this exact pattern (kept as `forge-agent` for compatibility):
+2. **CI workflow files** are named exactly `crafted-ci.yml` (Ubuntu) and `crafted-ci-macos.yml` (macOS Swift). No other naming is accepted.
+3. **Repo-root files** — the following files must always be committed at the repository root (no directory prefix): `README.md`, `CODEOWNERS`, `LICENSE`, `.gitignore`, `.editorconfig`, `VERSION`, `Makefile`, `pyproject.toml`. Validation checks basename, not directory path.
+4. **`conftest.py`** is auto-committed by `ci_workflow.ensure()` to enable `src/` imports. Never hand-edit or relocate this file.
+5. **Branch names** must follow the exact pattern:
    ```
    forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}
    ```
-   - `engineer_id`: lowercase alphanumeric, no dots or underscores.
-   - `subsystem_slug`: lowercase hyphenated (e.g., `crafted-app`).
-   - `N`: zero-padded to three digits (e.g., `001`).
-   - `title_slug`: lowercase hyphenated summary, max 48 characters.
+   - `N` is zero-padded to 3 digits.
+   - `title_slug` is lowercase, hyphen-separated.
+   - The `forge-agent` prefix is kept intentionally for compatibility — do not rename it.
 
 ---
 
-### 2. Class and Function Naming
+## 2. Class and Function Naming
 
-6. **Python classes** use `PascalCase`: `ConsensusEngine`, `BuildPipeline`, `PathSecurityError`.
-
-7. **Python functions and methods** use `snake_case`: `validate_write_path`, `ensure_ci_workflow`.
-
-8. **Constants** use `UPPER_SNAKE_CASE`: `GENERATION_SYSTEM`, `SWIFT_GENERATION_SYSTEM`, `UI_ADDENDUM`.
-
-9. **Private/internal symbols** are prefixed with a single underscore: `_is_docs_pr`, `_docs_keywords`. Do not use double underscores for name-mangling unless strictly necessary.
-
-10. **SwiftUI accessibility identifiers** follow the pattern `{module}-{component}-{role}-{context?}`, set via `.accessibilityIdentifier()` on every interactive element:
-    ```
-    auth-touchid-button
-    auth-passcode-button
-    settings-anthropic-key-field
-    settings-anthropic-key-test-button
-    settings-anthropic-key-reveal-button
-    navigator-project-row-{projectId}
-    stream-gate-card-{gateId}
-    stream-gate-yes-button-{gateId}
-    stream-gate-skip-button-{gateId}
-    stream-gate-stop-button-{gateId}
-    ```
-    - `module`: top-level feature area (`auth`, `settings`, `navigator`, `stream`).
-    - `component`: specific UI element group (`touchid`, `anthropic-key`, `project`, `gate`).
-    - `role`: semantic role (`button`, `field`, `row`, `card`, `label`).
-    - `context`: optional dynamic suffix, always a runtime id wrapped in braces in source (e.g., `\(gateId)`).
+6. **Python classes** use `PascalCase`: `ConsensusEngine`, `BuildPipeline`.
+7. **Python functions and methods** use `snake_case`: `validate_write_path`, `ensure`.
+8. **Module-level constants** use `UPPER_SNAKE_CASE`: `GENERATION_SYSTEM`, `SWIFT_GENERATION_SYSTEM`, `UI_ADDENDUM`.
+9. **Private/internal module-level variables** are prefixed with a single underscore: `_docs_keywords`, `_is_docs_pr`.
+10. **SwiftUI accessibility identifiers** follow the pattern `{module}-{component}-{role}-{context?}`:
+    - Every segment is lowercase, separated by hyphens.
+    - Dynamic context values are appended with brace interpolation in the format `{variableName}`.
+    - Examples:
+      ```
+      "auth-touchid-button"
+      "auth-passcode-button"
+      "settings-anthropic-key-field"
+      "settings-anthropic-key-test-button"
+      "settings-anthropic-key-reveal-button"
+      "navigator-project-row-{projectId}"
+      "stream-gate-card-{gateId}"
+      "stream-gate-yes-button-{gateId}"
+      "stream-gate-skip-button-{gateId}"
+      "stream-gate-stop-button-{gateId}"
+      ```
 
 ---
 
-### 3. Error and Exception Patterns
+## 3. Error and Exception Patterns
 
-11. **All custom exceptions** inherit from a single project base class (e.g., `CraftedError`) and use `PascalCase` ending in `Error`:
+11. **Path validation before every write.** Import and call `validate_write_path` before any file-system write operation that involves a user-supplied or externally derived path:
     ```python
-    class CraftedError(Exception): ...
-    class PathTraversalError(CraftedError): ...
-    class PipelineStageError(CraftedError): ...
+    from path_security import validate_write_path
+    safe_path = validate_write_path(user_supplied_path)  # returns safe default on traversal
     ```
-
-12. **Never catch bare `Exception`** in library code. Catch the narrowest relevant type and re-raise or wrap in a `CraftedError` subclass with context.
-
-13. **Path validation errors must be raised, never silently swallowed.** `validate_write_path` returns a safe default on traversal detection, but the caller must log the incident at `WARNING` or higher.
+    Never write to an unvalidated path. The function returns a safe default when a traversal attack is detected — do not catch or suppress that behaviour.
+12. **Fail-safe defaults.** When a security-sensitive function detects an invalid input, it must return a safe default value rather than raising an unhandled exception. `validate_write_path` is the canonical example.
+13. **No bare `except`.** Always catch specific exception types. Security-related exceptions (path traversal, permission errors) must be logged before returning a safe default.
 
 ---
 
-### 4. Import and Module Organisation
+## 4. Import and Module Organisation
 
-14. **Import order** (enforced by `isort` profile `black`):
-    1. Standard library
-    2. Third-party packages
-    3. `src.*` project modules
-
-    Separate each group with a single blank line.
-
-15. **Absolute imports only** from `src` package:
+14. **Standard library → third-party → project imports**, separated by blank lines (isort-compatible).
+15. **Project imports reference `src/` as the package root.** The auto-generated `conftest.py` handles `sys.path` for tests; do not add manual path hacks.
+16. **Security imports are always explicit:**
     ```python
-    from src.consensus import ConsensusEngine
-    from src.path_security import validate_write_path
+    from path_security import validate_write_path
     ```
-    Do not use relative imports (e.g., `from .consensus import ...`).
-
-16. **No wildcard imports** (`from module import *`) anywhere in production code.
-
----
-
-### 5. Comment and Documentation Rules
-
-17. **Every public class and function** must have a docstring (Google style):
+    Never use `from path_security import *`.
+17. **Keyword/constant lists** that are internal to a module are declared as module-level sets or frozensets prefixed with `_`:
     ```python
-    def validate_write_path(user_supplied_path: str) -> str:
-        """Sanitise and validate a user-supplied path before writing.
-
-        Args:
-            user_supplied_path: Raw path string from external input.
-
-        Returns:
-            A canonicalised safe path. Falls back to a project-local
-            default if traversal is detected.
-
-        Raises:
-            PathTraversalError: When traversal is detected and logging
-                the incident.
-        """
-    ```
-
-18. **Inline comments** explain *why*, not *what*. Prohibit comments that merely restate the code.
-
-19. **TODO / FIXME** comments must include an engineer id and a tracking reference:
-    ```python
-    # TODO(jsmith): Remove legacy keyword matching after v7.0 — CRAFT-1042
-    ```
-
-20. **Removed or deprecated features** must be annotated with the version in which removal occurred:
-    ```python
-    # Removed in v6.0 — keyword-based docs-PR detection replaced by label matching.
+    _docs_keywords = {"naming convention", "glossary", "changelog"}
     ```
 
 ---
 
-### 6. CraftedApp-Specific Patterns
+## 5. Comment and Documentation Rules
 
-21. **Path validation before every write.** Any code path that writes to disk must call `validate_write_path` first:
-    ```python
-    from src.path_security import validate_write_path
-
-    safe_path = validate_write_path(user_supplied_path)
-    with open(safe_path, "w") as f:
-        f.write(content)
+18. **Every SwiftUI interactive element** must have a `.accessibilityIdentifier()` modifier. Add a comment above the first usage in a file explaining the naming convention:
+    ```swift
+    // Convention: {module}-{component}-{role}-{context?}
+    // Set via .accessibilityIdentifier() modifier on all interactive elements
     ```
-    No exceptions. This applies to agent-generated code, CI scripts, and manual tooling.
+19. **TRD references.** When a code block implements a specific TRD requirement, add a single-line comment citing the TRD section:
+    ```python
+    # TRD-3 §6.0 — docs-PR detection via label, not keyword list
+    ```
+20. **No TODO without a tracking issue.** Use the format `# TODO(#123): description`.
+21. **Docstrings** are required on all public classes and functions. Use Google-style docstrings in Python.
 
-22. **CI workflow bootstrap.** Always invoke `ci_workflow.ensure()` at pipeline start. This guarantees `conftest.py` exists for `src/` import resolution. Do not manually create or edit `conftest.py`.
+---
 
-23. **Docs-PR detection** relies solely on GitHub labels and path-based file matching (post-v6.0). Do not reintroduce keyword-list heuristics (`_docs_keywords` was removed in v6.0).
+## 6. CraftedApp-Specific Patterns
 
-24. **Root-file validation.** When committing repo-root files, validate the file's basename against the known set (`README.md`, `CODEOWNERS`, `LICENSE`, `.gitignore`, `.editorconfig`, `VERSION`, `Makefile`, `pyproject.toml`). Reject any attempt to place these files inside a subdirectory.
-
-25. **SwiftUI views must set `.accessibilityIdentifier()`** on every interactive element (buttons, text fields, toggles, rows, cards) following the naming convention in rule 10. Omitting an identifier on an interactive element is a review-blocking issue.
-
-26. **Consensus prompts** (`GENERATION_SYSTEM`, `SWIFT_GENERATION_SYSTEM`, `UI_ADDENDUM`) are authoritative constants defined only in `src/consensus.py`. Other modules must import them — never duplicate the prompt text.
-
-27. **Branch protection.** Merges to `main` require a passing `crafted-ci.yml` (
+22. **axIdentifier coverage.** Every interactive SwiftUI element (buttons, text fields, toggles, navigation rows, gate cards) must carry an `.accessibilityIdentifier()` following rule 10. Pull requests that add interactive UI without identifiers must be rejected in review.
+23. **CI parity.** All features must pass both `crafted-ci.yml` (Ubuntu / Python) and `crafted-ci-macos.yml` (macOS / Swift). Never add a CI job under a different filename.
+24. **`ci_workflow.ensure()` is the sole owner of `conftest.py`.** If tests fail on import, re-run `ci_workflow.ensure()` rather than editing `conftest.py` manually.
+25. **Root-file validation.** Any automation that creates or moves repo-root files (rule 3) must validate by basename against the known set, not by checking whether the file's directory is `/`:
+    ```python
+    ROOT_FILES = {"README.md", "CODEOWNERS", "LICENSE", ".gitignore",
+                  ".editorconfig", "VERSION", "Makefile", "pyproject.toml"}
+    assert filename in ROOT_FILES
+    ```
+26. **Path security is non-negotiable.** Every agent, script, or pipeline step that writes to the filesystem must call `validate_write_path` (rule 11). Code reviews must explicitly verify this for every new or modified write path.
+27. **Keyword-list deprecation.** Do not use keyword matching for PR classification (the `_docs_keywords` pattern from TRD-3 v5.0 was removed in v6.0). Use labels or structured metadata instead.
+28. **Branch name enforcement.** CI or pre-push hooks must reject branch names that do not match the pattern in rule 5. No ad-hoc branch names are permitted for agent-generated work.
