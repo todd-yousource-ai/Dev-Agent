@@ -1,4 +1,1 @@
-# Crafted Dev Agent -- Interface Contracts
-
-| Field        | Value                          |
-|
+"""Package placeholder."""
