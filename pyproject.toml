@@ -1,28 +1,34 @@
+# FILE: pyproject.toml
 [build-system]
-requires = ["setuptools>=75.0", "wheel"]
+requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "crafted-dev-agent"
 version = "38.153.0"
+description = "Crafted Dev Agent - AI-powered development assistant"
 requires-python = ">= 3.12"
-description = "Native macOS AI coding agent by YouSource.ai"
 readme = "README.md"
-license = {text = "Proprietary"}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
-asyncio_mode = "auto"
-addopts = "-v --tb=short"
-python_files = ["test_*.py", "*_test.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 100
 
-[tool.coverage.run]
-source = ["src"]
-omit = ["tests/*"]
+# FILE: requirements.txt
+anthropic>=0.34.0
+openai>=1.40.0
+PyGithub>=2.3.0
+faiss-cpu>=1.8.0
+sentence-transformers>=3.0.0
+python-docx>=1.1.0
+pdfminer.six>=20231228
+pyyaml>=6.0.1
+ruff>=0.5.0
+pytest>=8.0.0
+numpy>=1.26.0
+
+# FILE: conftest.py
+# Root conftest.py for pytest discovery.
