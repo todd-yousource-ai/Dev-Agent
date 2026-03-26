@@ -1,1 +1,0 @@
-"""Repository scaffold committed directly."""
