@@ -1,0 +1,163 @@
+{
+  "build_id": "crafteddevagent-39dda21c",
+  "subsystem": "CraftedDevAgent",
+  "intent": "We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture. You should apply Max impl_files per PR: 8\u201310. Beyond that, split into multiple PRs. Max acceptance criteria: 8\u201310. More than that is a scope problem.",
+  "scope_statement": "Build the complete Crafted Dev Agent \u2014 a native macOS two-process AI coding agent consisting of a Swift/SwiftUI shell (UI, Touch ID, Keychain, XPC) and a Python backend (consensus engine, build pipeline, GitHub integration, document store, multi-agent coordination, holistic review, TRD workflow, recovery/state management, cross-run learning). The system takes plain-language build intents, decomposes them into ordered PRDs and typed PRs, generates implementation and tests using dual-LLM consensus (Claude + GPT-4o), runs self-correction, lint gates, and iterative fix loops, validates via CI, and gates on operator approval before merging. Architecture is fully specified across 17 TRDs covering all subsystems from the macOS app shell through self-healing software capabilities.\n\nAmbiguity clarifications:\n  - Should be finalized during the PRD process and use best practices.\n  - Should be finalized during the PRD process and use best practices.\n  - Should be finalized during the PRD process and use best practices.\n  - Should be finalized during the PRD process and use best practices.\n  - Should be finalized during the PRD process and use best practices.\n\nOperator on 'Given the massive scope (17 TRDs, Swift shell + Python backe':\nbuild foundational layers across all subsystems simultaneously\n\nOperator on 'The existing repository at version 38.153.0 already contains':\nfrom-scratch implementation of the full architecture. There is experimental code being used, which will be provided later for gap analysis during the process.\n\nOperator on 'TRD-8 v3.0 introduces the CraftedHealthButton component that':\nscoped as part of the initial build\n\nOperator on 'For the Figma pipeline UI (TRD-8 \u00a714) and sketch interpretat':\nintegrate Figma pipeline UI into the the PRD plan and finalize during the PRD process and use best practices.",
+  "created_at": 1774564785.446187,
+  "updated_at": 1774564785.446657,
+  "updated_by": "todd-gould",
+  "prd_plan": [
+    {
+      "prd_id": "PRD-001",
+      "title": "Foundation Architecture, Repository Bootstrap, and Cross-Subsystem Contracts",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-002",
+      "title": "macOS Application Shell, App Lifecycle, and Native Platform Integration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-003",
+      "title": "Authentication, Touch ID Session Control, and Keychain Secret Management",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-004",
+      "title": "XPC Transport, Authenticated Handshake, and Two-Process Runtime Orchestration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-005",
+      "title": "Backend Runtime Startup, Capability Handshake, and Degraded-State Operation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-006",
+      "title": "Document Store, Retrieval, Injection Defense, and Standards Context Loading",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-007",
+      "title": "Consensus Engine, Provider Adapters, and Language-Aware Generation Governance",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-008",
+      "title": "Intent Scoping, PRD Planning, PRD Generation, and Typed PR Planning",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-009",
+      "title": "GitHub Integration, Branch/PR Lifecycle, CI Workflow Management, and Review Ingestion",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-010",
+      "title": "Build Director, Stage-Oriented Execution Pipeline, and Typed PR Routing",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-011",
+      "title": "Self-Correction, Lint Gate, Native Output Enforcement, and Failure-Aware Fix Loop",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-012",
+      "title": "Recovery, Thread State, Autosave, Resume, Build Memory, and Build Rules",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-013",
+      "title": "Multi-Agent Coordination, Build Ledger, Claims, Heartbeats, and Shared Knowledge",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-014",
+      "title": "Holistic Code Review Workflow and Fix PR Generation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-015",
+      "title": "TRD Development Workflow, Adaptive Modes, and Product-to-Build Handoff",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-016",
+      "title": "Security Threat Model Enforcement and Safe-Failure Controls",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-017",
+      "title": "Unified UI/UX System, Build Stream, Health Dashboard, and Remediation Experience",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-018",
+      "title": "Figma Pipeline UI, Sketch Interpretation, and Design-to-Build Intake",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-019",
+      "title": "Mac CI Runner, Swift Validation Pipeline, Signing, and Release Packaging",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-020",
+      "title": "Testing, Validation, Regression Taxonomy, and Observability",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-021",
+      "title": "Self-Healing Health Loop, Autonomous Detection, and PR-Based Remediation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    }
+  ],
+  "pr_entries": {},
+  "knowledge_notes": [],
+  "version": 1,
+  "schema_version": 3,
+  "agent_version": "39.71.0"
+}
