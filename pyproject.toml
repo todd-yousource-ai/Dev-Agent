@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=75.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crafted-dev-agent"
+version = "38.153.0"
+requires-python = ">= 3.12"
+description = "Native macOS AI coding agent by YouSource.ai"
+readme = "README.md"
+license = {text = "Proprietary"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*"]
