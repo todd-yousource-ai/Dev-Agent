@@ -1,11 +1,25 @@
 """
-conftest.py — Repository-level pytest configuration.
+Root conftest.py for Crafted Dev Agent test suite.
 
-Inserts src/ into sys.path at pytest startup so test files can resolve
-imports from the src/ layout without requiring PYTHONPATH to be set.
+Repository-level pytest configuration file that enables test discovery
+from the repository root. Inserts src/ into sys.path at pytest startup
+so test files can resolve imports from the src/ layout without requiring
+PYTHONPATH to be set.
 
-This file is intentional and should not be removed. It is the canonical
-fix for ModuleNotFoundError on src-layout Python projects.
+Security assumptions:
+    - This file performs no network access, no environment mutation beyond
+      sys.path, and loads no secrets.
+    - Side-effect free apart from the deterministic sys.path insert below.
+    - Safe to import even when no src/ directory exists -- the path insert
+      is a no-op in that case (Python silently ignores non-existent
+      sys.path entries during import resolution).
+
+Failure behavior:
+    - No exceptions are raised. If src/ does not exist the path is still
+      added to sys.path; Python import machinery handles missing paths
+      gracefully by skipping them during module search.
+
+Fixtures will be added in later PRs as test code is introduced.
 """
 import sys
 from pathlib import Path
