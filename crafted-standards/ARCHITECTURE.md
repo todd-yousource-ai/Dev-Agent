@@ -2,314 +2,207 @@
 
 ## What This Subsystem Does
 
-`CraftedApp` is the macOS application entry subsystem defined by the SwiftUI app shell.
+`CraftedApp` is the macOS application entry-point scene for the Crafted application shell.
 
-It is implemented as the `@main` application type:
+It defines the top-level SwiftUI scene configuration:
 
-```swift
-@main struct CraftedApp: App
-```
-
-Its responsibilities are:
-
-- Define the primary application scene graph for the macOS app.
-- Construct the main window via a `WindowGroup`.
-- Mount `RootView()` as the primary content view.
-- Inject shared application-wide state into the main scene through SwiftUI environment objects:
+- Creates the primary application window using `WindowGroup`
+- Instantiates `RootView()` as the main window content
+- Injects shared application models into the root view environment:
   - `AppState.shared`
   - `BuildStreamModel.shared`
   - `SettingsStore.shared`
-- Configure main window presentation and sizing behavior:
-  - `.hiddenTitleBar`
-  - default size `1280 × 800`
-  - `.contentMinSize` resizability
-- Define a separate `Settings` scene.
-- Mount `SettingsView()` into the settings scene.
-- Inject `SettingsStore.shared` into the settings scene.
+- Configures primary window behavior:
+  - `.windowStyle(.hiddenTitleBar)`
+  - `.defaultSize(width: 1280, height: 800)`
+  - `.windowResizability(.contentMinSize)`
+- Declares a separate `Settings` scene
+  - Hosts `SettingsView()`
+  - Injects `SettingsStore.shared`
+  - Documented as biometric-gated
 
-This subsystem is the application shell boundary for the Crafted macOS UI. It owns scene declaration and top-level environment wiring, not feature-specific business logic.
-
-## Component Boundaries
-
-### In Scope
-
-The subsystem includes:
-
-- The `CraftedApp` SwiftUI `App` entrypoint.
-- Main scene declaration using `WindowGroup`.
-- Settings scene declaration using `Settings`.
-- Top-level environment object provisioning for shared state stores/models.
-- Window style and size configuration for the main application window.
-
-### Out of Scope
-
-The subsystem does **not** define or own:
-
-- Internal behavior of `RootView()`.
-- Internal behavior of `SettingsView()`.
-- Business logic inside:
-  - `AppState.shared`
-  - `BuildStreamModel.shared`
-  - `SettingsStore.shared`
-- CI, telemetry, or health-registry execution logic.
-- GitHub write-path validation logic.
-- Failure-recovery orchestration outside of the app-shell role.
-
-### Repository / Target Boundary Notes
-
-The broader system documents identify a CamelCase Swift/Xcode project pattern and explicitly call out roots such as `CraftedApp`, `CraftedTests`, and `ForgeAgent`. A prior failure pattern records:
-
-- `Path rejected: CraftedAppShell/ | New Swift target not in _ALLOWED_ROOTS | Pipeline | CamelCase root auto-detection`
-
-From this, the relevant architectural boundary is:
-
-- This subsystem belongs to the Crafted app shell domain.
-- It must remain compatible with repository tooling that accepts CamelCase root directories via smart root detection (`^[A-Za-z][A-Za-z0-9_-]*$`), rather than relying on a static allowlist.
-
-The health registry identifies the corresponding shell subsystem as:
+This subsystem is part of the application shell identified in the health registry as:
 
 - `target_id`: `crafted-app-shell`
 - `subsystem`: `CraftedAppShell`
 
+## Component Boundaries
+
+`CraftedApp` is a scene-composition boundary, not a business-logic or persistence boundary.
+
+Inside this subsystem:
+
+- SwiftUI `App` declaration: `@main struct CraftedApp: App`
+- Primary scene declaration via `WindowGroup`
+- Settings scene declaration via `Settings`
+- Environment object wiring for shared singleton-backed state
+- Window presentation configuration for the main application shell
+
+Outside this subsystem:
+
+- `RootView` implementation and its internal UI behavior
+- `SettingsView` implementation and settings UI logic
+- Internal behavior of:
+  - `AppState.shared`
+  - `BuildStreamModel.shared`
+  - `SettingsStore.shared`
+- Biometric enforcement implementation for the settings window
+- Telemetry production and transport, though the application shell is registered with:
+  - `telemetry_endpoint`: `logs/telemetry.jsonl`
+- CI orchestration, though the registered workflow is:
+  - `.github/workflows/crafted-ci.yml`
+
+Repository boundary implications from the source TRDs:
+
+- The subsystem exists under a CamelCase root naming pattern consistent with Swift/Xcode targets.
+- CamelCase roots must be accepted by root detection using:
+  - `^[A-Za-z][A-Za-z0-9_-]*$`
+- This avoids path rejection for roots such as `CraftedApp` and related targets.
+
 ## Data Flow
 
-### 1. Application Launch
+### Startup and Scene Initialization
 
-On process start, SwiftUI initializes `CraftedApp` as the app entrypoint.
+1. The process enters through `@main struct CraftedApp: App`.
+2. SwiftUI evaluates `body`.
+3. The primary `WindowGroup` is created.
+4. `RootView()` is constructed as the main scene content.
+5. Shared state is injected into the main view hierarchy via environment objects:
+   - `AppState.shared`
+   - `BuildStreamModel.shared`
+   - `SettingsStore.shared`
 
-### 2. Main Scene Construction
+### Settings Scene Flow
 
-`CraftedApp.body` creates a `WindowGroup` scene containing:
+1. The `Settings` scene is declared alongside the primary window scene.
+2. `SettingsView()` is created when the settings window is opened.
+3. `SettingsStore.shared` is injected into the settings view hierarchy.
+4. The settings window is documented as biometric-gated before access.
 
-```swift
-RootView()
-    .environmentObject(AppState.shared)
-    .environmentObject(BuildStreamModel.shared)
-    .environmentObject(SettingsStore.shared)
-```
+### Shell-Level Window Constraints
 
-Data flow at this boundary is top-down:
+Main window configuration is applied at scene definition time:
 
-- `AppState.shared` flows from the application shell into the root content tree.
-- `BuildStreamModel.shared` flows from the application shell into the root content tree.
-- `SettingsStore.shared` flows from the application shell into the root content tree.
-
-Any descendant view under `RootView()` consumes these objects through the SwiftUI environment.
-
-### 3. Window Configuration
-
-The main scene applies shell-level UI constraints:
-
-- hidden title bar
-- default window size `1280 × 800`
-- resizability constrained by content minimum size
-
-Documented sizing constraints for the main window are:
-
-- minimum: `1024 × 680`
-- maximum: unconstrained / resizable
-
-### 4. Settings Scene Construction
-
-A separate settings scene is declared:
-
-```swift
-Settings {
-    SettingsView()
-        .environmentObject(SettingsStore.shared)
-}
-```
-
-Data flow here is isolated to settings state injection:
-
-- `SettingsStore.shared` flows into `SettingsView()` and its descendants.
-
-The source document labels this settings window as:
-
-- separate scene
-- biometric-gated
-
-The scene architecture establishes the settings scene boundary, while gating semantics are part of settings access behavior rather than the shell’s internal business logic.
+- Default size: `1280 × 800`
+- Minimum content-constrained size via `.windowResizability(.contentMinSize)`
+- Documented minimum window size: `1024 × 680`
+- Maximum size: unconstrained
+- Title bar style: hidden
 
 ## Key Invariants
 
-The following invariants are directly supported by the source documents.
+From the provided TRDs and architecture context, `CraftedApp` must preserve the following invariants.
 
-### Scene Topology Is Fixed at the App Shell
+### Scene Wiring Invariants
 
-`CraftedApp` always defines:
+- The main application scene must render `RootView()`.
+- The main scene must provide all three shared environment objects:
+  - `AppState.shared`
+  - `BuildStreamModel.shared`
+  - `SettingsStore.shared`
+- The settings scene must provide `SettingsStore.shared` to `SettingsView()`.
 
-- one main `WindowGroup` scene for `RootView()`
-- one separate `Settings` scene for `SettingsView()`
+### Windowing Invariants
 
-The shell must not collapse these into a single scene because the TRD explicitly distinguishes them.
+- The primary window uses `.hiddenTitleBar`.
+- The primary window defaults to `1280 × 800`.
+- Minimum supported window size is `1024 × 680`.
+- Window maximum size is unconstrained.
+- Resizability is content-min-size constrained.
 
-### Shared State Is Injected at the Top Level
+### Security and Trust Invariants
 
-The main scene must provide:
-
-- `AppState.shared`
-- `BuildStreamModel.shared`
-- `SettingsStore.shared`
-
-The settings scene must provide:
-
-- `SettingsStore.shared`
-
-This is a shell contract for all descendant views that rely on environment object lookup.
-
-### Main Window Presentation Contract
-
-The main window must preserve the declared shell configuration:
-
-- hidden title bar
-- default size `1280 × 800`
-- content-minimum-size resizability behavior
-
-The documented size constraints are:
-
-- minimum `1024 × 680`
-- maximum unconstrained
-
-### Settings Is a Separate, Biometric-Gated Scene
-
-The settings window is explicitly specified as:
-
-- separate from the main scene
-- biometric-gated
-
-Any architecture change that removes the separate scene boundary or bypasses the gating model would violate the documented shell design.
-
-### Compatibility With CamelCase Root Detection
-
-This subsystem exists in a repository/tooling context where CamelCase Swift/Xcode roots must be accepted automatically. Repository operations affecting this subsystem must remain compatible with the smart root detection rule:
-
-- `^[A-Za-z][A-Za-z0-9_-]*$`
-
-This is important because a documented pipeline failure occurred when a new Swift target root was not in `_ALLOWED_ROOTS`.
-
-### Forge-Wide Safety Invariants Apply
-
-As part of the Forge architecture context, this subsystem operates under these system-wide invariants:
+Applicable repository-wide Forge invariants constrain this subsystem as part of the application shell:
 
 - Fail closed on auth, crypto, and identity errors; never degrade silently.
-- No silent failure paths; every error surfaces with context.
-- Secrets never appear in logs, error messages, or generated code.
+- No silent failure paths; every error must surface with context.
+- Secrets must never appear in logs, error messages, or generated code.
 - All external input is untrusted and validated.
 - Generated code is never executed by the agent.
-- Gates wait indefinitely for operator input; no automatic timeout-based bypass.
 
-These are not unique to `CraftedApp`, but they constrain how this subsystem is modified and operated within the larger system.
+### Settings Access Invariant
+
+- The settings window is a separate scene and is documented as biometric-gated.
+- `CraftedApp` may declare the settings scene, but must not weaken that gating contract.
+
+### Repository Path Invariant
+
+Because this subsystem uses a CamelCase target/root naming convention:
+
+- Repository tooling must permit CamelCase roots matching `^[A-Za-z][A-Za-z0-9_-]*$`.
+- Dot-prefixed roots such as `.github` require explicit allowlisting.
+- Path validation must occur before any write operation.
 
 ## Failure Modes
 
-### Missing or Incorrect Environment Object Injection
+### Missing or Incorrect Root Allowlisting
 
-If `RootView()` or `SettingsView()` expects environment objects that are not injected at the app shell, the scene tree will be misconfigured. At this boundary, likely faults are:
+Observed failure pattern:
 
-- missing `AppState.shared`
-- missing `BuildStreamModel.shared`
-- missing `SettingsStore.shared`
-- wrong scene receiving the wrong state object set
+- `Path rejected: CraftedAppShell/`
+- Root cause: new Swift target not present in `_ALLOWED_ROOTS`
+- Class: `Pipeline`
+- Fix: CamelCase root auto-detection
 
-Because the broader architecture forbids silent failure paths, such misconfiguration must surface explicitly.
+Impact on this subsystem:
 
-### Window Configuration Drift
+- Changes to `CraftedApp` or adjacent Swift targets may be silently blocked or rejected if repository tooling does not recognize CamelCase roots.
+- This is a pipeline/tooling failure, not a runtime SwiftUI failure.
 
-Changing shell-level window configuration can violate the scene contract:
+### Silent or Context-Free Error Handling
 
-- title bar no longer hidden
-- default size differs from `1280 × 800`
-- minimum-size behavior no longer enforced through content sizing
-- documented minimum `1024 × 680` not preserved
+Repository-level architecture forbids silent failures. Violations would include:
 
-This is an app-shell regression, not a feature-level regression.
+- scene initialization failures not surfaced with context
+- settings access failures that degrade silently
+- auth/identity-related failures that continue without explicit handling
 
-### Settings Scene Collapse or Misrouting
+These are architectural violations even where the exact implementation is outside `CraftedApp`.
 
-Potential failures include:
+### Settings Access Contract Drift
 
-- `SettingsView()` rendered inside the main `WindowGroup` instead of a separate `Settings` scene
-- `SettingsStore.shared` not injected into the settings scene
-- biometric-gated settings access being bypassed by architectural simplification
+If the settings scene remains declared but biometric gating is omitted or bypassed in the associated implementation, the subsystem would violate the documented settings-window contract.
 
-These violate the documented scene architecture.
+### Window Constraint Drift
 
-### Repository Tooling Rejection for Target Paths
+Changes to scene configuration can break shell expectations if they alter:
 
-A documented historical failure relevant to this subsystem is:
+- hidden title bar behavior
+- default window size
+- minimum content sizing behavior
+- unconstrained maximum resizing behavior
 
-- `Path rejected: CraftedAppShell/ | New Swift target not in _ALLOWED_ROOTS`
+### Pipeline Retry / Attempt Exhaustion
 
-Root cause:
+Relevant repository failure controls:
 
-- new Swift target path not accepted by static path allowlist
+- Never retry indefinitely
+- Maximum 20 local attempts before moving on
 
-Fix already established in the source material:
-
-- CamelCase root auto-detection
-
-Architectural implication:
-
-- changes to this subsystem may fail in automation if repository tooling regresses from smart root detection back to a brittle static list.
-
-### Pipeline Escalation and Attempt Caps
-
-The broader system documents additional operational failure patterns that can affect work on this subsystem:
-
-- max 20 local attempts before moving on
-- docs PRs can skip CI gates if not handled correctly
-- branch-protection bypass can create merge conflicts
-- failure strategy depends primarily on failure type, secondarily on attempt count
-
-These are not UI-shell runtime failures, but they are relevant maintenance and delivery failure modes for this subsystem.
+This matters when changes to `CraftedApp` are being repaired or scaffolded by automation; repeated failures are capped and escalated rather than retried without bound.
 
 ## Dependencies
 
-### Direct SwiftUI Scene Dependencies
+Direct architectural dependencies named in the TRDs:
 
-The `CraftedApp` shell depends on:
-
-- `SwiftUI` application model via `App`
-- `WindowGroup`
-- `Settings`
-
-### View Dependencies
-
-The shell constructs and depends on the presence of:
-
+- SwiftUI `App` scene system
 - `RootView`
 - `SettingsView`
-
-### Shared State Dependencies
-
-The shell injects these singleton/shared objects:
-
 - `AppState.shared`
 - `BuildStreamModel.shared`
 - `SettingsStore.shared`
 
-These are required to satisfy the scene environment contract.
+Registered subsystem metadata dependencies:
 
-### Repository / Pipeline Dependencies
-
-From the health registry and repository architecture context, the subsystem is associated with:
-
-- repository: `todd-yousource-ai/Dev-Agent`
-- subsystem: `CraftedAppShell`
-- target: `crafted-app-shell`
-- languages: `swift`, `python`
+- Repository: `todd-yousource-ai/Dev-Agent`
 - CI workflow: `.github/workflows/crafted-ci.yml`
-- telemetry endpoint: `logs/telemetry.jsonl`
+- Telemetry endpoint: `logs/telemetry.jsonl`
 
-### Tooling and Governance Dependencies
+Repository/process dependencies that constrain work on this subsystem:
 
-Subsystem changes are constrained by the broader Forge operating model:
+- GitHub operations must go through `GitHubTool`
+- Paths must be validated before any write
+- CamelCase root detection must be supported for Swift/Xcode targets
+- Dot-prefixed roots such as `.github` require explicit allowlisting
 
-- all GitHub operations go through `GitHubTool`
-- paths must be validated before any write
-- root-directory validation must support CamelCase Swift/Xcode roots
-- failure handling follows centralized escalation rules
-- context, CI-log truncation, and polling behaviors are managed automatically by shared infrastructure
-
-These are external dependencies and constraints on how the subsystem is maintained, not part of the app-shell implementation itself.
+This subsystem does not, based on the provided sources, define its own persistence layer, networking layer, or domain-specific business logic. Its role is application-shell scene composition and shared environment injection.
