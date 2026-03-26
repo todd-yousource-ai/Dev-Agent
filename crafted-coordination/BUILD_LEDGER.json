@@ -1,0 +1,121 @@
+{
+  "build_id": "crafteddevagent-655b8015",
+  "subsystem": "CraftedDevAgent",
+  "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture. You should apply Max impl_files per PR: 8\u201310. Beyond that, split into multiple PRs. Max acceptance criteria: 8\u201310. More than that is a scope problem.",
+  "scope_statement": "Build the complete Crafted Dev Agent \u2014 a native macOS two-process AI coding agent consisting of a Swift shell (UI, Touch ID, Keychain, XPC) and a Python backend (consensus engine, build pipeline, GitHub integration, document store, multi-agent coordination, holistic review, TRD workflow, recovery/state management, CI pipeline, build memory, build rules). The system transforms plain-language build intents into tested, CI-passing GitHub pull requests using dual-LLM parallel generation with Claude arbitration. This is a full-system build decomposed into multiple PRDs covering all 16 TRDs plus the identified gap components (CommandRouter, EmailNotifier, generate_single(), SCOPE_SYSTEM prompt, and Crafted Connect SDK stub), with each PRD producing 8-10 implementation-file PRs and 8-10 acceptance criteria per PR.\n\nClarifications:\n  - This should be resolved through the PRD process using best practices\n  - This should be resolved through the PRD process using best practices\n  - This should be resolved through the PRD process using best practices\n  - This should be resolved through the PRD process using best practices\n  - This should be resolved through the PRD process using best practices\n\nOperator on 'Should the initial PRD decomposition prioritize the Python b':\nboth tracks be developed in parallel\n\nOperator on 'For the five identified gap components (CommandRouter, Email':\nbundled into the PRDs of their parent subsystem\n\nOperator on 'TRD-8 references Figma MCP Server and TRD-18 Crafted Connect':\nfull implementations be attempted\n\nOperator on 'The regression test suite (test_regression_taxonomy.py, 35 t':\nThe PRDs should be develop in order that allow for the most graceful software development for the product",
+  "created_at": 1774544676.0630982,
+  "updated_at": 1774544676.063375,
+  "updated_by": "todd-gould",
+  "prd_plan": [
+    {
+      "prd_id": "PRD-001",
+      "title": "Core Backend Runtime, Startup Handshake, Command Routing, and Scope Gate Foundations",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-002",
+      "title": "Consensus Engine, Provider Adapters, Single-Provider Generation, and Prompt Systems",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-003",
+      "title": "Document Store, Retrieval, Injection Defense, and Build Rules Context Loading",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-004",
+      "title": "GitHub Integration, Branch/PR Lifecycle, CI Polling, and Repository Bootstrap",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-005",
+      "title": "Recovery, Thread State, Build Memory, Context Management, and Self-Improving Build Rules",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-006",
+      "title": "PR Planning, Build Pipeline Orchestration, Repo Context, Self-Correction, and Fix Loop",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-007",
+      "title": "Multi-Agent Coordination, Build Ledger, Conflict Tracking, and Journaled Collaboration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-008",
+      "title": "Holistic Code Review Workflow and Review-Fix PR Generation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-009",
+      "title": "TRD Development Workflow, Adaptive Interview Modes, and Build Handoff",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-010",
+      "title": "Code Quality Pipeline, CI Workflow Generation, Regression Contracts, and Operational Notifications",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-011",
+      "title": "Swift macOS Shell Foundation, Authentication, Keychain, and Process Management",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-012",
+      "title": "Swift XPC Bridge, Build Stream UI, Context Panels, and Native macOS Interaction Surfaces",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-013",
+      "title": "Mac CI Runner, Swift Build Validation, Python Bundling, Signing, and Release Packaging",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-014",
+      "title": "Advanced Swift UI/UX System, Health Dashboard, Figma Pipeline, and Maintainer Flows",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-015",
+      "title": "Self-Healing Observability, Detection, Classification, and Remediation Loop",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    }
+  ],
+  "pr_entries": {},
+  "knowledge_notes": [],
+  "version": 1,
+  "schema_version": 3,
+  "agent_version": "39.48.0"
+}
