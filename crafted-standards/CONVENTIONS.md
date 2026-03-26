@@ -1,134 +1,211 @@
-# CONVENTIONS.md — CraftedAgent Subsystem
+# Code Conventions
 
-All rules below are derived from the project TRDs and architecture documents. Every rule is mandatory unless explicitly marked *recommended*.
+## File and Directory Naming
 
----
+1. **Name CraftedAgent backend Python modules in `snake_case.py` under `src/`.**  
+   Use lowercase filenames with underscores only. Follow the established subsystem patterns:
+   - `src/consensus.py`
+   - `src/build_director.py`
 
-## 1. File and Directory Naming
+2. **Place importable Python application code under `src/`.**  
+   Do not create parallel top-level package directories for backend runtime code.
 
-1. **Python source files** live under `src/` and use `snake_case.py`.
-   - `src/consensus.py` — `ConsensusEngine`, `GENERATION_SYSTEM`, `SWIFT_GENERATION_SYSTEM`, `UI_ADDENDUM`
-   - `src/build_director.py` — `BuildPipeline`
+3. **Commit required root-level repository files by basename with no directory prefix.**  
+   The following files must exist at repo root when present in the subsystem:
+   - `README.md`
+   - `CODEOWNERS`
+   - `LICENSE`
+   - `.gitignore`
+   - `.editorconfig`
+   - `VERSION`
+   - `Makefile`
+   - `pyproject.toml`
 
-2. **CI workflow files** are named exactly:
-   - `crafted-ci.yml` (Ubuntu runner)
-   - `crafted-ci-macos.yml` (macOS Swift runner)
+4. **Keep CI workflow filenames exactly as specified.**  
+   Use only:
+   - `crafted-ci.yml` for Ubuntu CI
+   - `crafted-ci-macos.yml` for macOS Swift CI
 
-3. **Repo-root files** — the following files must always be committed at the repository root (no directory prefix). Validate by basename, not by directory:
-   - `README.md`, `CODEOWNERS`, `LICENSE`, `.gitignore`, `.editorconfig`, `VERSION`, `Makefile`, `pyproject.toml`
+5. **Do not rename or relocate `conftest.py` when it is created by CI bootstrap.**  
+   `conftest.py` is auto-committed by `ci_workflow.ensure()` to support `src/` imports.
 
-4. **`conftest.py`** is auto-committed by `ci_workflow.ensure()` so that `src/` is importable in tests. Never hand-edit this file; if it drifts, delete and let the pipeline regenerate it.
+6. **Use subsystem-specific slugs in branch names and keep the compatibility prefix unchanged.**  
+   Branches for CraftedAgent work must use:
+   ```text
+   forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}
+   ```
+   Example:
+   ```text
+   forge-agent/build/e123/crafted-agent/pr-007-path-validation
+   ```
 
-5. **Test files** follow the pattern `tests/test_{module}.py` mirroring the source file they cover (e.g., `tests/test_consensus.py` for `src/consensus.py`).
+## Class and Function Naming
 
----
+1. **Name Python classes in `PascalCase`.**  
+   Match the existing subsystem style:
+   - `ConsensusEngine`
+   - `BuildPipeline`
 
-## 2. Class and Function Naming
+2. **Name Python functions and methods in `snake_case`.**  
+   Examples:
+   - `validate_write_path`
+   - `ensure_workflow_files`
+   - `build_release_artifacts`
 
-6. **Classes** use `PascalCase`: `ConsensusEngine`, `BuildPipeline`, `PathSecurity`.
+3. **Use noun-based class names for orchestrators and engines.**  
+   Prefer names that describe the responsibility directly:
+   - `BuildPipeline`
+   - `ConsensusEngine`  
+   Avoid verb phrases such as `BuildsPipeline` or vague names such as `Manager`.
 
-7. **Functions and methods** use `snake_case`: `validate_write_path`, `ensure`, `run_build`.
+4. **Name constants in `UPPER_SNAKE_CASE`.**  
+   Follow the established style:
+   - `GENERATION_SYSTEM`
+   - `SWIFT_GENERATION_SYSTEM`
+   - `UI_ADDENDUM`
 
-8. **Constants** use `UPPER_SNAKE_CASE`: `GENERATION_SYSTEM`, `SWIFT_GENERATION_SYSTEM`, `UI_ADDENDUM`.
+5. **Name Swift accessibility identifiers using the exact hyphenated schema.**  
+   Every interactive element must set `.accessibilityIdentifier()` using:
+   ```text
+   {module}-{component}-{role}-{context?}
+   ```
+   Required examples to follow:
+   - `auth-touchid-button`
+   - `auth-passcode-button`
+   - `settings-anthropic-key-field`
+   - `settings-anthropic-key-test-button`
+   - `settings-anthropic-key-reveal-button`
+   - `navigator-project-row-{projectId}`
+   - `stream-gate-card-{gateId}`
+   - `stream-gate-yes-button-{gateId}`
+   - `stream-gate-skip-button-{gateId}`
+   - `stream-gate-stop-button-{gateId}`
 
-9. **Private/internal symbols** are prefixed with a single underscore: `_is_docs_pr`, `_docs_keywords`. Do not use double underscores for name-mangling unless there is a concrete inheritance collision.
+6. **Use stable dynamic suffixes for identifier context values.**  
+   When an accessibility identifier includes `{projectId}` or `{gateId}`, append the actual stable domain identifier exactly once at the end. Do not insert random UUIDs, array indexes, or transient state values.
 
-10. **Branch names** follow this exact template (the `forge-agent` prefix is kept intentionally for compatibility — do not rename):
-    ```
-    forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}
-    ```
-    - `{N:03d}` — zero-padded to three digits.
-    - `{title_slug}` — lowercase, hyphens only, no underscores.
+## Error and Exception Patterns
 
----
+1. **Validate every user-supplied write path before any filesystem write.**  
+   Always call `validate_write_path` before opening, creating, overwriting, moving, or deleting a user-directed file path.
+   ```python
+   from path_security import validate_write_path
 
-## 3. Error and Exception Patterns
+   safe_path = validate_write_path(user_supplied_path)
+   ```
+   Use `safe_path` for the write operation, never the original input.
 
-11. **Validate paths before ANY write operation.** Every agent-initiated write must pass through `path_security.validate_write_path`:
-    ```python
-    from path_security import validate_write_path
+2. **Do not write to a path derived from user input without reassignment to the validated path.**  
+   This is required even when the path appears normalized or relative.
 
-    safe_path = validate_write_path(user_supplied_path)  # returns safe default on traversal
-    ```
-    Never call `open(..., "w")`, `Path.write_text()`, or `shutil.copy` with a raw user-supplied path.
+3. **Treat path validation as mandatory for all write-like operations, not just file creation.**  
+   Apply it before:
+   - file writes
+   - file overwrites
+   - temp-file finalization
+   - renames into destination paths
+   - extracted artifact output
+   - generated documentation output
 
-12. **Return safe defaults on traversal detection.** `validate_write_path` must return a safe default path (not raise) when directory traversal is detected, so the caller always receives a usable value. Log a warning at the call site when the returned path differs from the supplied path.
+4. **Prefer safe fallback behavior from `validate_write_path` over custom traversal handling.**  
+   Do not duplicate traversal checks in local code if `validate_write_path` is available for the write path.
 
-13. **Custom exceptions** inherit from a single project base: `class CraftedAgentError(Exception)`. Subsystem exceptions extend it (e.g., `PathTraversalError(CraftedAgentError)`).
+## Import and Module Organisation
 
-14. **Never silently swallow exceptions.** Every `except` block must either re-raise, log at `WARNING` or above, or convert to a well-typed return value. Bare `except:` is prohibited.
+1. **Import path validation directly from `path_security`.**  
+   Use:
+   ```python
+   from path_security import validate_write_path
+   ```
+   Do not alias this import unless required to resolve a local naming conflict.
 
----
+2. **Organize Python imports so `src/` modules remain directly importable in tests.**  
+   Rely on the repository `conftest.py` support for `src/` imports; do not introduce ad hoc path mutation inside individual tests unless unavoidable.
 
-## 4. Import and Module Organisation
+3. **Keep module responsibilities aligned with established backend file roles.**  
+   Use dedicated modules for primary subsystem responsibilities:
+   - `src/consensus.py` for consensus/generation engine logic
+   - `src/build_director.py` for build pipeline orchestration
 
-15. **Import order** (enforced by `isort` with the `black` profile):
-    1. Standard library
-    2. Third-party packages
-    3. Project modules (`from src.…` or `from path_security import …`)
+4. **Do not split canonical subsystem responsibilities into arbitrarily named duplicate modules.**  
+   If extending consensus behavior, add to `src/consensus.py` or a clearly related supporting module rather than creating overlapping files such as `src/consensus_engine_impl.py` without necessity.
 
-16. **Relative imports are prohibited** inside `src/`. Always use absolute imports rooted at `src`:
-    ```python
-    from src.consensus import ConsensusEngine   # ✓
-    from .consensus import ConsensusEngine       # ✗
-    ```
+## Comment and Documentation Rules
 
-17. **`__all__` is required** in every public module to make the API surface explicit.
+1. **Document naming-sensitive logic with the exact convention string when enforced by code.**  
+   For any code that validates or generates branch names, accessibility identifiers, or required filenames, include the literal format in comments or docstrings.
 
----
+2. **When implementing docs-PR detection logic from legacy behavior, use the v5.0 keyword-based pattern only if explicitly required by the calling flow.**  
+   The historical pattern was:
+   ```python
+   _docs_keywords = {"naming convention", "glossary", "changelog", ...}
+   _is_docs_pr = any(kw in title_lower for kw in _docs_keywords) or ...
+   ```
+   Treat this as legacy behavior reference, not a default feature to recreate everywhere.
 
-## 5. Comment and Documentation Rules
+3. **Keep comments implementation-specific and tied to subsystem rules.**  
+   Examples of acceptable comments:
+   - why `validate_write_path` is required before a write
+   - why `crafted-ci-macos.yml` must remain named exactly
+   - why an accessibility identifier uses a domain ID suffix
 
-18. **Module docstring** — every `.py` file begins with a one-line module docstring stating its responsibility, matching the TRD role:
-    ```python
-    """ConsensusEngine, GENERATION_SYSTEM, and SWIFT_GENERATION_SYSTEM + UI_ADDENDUM."""
-    ```
+4. **Do not add generic placeholder comments.**  
+   Avoid comments such as:
+   - `# handle errors`
+   - `# set identifier`
+   - `# do validation`  
+   Replace them with the exact rule being enforced.
 
-19. **Public functions and classes** require a Google-style docstring with `Args:`, `Returns:`, and `Raises:` sections.
+## CraftedAgent-Specific Patterns
 
-20. **Inline comments** explain *why*, not *what*. If a comment restates the code, delete it.
+1. **Use the mandatory compatibility branch prefix `forge-agent`.**  
+   Do not substitute `crafted-agent`, `forge`, or any other prefix in branch generation logic.
 
-21. **TODO format**: `# TODO(engineer_id): description — refs TRD-N §section` so TODOs are traceable to a person and spec section.
+2. **Generate branch names with zero-padded PR numbers to three digits.**  
+   Format PR numbers as:
+   - `pr-001`
+   - `pr-042`
+   - `pr-120`
 
----
+3. **Slug fields in branch names must be lowercase and hyphen-separated.**  
+   Apply this to:
+   - `{subsystem_slug}`
+   - `{title_slug}`  
+   Do not use spaces, underscores, or mixed case.
 
-## 6. CraftedAgent-Specific Patterns
+4. **Assign accessibility identifiers to all interactive Swift UI elements.**  
+   Buttons, text fields, toggles, selectable rows, and equivalent controls must all set `.accessibilityIdentifier()`.
 
-### 6.1 Accessibility Identifiers (SwiftUI)
+5. **Use role words in accessibility identifiers that match the actual control type.**  
+   Preferred role segment values include:
+   - `button`
+   - `field`
+   - `row`
+   - `card`  
+   Do not label a field as `button` or a row as `card`.
 
-22. **axIdentifier format**: `{module}-{component}-{role}-{context?}`
-    Set via `.accessibilityIdentifier()` on **every** interactive element.
+6. **For repeated interactive UI elements, include domain context in the identifier.**  
+   Use identifiers such as:
+   - `navigator-project-row-{projectId}`
+   - `stream-gate-yes-button-{gateId}`  
+   Do not rely on visual order like `row-1`, `row-2`, or `button-first`.
 
-23. **Canonical examples** (do not deviate from this pattern):
-    | Identifier | Usage |
-    |---|---|
-    | `auth-touchid-button` | Touch ID authentication button |
-    | `auth-passcode-button` | Passcode fallback button |
-    | `settings-anthropic-key-field` | API key text field |
-    | `settings-anthropic-key-test-button` | Key validation button |
-    | `settings-anthropic-key-reveal-button` | Key reveal toggle |
-    | `navigator-project-row-{projectId}` | Project list row |
-    | `stream-gate-card-{gateId}` | Gate card container |
-    | `stream-gate-yes-button-{gateId}` | Gate approval button |
-    | `stream-gate-skip-button-{gateId}` | Gate skip button |
-    | `stream-gate-stop-button-{gateId}` | Gate stop button |
+7. **Preserve canonical CI workflow names in automation, references, and documentation.**  
+   Any code that creates, checks, or updates CI files must reference:
+   - `crafted-ci.yml`
+   - `crafted-ci-macos.yml`  
+   Never introduce alternate names such as `ci.yml` or `macos-ci.yml`.
 
-24. Dynamic segments (`{projectId}`, `{gateId}`) are interpolated at runtime. Static segments are always lowercase with hyphens — no underscores, no camelCase.
+8. **When generating or validating repository file manifests, treat required root files by basename.**  
+   Validate `README.md` and the other required root files against the known basename set rather than by path strings containing a root prefix.
 
-### 6.2 Docs-PR Detection
+9. **If the subsystem creates files from agent output, validate destination paths before materialization.**  
+   This includes generated source files, workflow files, docs files, and support files written from model-produced paths or filenames.
 
-25. Docs-PR classification logic was **removed in TRD v6.0**. Do not re-introduce keyword-list matching (`_docs_keywords`, `_is_docs_pr`). Classification of documentation-only PRs is handled by file-path diffstat, not title keywords.
-
-### 6.3 CI Workflow Discipline
-
-26. Every PR must pass both `crafted-ci.yml` (Ubuntu) and `crafted-ci-macos.yml` (macOS Swift) before merge.
-
-27. Do not add CI files outside the two canonical names. If a new runner OS is needed, create a TRD amendment first.
-
-### 6.4 Root-File Validation
-
-28. Before committing, validate that repo-root files match the known basename set (Rule 3). Use basename comparison — never assert on an absolute directory path.
-
----
-
-*Last updated from TRD-1, TRD-3, GitHub-Integration-Lessons-Learned, and forge_architecture_context.*
+10. **Keep naming conventions literal and machine-checkable where possible.**  
+    If code validates:
+    - branch names
+    - accessibility identifiers
+    - workflow filenames
+    - root-required files  
+    implement the rule as an exact format or explicit allowed set, not as informal string matching.
