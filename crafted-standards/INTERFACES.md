@@ -1,528 +1,544 @@
-# INTERFACES.md
+# Interface Contracts - CraftedApp
 
-This document defines the interface contracts explicitly stated in the provided TRD-derived repository documents. It is limited to formats and contracts that appear in the supplied source material.
+## Data Structures
 
-## Interface Contracts
-
-### Source Authority
-
-The repository documents establish the following interface authorities:
-
-- The product is a **two-process** system:
-  - **Swift shell**: UI, authentication, Keychain, XPC
-  - **Python backend**: consensus, pipeline, GitHub
-- The two processes communicate via:
-  - **authenticated Unix socket**
-  - **line-delimited JSON**
-- The TRDs in `forge-docs/` are the source of truth for all unspecified details.
-- Neither process executes generated code.
-
-Because only partial TRD-derived content was provided, this file includes only interfaces directly recoverable from that content and does not invent undocumented fields or endpoints.
+This document defines the required wire-format and API contracts for the CraftedApp subsystem based on the provided TRD interface requirements.
 
 ---
 
-## Per-Subsystem Data Structures
+### TrustFlowEvent
 
-### 1. Interprocess Message Frame
+Required for every action outcome emitted in the enforcement path.
 
-The only explicit on-wire format provided for Swift ↔ Python communication is **line-delimited JSON** over an **authenticated Unix socket**.
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `event_id` | `string` | yes | MUST be globally unique. MUST be generated with CSPRNG. MUST NOT be sequential. |
+| `session_id` | `string` | yes | Session identifier for the agent session. |
+| `ctx_id` | `string` | yes | CTX-ID token identifier associated with the action. |
+| `ts` | `number` | yes | UTC Unix timestamp with millisecond precision. |
+| `event_type` | `string` | yes | Event type for the emitted TrustFlow event. |
+| `payload_hash` | `string` | yes | MUST be SHA-256 of the serialized action payload. |
 
-#### Structure
+#### Additional contract requirements
+- Emission MUST be synchronous in the enforcement path.
+- Async buffering is not permitted.
+- Failed emission MUST be surfaced.
+- Failed emission is a WARN-level audit event.
+- Failed emission MUST NOT silently continue.
 
-Each message frame:
+---
 
-- MUST be a valid JSON value
-- SHOULD be a JSON object for extensibility
-- MUST be terminated by a newline (`\n`)
-- MUST occupy exactly one line on the stream
+### VTZEnforcementDecision
 
-#### Type
+Produced when VTZ policy denies an action.
 
-```text
-LineDelimitedJsonFrame := UTF-8 encoded JSON + "\n"
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `verdict` | `string` | yes | MUST be `block` for VTZ policy denial. |
+
+#### Additional contract requirements
+- Every action MUST be checked against VTZ policy BEFORE execution.
+- VTZ policy denial MUST produce a `VTZEnforcementDecision` record with `verdict=block`.
+
+---
+
+### CTX-ID Token
+
+Represents the identity and trust context bound to an agent session.
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `ctx_id` | `string` | yes | CTX-ID token value. Immutable once issued. |
+
+#### Additional contract requirements
+- CTX-ID tokens are IMMUTABLE once issued.
+- No field modification after issuance.
+- Rotation creates a new token.
+- The old token is invalidated immediately upon rotation.
+- Expired CTX-ID MUST be rejected.
+- Clock skew tolerance is defined per deployment.
+- CTX-ID MUST be validated against TrustLock public key.
+- Software-only validation is rejected.
+- Missing CTX-ID MUST be treated as `UNTRUSTED`.
+- Identity MUST NEVER be inferred from context if CTX-ID is missing.
+
+---
+
+### Agent Action
+
+A logical action processed by a CraftedApp entry point.
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `session_id` | `string` | yes | Must identify the current agent session. |
+| `ctx_id` | `string` | yes | MUST be validated FIRST before any partial processing. |
+| `payload` | `object` | yes | Serialized action payload used to compute `payload_hash`. |
+
+#### Additional contract requirements
+- Every entry point that processes an agent action MUST call CTX-ID validation FIRST.
+- CTX-ID validation failure MUST result in immediate rejection.
+- No partial processing is permitted before CTX-ID validation succeeds.
+- Every action outcome (`allow`, `restrict`, `block`) MUST emit a TrustFlow event.
+
+---
+
+### Consensus Engine Invocation
+
+Required invocation contract for consensus-backed implementation tasks.
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `task` | `string` | yes | Example format: `Implement: {spec.title}` |
+| `context` | `string` | yes | Context string provided to the consensus engine. |
+| `language` | `string` | yes | MUST be one of: `"python"`, `"swift"`, `"go"`, `"typescript"`, `"rust"` |
+
+#### Result Structure
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `final_code` | `string` | yes | Final generated code output from consensus execution. |
+
+#### Required usage
+```python
+result = await self._consensus.run(
+    task=f"Implement: {spec.title}",
+    context=context_string,
+    language=spec.language,   # "python" | "swift" | "go" | "typescript" | "rust"
+)
+code = result.final_code
 ```
 
-#### Constraints
-
-- Encoding: UTF-8
-- Delimiter: newline
-- Transport: authenticated Unix socket
-- Framing: one JSON message per line
-- Messages MUST NOT rely on multi-line JSON formatting
-- Receivers MUST parse input incrementally by newline boundaries
-
----
-
-### 2. Pull Request State Representation
-
-The GitHub integration document explicitly identifies a draft PR lifecycle distinction.
-
-#### Fields explicitly evidenced
-
-```json
-{
-  "draft": true
-}
-```
-
-#### Field contract
-
-| Field | Type | Constraints | Notes |
-|---|---|---|---|
-| `draft` | boolean | `true` or `false` | Present in GitHub PR context |
-
-#### Behavioral constraint
-
-- `PATCH /repos/{owner}/{repo}/pulls/{number}` with body `{"draft": false}` is documented as ineffective for converting a draft PR to ready for review.
-- Conversion from draft to ready-for-review MUST use the GraphQL `markPullRequestReadyForReview` mutation.
-
----
-
-### 3. Repository Pull Request Locator
-
-The GitHub REST path supplied in the lessons-learned document implies the following locator fields.
-
-#### Implied structure
-
-| Field | Type | Constraints |
-|---|---|---|
-| `owner` | string | GitHub repository owner identifier |
-| `repo` | string | GitHub repository name |
-| `number` | integer | Pull request number |
-
-#### REST path template
-
-```text
-/repos/{owner}/{repo}/pulls/{number}
-```
-
----
-
-### 4. Product Version
-
-The repository metadata explicitly provides a version string.
-
-#### Structure
-
-| Field | Type | Constraints |
-|---|---|---|
-| `version` | string | Semantic-like dotted version string |
-
-#### Example
-
-```json
-{
-  "version": "38.153.0"
-}
-```
-
-No stronger semantic-versioning rules are stated in the provided materials.
-
----
-
-### 5. Process Responsibility Boundary
-
-The provided documents define subsystem ownership, which is an interface contract at the architectural boundary.
-
-#### Swift shell responsibilities
-
-| Capability | Ownership |
-|---|---|
-| UI | Swift shell |
-| Authentication | Swift shell |
-| Keychain | Swift shell |
-| XPC | Swift shell |
-
-#### Python backend responsibilities
-
-| Capability | Ownership |
-|---|---|
-| Consensus | Python backend |
-| Pipeline | Python backend |
-| GitHub operations | Python backend |
-
-#### Constraint
-
-- Interfaces crossing this boundary MUST respect the ownership split above.
-- Secrets handling belongs to the Swift-owned security/authentication side unless specified otherwise by the governing TRD.
-
----
-
-## Cross-Subsystem Protocols
-
-### 1. Swift Shell ↔ Python Backend IPC
-
-#### Transport
-
-- **Authenticated Unix socket**
-
-#### Framing
-
-- **Line-delimited JSON**
-
-#### Protocol requirements
-
-| Requirement | Contract |
-|---|---|
-| Authentication | Socket communication MUST be authenticated |
-| Message format | Messages MUST be JSON |
-| Framing | Each message MUST be newline-delimited |
-| Process model | Swift shell and Python backend are separate processes |
-| Execution safety | Neither side may execute generated code |
-
-#### Sender requirements
-
-- MUST serialize each outbound message as one JSON document
-- MUST append `\n`
-- MUST NOT emit pretty-printed/multi-line JSON
-
-#### Receiver requirements
-
-- MUST buffer until newline
-- MUST parse each complete line as one JSON document
-- MUST reject malformed JSON frames
-- MUST treat framing violations as protocol errors
-
----
-
-### 2. GitHub Pull Request Lifecycle Protocol
-
-The provided lessons-learned document defines one concrete lifecycle rule.
-
-#### Draft PR creation policy
-
-- The agent opens every PR as a **draft**
-
-#### Transition: Draft → Ready for Review
-
-##### Unsupported/ineffective method
-
-```http
-PATCH /repos/{owner}/{repo}/pulls/{number}
-Content-Type: application/json
-
-{"draft": false}
-```
-
-Documented behavior:
-
-- Returns `200`
-- Field is silently ignored
-- PR remains draft
-
-##### Required method
-
-- Use GraphQL mutation:
-  - `markPullRequestReadyForReview`
-
-#### Contract
-
-| Action | Required Interface |
-|---|---|
-| Create PR as draft | GitHub PR draft workflow |
-| Convert draft PR to ready | GraphQL `markPullRequestReadyForReview` |
-| Convert via REST `PATCH ... {"draft": false}` | MUST NOT be relied upon |
-
----
-
-### 3. Build and Review Workflow Boundary
-
-From the provided repository documents, the product-level interaction contract is:
-
-1. User provides:
-   - repository
-   - TRDs
-   - plain-language intent
-2. Agent:
-   - assesses confidence in scope
-   - decomposes intent into ordered PRD plan
-   - decomposes PRD into typed pull requests
-   - generates implementation and tests using two providers in parallel
-   - runs self-correction pass
-   - runs lint gate
-   - runs iterative fix loop
-   - opens GitHub pull requests
-3. Operator:
-   - gates
-   - reviews
-   - merges
-
-This is a workflow contract, not a complete wire schema. No additional field-level payloads are stated in the provided content.
+#### Behavioral requirements
+- `language="swift"` selects `SWIFT_GENERATION_SYSTEM` plus optional `SWIFT_UI_ADDENDUM` when UI keywords are detected.
+- `language="python"` selects `GENERATION_SYSTEM`.
+
+#### Prohibited implementation behavior
+- Fix loop strategy MUST use `_choose_strategy(failure_type, attempt, records)`.
+- Fix arbitration MUST use `_score_fix()`.
+- Length-based arbitration is forbidden.
 
 ---
 
 ## Enums and Constants
 
-### 1. Process Roles
+### Action Outcome
 
-```text
-ProcessRole =
-  - swift_shell
-  - python_backend
-```
+Allowed values for action outcome emission:
 
-### 2. Transport Type
+- `allow`
+- `restrict`
+- `block`
 
-```text
-TransportType =
-  - authenticated_unix_socket
-```
+Every action outcome with one of these values MUST emit a TrustFlow event.
 
-### 3. Message Encoding
+---
 
-```text
-MessageEncoding =
-  - json
-  - utf8
-  - line_delimited
-```
+### VTZ Enforcement Verdict
 
-### 4. Pull Request State
+Allowed/required known value from the provided contract:
 
-Only values evidenced in provided material are included.
+- `block`
 
-```text
-PullRequestReviewState =
-  - draft
-  - ready_for_review
-```
+For VTZ policy denial, `verdict` MUST be exactly `block`.
 
-### 5. Provider Set
+---
 
-The README explicitly names the consensus providers.
+### CTX-ID Trust State
 
-```text
-ModelProvider =
-  - claude
-  - gpt_4o
-```
+Known required value:
 
-### 6. Governance Constants
+- `UNTRUSTED`
 
-```text
-SecurityAuthority = "TRD-11"
-SpecificationAuthority = "forge-docs/"
-CurrentVersion = "38.153.0"
-```
+If `ctx_id` is missing, the request/session/action MUST be treated as `UNTRUSTED`.
 
-### 7. File/Document Constants
+---
 
-```text
-AgentInstructionFiles =
-  - AGENTS.md
-  - CLAUDE.md
+### Consensus Language
 
-PrimarySpecificationDocs =
-  - README.md
-  - forge-docs/*
-```
+Exact allowed values:
+
+- `"python"`
+- `"swift"`
+- `"go"`
+- `"typescript"`
+- `"rust"`
+
+---
+
+### System Selector Constants
+
+Exact referenced constant names:
+
+- `SWIFT_GENERATION_SYSTEM`
+- `SWIFT_UI_ADDENDUM`
+- `GENERATION_SYSTEM`
+
+---
+
+### Required Python Runtime/Tooling Constants
+
+These are implementation constraints for Python-backed CraftedApp components:
+
+- Python version: `3.12`
+- Test runner: `pytest`
+- Linter: `ruff`
+- Type checker: `mypy`
+- Required dependency: `pyyaml`
 
 ---
 
 ## Validation Rules
 
-### 1. IPC Message Validation
+## 1. CAL Enforcement
 
-For every Swift ↔ Python IPC message:
+1. Every entry point that processes an agent action MUST call CTX-ID validation FIRST.
+2. CTX-ID validation failure MUST result in immediate rejection.
+3. No partial processing is allowed before CTX-ID validation completes successfully.
+4. Every action MUST be checked against VTZ policy BEFORE execution.
+5. VTZ policy denial MUST produce a `VTZEnforcementDecision` with `verdict=block`.
+6. Every action outcome (`allow`, `restrict`, `block`) MUST emit a TrustFlow event.
+7. TrustFlow emission failure MUST NOT silently continue.
+8. TrustFlow emission failure MUST be logged and surfaced.
 
-- MUST be valid JSON
-- MUST be UTF-8 encoded
-- MUST terminate with newline
-- MUST fit on a single line
-- MUST be transmitted over the authenticated Unix socket
-- MUST NOT contain embedded framing semantics that depend on multi-line parsing
+## 2. TrustFlow Event Validation
 
-#### Invalid conditions
+A `TrustFlowEvent` is valid only if all of the following hold:
 
-- malformed JSON
-- missing newline terminator
-- multi-line pretty-printed JSON
-- unauthenticated socket usage
-- non-UTF-8 payloads
+- `event_id` is present.
+- `event_id` is globally unique.
+- `event_id` is generated using CSPRNG.
+- `event_id` is not sequential.
+- `session_id` is present.
+- `ctx_id` is present.
+- `ts` is present.
+- `ts` is a UTC Unix timestamp with millisecond precision.
+- `event_type` is present.
+- `payload_hash` is present.
+- `payload_hash` equals SHA-256 of the serialized action payload.
 
----
+Operational rules:
 
-### 2. Responsibility Validation
+- Emission MUST be synchronous in the enforcement path.
+- Async buffering is not permitted.
+- Failed emission is a WARN-level audit event.
 
-Changes or interfaces MUST preserve subsystem boundaries:
+## 3. CTX-ID Validation
 
-- Swift shell MUST own:
-  - UI
-  - auth
-  - Keychain
-  - XPC
-- Python backend MUST own:
-  - consensus
-  - pipeline
-  - GitHub operations
+A CTX-ID is valid only if all of the following hold:
 
-Any interface that relocates these responsibilities would violate the documented architecture unless another TRD explicitly authorizes it.
+- It is present unless the caller is explicitly treated as `UNTRUSTED`.
+- It has not expired.
+- It validates against the TrustLock public key.
+- Validation is not software-only.
+- It has not been invalidated by rotation.
 
----
+Additional rules:
 
-### 3. Generated Code Safety Validation
+- CTX-ID tokens are immutable once issued.
+- No field modification after issuance is permitted.
+- Rotation creates a new token and invalidates the old one immediately.
+- Expired CTX-ID MUST be rejected.
+- Missing CTX-ID MUST be treated as `UNTRUSTED`.
 
-- Neither process may execute generated code.
+## 4. VTZ Enforcement Validation
 
-This is a hard behavioral contract and must be preserved by any interface or workflow.
+- Every agent session is bound to EXACTLY ONE VTZ at CTX-ID issuance.
+- Cross-VTZ tool calls require explicit policy authorization.
+- Implicit authorization is denied.
+- VTZ boundaries are structural and cannot be bypassed by application code.
+- VTZ policy changes take effect at NEXT CTX-ID issuance, not mid-session.
 
----
+## 5. Security Rules
 
-### 4. GitHub Draft PR Transition Validation
+The following are mandatory interface-level security constraints:
 
-When transitioning a PR from draft to reviewable:
+- Never hardcode credentials, API keys, tokens, or secrets as string literals.
+- Never use `shell=True` in subprocess calls.
+- Never call `eval()` or `exec()` on generated or external content.
+- Never log HTTP response bodies.
+- Log status codes and error types only.
+- All file paths written to disk MUST pass `path_security.validate_write_path()` before any write.
+- All loaded document chunks MUST pass injection scanning before inclusion in any LLM prompt.
+- Context from external documents goes in the USER prompt, never the SYSTEM prompt.
+- When `SECURITY_REFUSAL` output is returned from the LLM: stop, gate, log. Never retry to bypass.
 
-- GraphQL `markPullRequestReadyForReview` MUST be used
-- REST `PATCH /repos/{owner}/{repo}/pulls/{number}` with `{"draft": false}` MUST NOT be treated as a valid state transition mechanism
+## 6. Python Implementation Rules
 
-#### Failure interpretation
+For Python implementations in CraftedApp:
 
-If a REST patch returns success but PR remains draft, that result is consistent with the documented GitHub behavior and is not a valid transition.
+- Python `3.12` is required.
+- Type annotations are required on every function.
+- `async/await` must be used throughout the backend.
+- No blocking calls on the event loop.
+- Dataclasses are required for all structured data.
+- Tests must use `pytest`.
+- Tests live in `tests/` and mirror `src/` structure.
+- `ruff` must pass clean.
+- `mypy` must pass clean.
+- Test coverage must be `>= 85%` on all new modules.
+- `pyyaml` must be present in `requirements.txt`.
 
----
+## 7. Forbidden Patterns
 
-### 5. Specification Validation
+The following are explicitly non-conformant:
 
-- Interfaces MUST derive from TRDs in `forge-docs/`
-- Security-relevant interfaces MUST conform to TRD-11
-- Implementations MUST NOT invent requirements absent from TRDs
+### Length-based fix arbitration
+```python
+winner = max(claude_fix, openai_fix, key=len)  # WRONG — use _score_fix()
+```
 
-This document itself is intentionally incomplete where the provided material does not specify structure.
+### Swift force unwrap
+```swift
+let value = optional!
+```
+
+### LLM API call from Swift
+```swift
+let client = AnthropicClient(apiKey: keychainValue)
+```
+
+### Keychain read for backend
+```swift
+let token = KeychainKit.read("github_token")  // Python reads nothing from Keychain
+```
+
+Additional rule:
+- Only Swift reads Keychain, only to deliver via XPC.
 
 ---
 
 ## Wire Format Examples
 
-## 1. IPC Line-Delimited JSON
+## Valid Payloads
 
-### Example frame
-
-```json
-{"type":"ping"}
-```
-
-On the wire:
-
-```text
-{"type":"ping"}\n
-```
-
-### Example stream with multiple messages
-
-```text
-{"type":"session_start"}\n
-{"type":"status","state":"running"}\n
-{"type":"session_end"}\n
-```
-
-Note: message field names beyond the JSON framing are illustrative only; the provided documents do not define a canonical IPC schema.
-
----
-
-## 2. GitHub REST Attempt That Must Not Be Relied Upon
-
-```http
-PATCH /repos/{owner}/{repo}/pulls/{number}
-Content-Type: application/json
-
-{"draft": false}
-```
-
-Documented outcome:
-
-- HTTP 200 may be returned
-- PR may remain in draft state
-- Client MUST NOT interpret this as successful conversion to ready-for-review
-
----
-
-## 3. Required GitHub Draft Conversion Operation
-
-The exact mutation payload is not fully provided in the source excerpt, but the required interface is:
-
-```graphql
-mutation {
-  markPullRequestReadyForReview(...)
-}
-```
-
-Contract:
-
-- This mutation is the required mechanism for converting a draft PR to ready for review.
-
----
-
-## 4. Pull Request Locator Example
-
+### Valid TrustFlowEvent
 ```json
 {
-  "owner": "example-org",
-  "repo": "crafted",
-  "number": 42
+  "event_id": "b9d7b4d8-8b8e-4b33-9e8d-5d0d5e8c1a21",
+  "session_id": "sess_12345",
+  "ctx_id": "ctx_abc123",
+  "ts": 1712345678123,
+  "event_type": "action.allow",
+  "payload_hash": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 }
 ```
 
-Associated REST path:
-
-```text
-/repos/example-org/crafted/pulls/42
-```
-
----
-
-## 5. Version Example
-
+### Valid VTZEnforcementDecision
 ```json
 {
-  "version": "38.153.0"
+  "verdict": "block"
 }
 ```
 
----
-
-## 6. Responsibility Boundary Example
-
+### Valid Agent Action
 ```json
 {
-  "swift_shell": ["ui", "authentication", "keychain", "xpc"],
-  "python_backend": ["consensus", "pipeline", "github"]
+  "session_id": "sess_12345",
+  "ctx_id": "ctx_abc123",
+  "payload": {
+    "tool": "read_file",
+    "path": "/workspace/project/README.md"
+  }
 }
 ```
 
-This is a normalized representation of the documented subsystem ownership, not a declared runtime payload.
+### Valid Consensus Engine Invocation
+```json
+{
+  "task": "Implement: SampleSpec",
+  "context": "Relevant implementation context",
+  "language": "python"
+}
+```
+
+### Valid Consensus Engine Result
+```json
+{
+  "final_code": "print('hello')"
+}
+```
 
 ---
 
-## Non-Derivable Interfaces
+## Invalid Payloads
 
-The provided material references many detailed TRDs but does not include their actual field-level content. Therefore, this document intentionally does **not** define undocumented schemas for:
+### Invalid TrustFlowEvent: missing required field
+```json
+{
+  "event_id": "b9d7b4d8-8b8e-4b33-9e8d-5d0d5e8c1a21",
+  "session_id": "sess_12345",
+  "ts": 1712345678123,
+  "event_type": "action.allow",
+  "payload_hash": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+}
+```
 
-- XPC payloads
-- Keychain record formats
-- auth token structures
-- consensus request/response schemas
-- provider adapter payloads
-- PRD plan schemas
-- typed pull request schemas
-- lint/fix-loop result objects
-- error envelope formats
-- security token wire formats
-- test result schemas
+Reason:
+- `ctx_id` is required.
 
-Those interfaces must be taken directly from the relevant TRDs in `forge-docs/`.
+### Invalid VTZEnforcementDecision: wrong verdict
+```json
+{
+  "verdict": "allow"
+}
+```
+
+Reason:
+- VTZ policy denial MUST produce `verdict=block`.
+
+### Invalid Consensus Engine Invocation: unsupported language
+```json
+{
+  "task": "Implement: SampleSpec",
+  "context": "Relevant implementation context",
+  "language": "java"
+}
+```
+
+Reason:
+- `language` MUST be one of `"python"`, `"swift"`, `"go"`, `"typescript"`, `"rust"`.
+
+### Invalid Agent Action: missing ctx_id
+```json
+{
+  "session_id": "sess_12345",
+  "payload": {
+    "tool": "read_file"
+  }
+}
+```
+
+Reason:
+- CTX-ID validation must occur first.
+- Missing CTX-ID must be treated as `UNTRUSTED`.
+
+### Invalid Security Behavior
+```python
+subprocess.run(cmd, shell=True)
+```
+
+Reason:
+- `shell=True` is forbidden.
+
+```python
+eval(untrusted_content)
+```
+
+Reason:
+- `eval()` on generated or external content is forbidden.
+
+```python
+log.info("response body: %s", response.text)
+```
+
+Reason:
+- HTTP response bodies must never be logged.
 
 ---
 
-## Summary
+## Integration Points
 
-The explicit interface contracts recoverable from the provided TRD-derived documents are:
+## 1. Agent Entry Points
 
-- Swift ↔ Python communication uses an **authenticated Unix socket**
-- The wire format is **UTF-8 line-delimited JSON**
-- The system is a strict **two-process architecture**
-- Subsystem ownership is split between **Swift shell** and **Python backend**
-- **Generated code is never executed**
-- GitHub draft PRs must be transitioned to ready-for-review using GraphQL
-- REST patching `{"draft": false}` on a PR must not be relied upon
+Any CraftedApp entry point that processes agent actions MUST:
 
-All other interfaces remain governed by the underlying TRDs and are intentionally unspecified here absent direct source text.
+1. Validate `ctx_id` first.
+2. Reject immediately on CTX-ID validation failure.
+3. Check VTZ policy before executing the action.
+4. Produce `VTZEnforcementDecision` with `verdict=block` on denial.
+5. Emit a synchronous TrustFlow event for every outcome.
+
+## 2. TrustLock
+
+CTX-ID validation MUST integrate with:
+
+- TrustLock public key validation
+
+Constraint:
+- Software-only validation is rejected.
+
+## 3. VTZ Policy Engine
+
+CraftedApp MUST integrate with a VTZ policy enforcement mechanism that supports:
+
+- session bound to EXACTLY ONE VTZ
+- explicit authorization for cross-VTZ tool calls
+- denial by default for implicit cross-VTZ access
+- policy application at NEXT CTX-ID issuance
+
+## 4. TrustFlow Audit Pipeline
+
+CraftedApp MUST integrate with a TrustFlow emission path that:
+
+- accepts `event_id`, `session_id`, `ctx_id`, `ts`, `event_type`, `payload_hash`
+- emits synchronously in the enforcement path
+- surfaces emission failures
+- records failures as WARN-level audit events
+
+## 5. Consensus Engine
+
+CraftedApp integrations using the consensus engine MUST call:
+
+- `await self._consensus.run(...)`
+
+With required parameters:
+
+- `task`
+- `context`
+- `language`
+
+And must consume:
+
+- `result.final_code`
+
+## 6. File Write Security
+
+Before any disk write, CraftedApp MUST integrate with:
+
+- `path_security.validate_write_path()`
+
+This validation MUST occur before any write operation.
+
+## 7. Prompt Construction / External Content Handling
+
+For any external document content included in prompts:
+
+- loaded document chunks MUST pass injection scanning
+- external document context MUST be placed in the USER prompt
+- external document context MUST NOT be placed in the SYSTEM prompt
+
+## 8. LLM Security Refusal Handling
+
+When the LLM returns:
+
+- `SECURITY_REFUSAL`
+
+CraftedApp MUST:
+
+1. stop
+2. gate
+3. log
+4. never retry to bypass
+
+--- 
+
+## Conformance Summary
+
+A CraftedApp component is non-conformant if any of the following are violated:
+
+- missing required TrustFlow event fields
+- non-unique or sequential `event_id`
+- non-millisecond or non-UTC `ts`
+- incorrect `payload_hash`
+- CTX-ID not validated first
+- partial processing before CTX-ID validation
+- expired or rotated CTX-ID accepted
+- software-only CTX-ID validation
+- missing TrustFlow event for any `allow` / `restrict` / `block` outcome
+- asynchronous TrustFlow buffering in enforcement path
+- VTZ denial without `VTZEnforcementDecision(verdict="block")`
+- implicit cross-VTZ access
+- bypassable VTZ enforcement
+- forbidden security patterns
+- unsupported consensus `language`
+- use of length-based fix arbitration instead of `_score_fix()`
