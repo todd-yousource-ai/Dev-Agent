@@ -1,576 +1,504 @@
-# INTERFACES.md
+# Interface Contracts - CraftedAgent
 
-Definitive interface and wire-format reference derived from the provided TRD-facing repository documents only.
+## Data Structures
 
-## Scope and Source Authority
+### Consensus Engine Invocation
 
-This document is derived entirely from the provided repository documentation excerpts:
+All CraftedAgent implementations that invoke the consensus engine MUST pass the following arguments exactly as shown.
 
-- `AGENTS.md`
-- `CLAUDE.md`
-- `README.md`
-- `GitHub-Integration-Lessons-Learned`
+#### Call Shape
 
-Where those documents explicitly defer to TRDs, that deferral is preserved here. No unstated fields, endpoints, or behaviors are invented.
+```python
+result = await self._consensus.run(
+    task=f"Implement: {spec.title}",
+    context=context_string,
+    language=spec.language,
+)
+code = result.final_code
+```
 
-## Interface Contracts
+#### Parameters
 
-### System Boundary
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `task` | `str` | Yes | MUST be provided. Example format shown as `f"Implement: {spec.title}"`. |
+| `context` | `str` | Yes | MUST be provided as prompt context. |
+| `language` | `"python" \| "swift" \| "go" \| "typescript" \| "rust"` | Yes | MUST always be passed. |
 
-Crafted Dev Agent is a **two-process native macOS system**:
+#### Result Object
 
-- **Swift shell**
-  - owns UI
-  - owns authentication
-  - owns Keychain access
-  - owns XPC-related platform integration
-- **Python backend**
-  - owns consensus
-  - owns generation pipeline
-  - owns GitHub operations
-
-### Primary Cross-Process Contract
-
-The Swift shell and Python backend communicate via:
-
-- **transport:** authenticated Unix socket
-- **framing:** line-delimited JSON
-
-### Execution Safety Contract
-
-A system-wide behavioral interface constraint is explicitly stated:
-
-- **Neither process ever executes generated code.**
-
-This is a hard contract, not an implementation detail.
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `final_code` | `str` | Yes | Generated code output consumed by caller. |
 
 ---
 
-## Per-Subsystem Data Structures
+### VTZEnforcementDecision
 
-Only structures directly supported by the provided documents are listed.
+Produced when VTZ policy denies an action.
 
-### 1. Process Topology
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `verdict` | `str` | Yes | On VTZ denial, MUST equal `block`. |
 
-#### `SystemArchitecture`
-
-| Field | Type | Constraints |
-|---|---|---|
-| `swift_shell` | object | Required logical subsystem |
-| `python_backend` | object | Required logical subsystem |
-
-#### `SwiftShell`
-
-| Field | Type | Constraints |
-|---|---|---|
-| `responsibilities` | array<string> | Includes `UI`, `authentication`, `Keychain`, `XPC` |
-
-#### `PythonBackend`
-
-| Field | Type | Constraints |
-|---|---|---|
-| `responsibilities` | array<string> | Includes `consensus`, `pipeline`, `GitHub` |
+No additional fields are defined in the provided TRD content.
 
 ---
 
-### 2. Cross-Process Message Frame
+### TrustFlow Event
 
-The only explicit wire-format statement provided is **line-delimited JSON** over an authenticated Unix socket.
+Every action outcome (`allow`, `restrict`, `block`) MUST emit a TrustFlow event.
 
-#### `SocketMessage`
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `event_id` | `str` | Yes | MUST be globally unique. MUST be generated with CSPRNG. MUST NOT be sequential. |
+| `session_id` | `str` | Yes | MUST be present on every TrustFlow event. |
+| `ctx_id` | `str` | Yes | MUST be present on every TrustFlow event. |
+| `ts` | `number` | Yes | MUST be a UTC Unix timestamp with millisecond precision. |
+| `event_type` | `str` | Yes | MUST be present on every TrustFlow event. |
+| `payload_hash` | `str` | Yes | MUST be SHA-256 of the serialized action payload. |
 
-| Field | Type | Constraints |
-|---|---|---|
-| `json_line` | string | Must be valid JSON encoded on a single line and delimited by newline framing |
-
-#### Constraints
-
-- Each message is one complete JSON value per line.
-- Messages are transmitted over an **authenticated Unix socket**.
-- Message schemas beyond “JSON object/value per line” are not specified in the provided source excerpts and therefore are owned by the TRDs.
-
----
-
-### 3. Product Version Structure
-
-From `AGENTS.md` and lessons-learned metadata.
-
-#### `VersionIdentifier`
-
-| Field | Type | Constraints |
-|---|---|---|
-| `major` | integer | Non-negative |
-| `minor` | integer | Non-negative |
-| `patch` | integer | Non-negative |
-
-#### Known examples
-
-- `38.153.0`
-- `38.209` appears as a document version and is not guaranteed to be the same runtime version schema
-
-Because both forms appear in source material, consumers must not assume all versioned artifacts use identical tuple length unless specified by owning TRD.
+No additional fields are defined in the provided TRD content.
 
 ---
 
-### 4. Planning and Output Artifacts
+### CTX-ID Token
 
-From `README.md`.
+CTX-ID is a validated token used before any agent action processing.
 
-#### `Intent`
+Defined contract properties:
 
-| Field | Type | Constraints |
-|---|---|---|
-| `text` | string | Plain-language operator intent |
+| Property | Type | Required | Constraints |
+|---|---|---:|---|
+| `ctx_id` | `str` | Yes | Missing CTX-ID MUST be treated as `UNTRUSTED`. |
+| token immutability | semantic rule | Yes | CTX-ID tokens are IMMUTABLE once issued. No field modification after issuance. |
+| token rotation | semantic rule | Yes | Rotation creates a new token; the old one is invalidated immediately. |
+| expiration | semantic rule | Yes | Expired CTX-ID MUST be rejected. Clock skew tolerance is deployment-defined. |
+| public key validation | semantic rule | Yes | MUST be validated against TrustLock public key. Software-only validation is rejected. |
 
-#### `TRDSet`
-
-| Field | Type | Constraints |
-|---|---|---|
-| `documents` | array<document> | Repository specifications loaded into the agent |
-| `source_of_truth` | boolean | Implied true for `forge-docs/` set |
-
-#### `PRDPlan`
-
-| Field | Type | Constraints |
-|---|---|---|
-| `items` | array<object> | Ordered PRD plan |
-| `ordering` | string | Must be ordered |
-
-#### `TypedPullRequestSequence`
-
-| Field | Type | Constraints |
-|---|---|---|
-| `pull_requests` | array<object> | Sequence of typed pull requests |
-| `ordering` | string | Must be sequential/logical |
-
-#### `PullRequestPolicy`
-
-| Field | Type | Constraints |
-|---|---|---|
-| `open_mode` | string | Every PR is opened as `draft` initially |
+The internal serialized field layout of the CTX-ID token is not defined in the provided TRD content.
 
 ---
 
-### 5. Consensus / Model Roles
+### Agent Session
 
-From `README.md`.
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `session_id` | `str` | Yes | Used in TrustFlow event emission. |
+| bound VTZ | semantic rule | Yes | Every agent session is bound to EXACTLY ONE VTZ at CTX-ID issuance. |
 
-#### `ConsensusConfiguration`
-
-| Field | Type | Constraints |
-|---|---|---|
-| `providers` | array<string> | Includes `Claude` and `GPT-4o` |
-| `arbitrator` | string | `Claude` arbitrates every result |
-
-#### `GenerationFlow`
-
-| Field | Type | Constraints |
-|---|---|---|
-| `parallel_generation` | boolean | True; two providers operate in parallel |
-| `self_correction_pass` | boolean | Supported |
-| `lint_gate` | boolean | Supported |
-| `iterative_fix_loop` | boolean | Supported |
+No additional session fields are defined in the provided TRD content.
 
 ---
 
-### 6. GitHub Pull Request Lifecycle Structures
+### Action Payload
 
-From `GitHub-Integration-Lessons-Learned`.
+The serialized action payload is an input to TrustFlow hashing.
 
-#### `PullRequestDraftState`
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| serialized action payload | bytes/string serialization | Yes | `payload_hash` MUST be SHA-256 of this serialized payload. |
 
-| Field | Type | Constraints |
-|---|---|---|
-| `draft` | boolean | PRs are initially opened as draft |
-| `ready_for_review` | boolean | Transition must be performed via GraphQL mutation |
-
-#### `MarkPullRequestReadyForReviewRequest`
-
-| Field | Type | Constraints |
-|---|---|---|
-| `pull_request_id` | string | Required GraphQL target identifier |
-
-#### `RestPatchPullRequestDraftAttempt`
-
-| Field | Type | Constraints |
-|---|---|---|
-| `endpoint` | string | `/repos/{owner}/{repo}/pulls/{number}` |
-| `method` | string | `PATCH` |
-| `body.draft` | boolean | Setting `false` does not transition draft state |
-
-#### Behavior Contract
-
-- `PATCH /repos/{owner}/{repo}/pulls/{number}` with `{ "draft": false }`
-  - may return HTTP `200`
-  - does **not** convert a draft PR to ready for review
-  - field is silently ignored
-- Correct transition mechanism:
-  - **GraphQL `markPullRequestReadyForReview` mutation**
-
----
-
-## Cross-Subsystem Protocols
-
-### 1. Swift Shell ↔ Python Backend Protocol
-
-#### Transport
-
-| Property | Value |
-|---|---|
-| Transport type | Unix socket |
-| Authentication | Required |
-| Encoding | JSON |
-| Framing | Line-delimited |
-
-#### Ownership Boundaries
-
-| Operation Domain | Owning Subsystem |
-|---|---|
-| UI | Swift shell |
-| Authentication | Swift shell |
-| Secrets / Keychain | Swift shell |
-| XPC integration | Swift shell |
-| Consensus | Python backend |
-| Generation pipeline | Python backend |
-| GitHub operations | Python backend |
-
-#### Required Protocol Guarantees
-
-- Cross-process messages must be sent through the authenticated Unix socket.
-- Payloads must be JSON framed one message per line.
-- Secret ownership remains on the Swift side.
-- GitHub operations are backend-owned.
-- Generated code must not be executed by either side.
-
----
-
-### 2. Operator → Agent Protocol
-
-From `README.md`, the operator-facing logical flow is:
-
-1. load repository
-2. load TRDs
-3. provide plain-language intent
-4. agent assesses confidence in scope
-5. agent decomposes intent into ordered PRD plan
-6. agent decomposes PRD into typed pull requests
-7. agent generates implementation and tests with two models in parallel
-8. agent performs self-correction
-9. agent applies lint gate
-10. agent runs iterative fix loop
-11. agent opens GitHub pull requests
-12. operator gates, reviews, and merges
-
-This is a workflow contract. Specific request/response payloads are not defined in the provided excerpts and therefore remain TRD-owned.
-
----
-
-### 3. Pull Request Lifecycle Protocol
-
-#### Draft-first policy
-
-- Every pull request is opened as a **draft**.
-
-#### Draft → Ready for Review transition
-
-| Attempted Mechanism | Result |
-|---|---|
-| REST `PATCH /repos/{owner}/{repo}/pulls/{number}` with `{ "draft": false }` | No state change; ignored |
-| GraphQL `markPullRequestReadyForReview` | Supported and required |
-
-#### Integration requirement
-
-Any GitHub integration subsystem must implement draft promotion using GraphQL, not REST field patching.
+The action payload schema itself is not defined in the provided TRD content.
 
 ---
 
 ## Enums and Constants
 
-Only values explicitly present in source material are listed.
+### Language Enum
 
-### `SubsystemName`
+Exact allowed values for consensus invocation:
 
-```text
-SwiftShell
-PythonBackend
+- `"python"`
+- `"swift"`
+- `"go"`
+- `"typescript"`
+- `"rust"`
+
+### VTZ Verdict Enum
+
+Defined value in provided TRD content:
+
+- `block`
+
+Referenced action outcomes that MUST emit TrustFlow events:
+
+- `allow`
+- `restrict`
+- `block`
+
+### Special Status Values
+
+- `UNTRUSTED` — applied when CTX-ID is missing.
+- `SECURITY_REFUSAL` — when seen from the LLM, processing MUST stop, gate, and log.
+
+### Consensus System Selection Constants
+
+These names are part of the contract behavior:
+
+- `SWIFT_GENERATION_SYSTEM`
+- `SWIFT_UI_ADDENDUM`
+- `GENERATION_SYSTEM`
+
+### Fix Strategy / Arbitration API Symbols
+
+These names are contractually referenced:
+
+- `_choose_strategy(failure_type, attempt, records)`
+- `_score_fix()`
+
+### Forbidden Pattern Marker
+
+The following is explicitly forbidden and non-conformant:
+
+```python
+winner = max(claude_fix, openai_fix, key=len)
 ```
-
-### `SwiftShellResponsibility`
-
-```text
-UI
-authentication
-Keychain
-XPC
-```
-
-### `PythonBackendResponsibility`
-
-```text
-consensus
-pipeline
-GitHub
-```
-
-### `TransportType`
-
-```text
-unix_socket
-```
-
-### `WireEncoding`
-
-```text
-json
-```
-
-### `FrameFormat`
-
-```text
-line_delimited_json
-```
-
-### `ModelProvider`
-
-```text
-Claude
-GPT-4o
-```
-
-### `ArbitrationProvider`
-
-```text
-Claude
-```
-
-### `PullRequestOpenMode`
-
-```text
-draft
-```
-
-### `GitHubDraftPromotionMethod`
-
-```text
-graphql_markPullRequestReadyForReview
-```
-
-### `UnsupportedOrIneffectiveDraftPromotionMethod`
-
-```text
-rest_patch_pulls_with_draft_false
-```
-
-### `DocumentAuthority`
-
-```text
-forge-docs
-TRD-11
-TRD-1
-TRD-8
-```
-
-Notes:
-
-- `TRD-11` is explicitly the governing security specification.
-- `TRD-1` and `TRD-8` are cited as ownership references in `CLAUDE.md`.
-- No further enum expansion is justified from the provided excerpts.
 
 ---
 
 ## Validation Rules
 
-### 1. Source-of-Truth Validation
+## Entry Point Enforcement Order
 
-- Code and interfaces must match the TRDs in `forge-docs/`.
-- If an interface detail is not present in the provided documents, it must be treated as unspecified here.
-- Security-relevant changes must defer to **TRD-11**.
+Every entry point that processes an agent action MUST enforce the following order:
 
-### 2. Transport Validation
+1. CTX-ID validation FIRST.
+2. On CTX-ID validation failure: immediate rejection.
+3. VTZ policy check BEFORE execution.
+4. On VTZ policy denial: produce `VTZEnforcementDecision` with `verdict=block`.
+5. Emit a TrustFlow event for every action outcome.
+6. TrustFlow emission failure MUST NOT silently continue.
 
-For any Swift↔Python message:
+## TrustFlow Validation Rules
 
-- transport must be a Unix socket
-- socket must be authenticated
-- each frame must be valid JSON
-- each frame must be newline-delimited
-- no multi-message JSON blob without line framing
-- no alternate framing format is specified
+- Every TrustFlow event MUST include all of:
+  - `event_id`
+  - `session_id`
+  - `ctx_id`
+  - `ts`
+  - `event_type`
+  - `payload_hash`
+- `event_id` MUST be globally unique.
+- `event_id` MUST use CSPRNG.
+- `event_id` MUST NOT be sequential.
+- `ts` MUST be UTC Unix timestamp with millisecond precision.
+- `payload_hash` MUST be SHA-256 of the serialized action payload.
+- Emission MUST be synchronous in the enforcement path.
+- Async buffering is not permitted.
+- Failed emission is a WARN-level audit event.
+- Failed emission MUST NOT be silently skipped.
+- Failed emission MUST be logged and surfaced.
 
-### 3. Responsibility Boundary Validation
+## CTX-ID Validation Rules
 
-A component is invalid if it violates ownership boundaries:
+- CTX-ID validation MUST occur before any action processing.
+- Missing CTX-ID MUST be treated as `UNTRUSTED`.
+- Expired CTX-ID MUST be rejected.
+- CTX-ID MUST be validated against TrustLock public key.
+- Software-only validation is rejected.
+- CTX-ID tokens are immutable once issued.
+- Rotation MUST create a new token.
+- Rotation MUST invalidate the old token immediately.
+- Identity MUST NEVER be inferred from surrounding context when CTX-ID is missing.
 
-- Swift shell must own:
-  - UI
-  - authentication
-  - Keychain/secrets
-  - XPC integration
-- Python backend must own:
-  - consensus
-  - generation pipeline
-  - GitHub operations
+## VTZ Validation Rules
 
-### 4. Execution Safety Validation
+- Every agent session is bound to EXACTLY ONE VTZ at CTX-ID issuance.
+- Every action MUST be checked against VTZ policy before execution.
+- Cross-VTZ tool calls require explicit policy authorization.
+- Implicit cross-VTZ authorization is denied.
+- VTZ boundaries are structural, not advisory.
+- Enforcement cannot be bypassed by application code.
+- VTZ policy changes take effect at NEXT CTX-ID issuance.
+- VTZ policy changes do not apply mid-session.
 
-Invalid behavior:
+## Consensus Engine Rules
 
-- executing generated code in Swift shell
-- executing generated code in Python backend
+- `language` MUST always be passed to `self._consensus.run(...)`.
+- Valid `language` values are exactly:
+  - `"python"`
+  - `"swift"`
+  - `"go"`
+  - `"typescript"`
+  - `"rust"`
+- `language="swift"` selects `SWIFT_GENERATION_SYSTEM` plus optional `SWIFT_UI_ADDENDUM` when UI keywords are detected.
+- `language="python"` selects `GENERATION_SYSTEM`.
+- Fix loop strategy is failure-type-aware via `_choose_strategy(failure_type, attempt, records)`.
+- Fix arbitration MUST use `_score_fix()`.
+- Length-based arbitration MUST NOT be used.
 
-Valid behavior:
+## Security Rules
 
-- generate code
-- analyze code
-- lint code
-- self-correct code
-- iterate fixes
-- open PRs
+- Never hardcode credentials, API keys, tokens, or secrets as string literals.
+- Never use `shell=True` in subprocess calls.
+- Never call `eval()` or `exec()` on generated or external content.
+- Never log HTTP response bodies.
+- Log status codes and error types only.
+- All file paths written to disk MUST pass `path_security.validate_write_path()` before any write.
+- All loaded document chunks MUST pass injection scanning before inclusion in any LLM prompt.
+- Context from external documents MUST go in the USER prompt, never the SYSTEM prompt.
+- When `SECURITY_REFUSAL` output is seen from the LLM: stop, gate, log. Never retry to bypass.
 
-### 5. GitHub Draft Lifecycle Validation
+## Python Implementation Rules
 
-When promoting a PR from draft:
+- Python version: `3.12`.
+- Type annotations on every function.
+- `async/await` throughout the backend.
+- No blocking calls on the event loop.
+- Dataclasses for all structured data.
+- `pytest` for all tests.
+- Tests live in `tests/` and mirror `src/` structure.
+- `ruff` must pass clean.
+- `mypy` must pass clean.
+- Test coverage must be `>= 85%` on all new modules.
+- `pyyaml` MUST be present in `requirements.txt`.
 
-- invalid implementation:
-  - REST `PATCH /repos/{owner}/{repo}/pulls/{number}` with `{"draft": false}`
-- valid implementation:
-  - GraphQL `markPullRequestReadyForReview`
+## Swift-Specific Forbidden Rules
 
-If a system treats HTTP 200 from the REST patch as success for draft promotion, that behavior is non-compliant with the documented contract.
+The following patterns are forbidden:
 
-### 6. Planning Workflow Validation
+```swift
+let value = optional!
+```
 
-A compliant end-to-end build flow must preserve the documented ordering semantics:
+```swift
+let client = AnthropicClient(apiKey: keychainValue)
+```
 
-- intent is assessed before commitment to scope
-- intent is decomposed into an ordered PRD plan
-- PRD is decomposed into typed pull requests
-- generation uses two-model consensus with parallel providers
-- Claude arbitrates every result
-- self-correction, lint gate, and iterative fix loop occur before or within PR-production workflow as documented
+```swift
+let token = KeychainKit.read("github_token")
+```
 
-### 7. Pull Request Creation Validation
+Constraint notes:
 
-- pull requests must be opened as draft initially
-- operator remains the reviewer/gate/merge authority
+- Only Swift reads Keychain.
+- Swift reads Keychain only to deliver via XPC.
+- Python reads nothing from Keychain.
+- LLM API calls from Swift are forbidden.
 
 ---
 
 ## Wire Format Examples
 
-Only formats directly supportable from the provided documents are shown.
+## Valid Payloads
 
-### 1. Line-Delimited JSON Over Authenticated Unix Socket
-
-Example stream:
-
-```json
-{"type":"intent","text":"Implement the next TRD-defined subsystem"}
-{"type":"status","phase":"planning"}
-{"type":"result","artifact":"pull_request","mode":"draft"}
-```
-
-Notes:
-
-- The example demonstrates **JSON lines** only.
-- Field names such as `type`, `phase`, and `artifact` are illustrative of framing shape, not normative schema from the provided excerpts.
-- The normative contract is: **one valid JSON value per newline-delimited message over an authenticated Unix socket**.
-
-### 2. Operator Intent Payload Example
-
-```json
-{"text":"Build the repository according to the loaded TRDs and open logical draft PRs"}
-```
-
-Normative support:
-
-- intent is plain-language
-- operator provides the intent
-- exact envelope schema is TRD-owned
-
-### 3. Consensus Configuration Example
+### Valid TrustFlow Event
 
 ```json
 {
-  "providers": ["Claude", "GPT-4o"],
-  "arbitrator": "Claude",
-  "parallel_generation": true
+  "event_id": "6f1b3c9e-7d42-4ad4-a7ce-9d9ef3c1b2a1",
+  "session_id": "sess_01HZX8YQ7K8M2P4R9T6N3V1C5B",
+  "ctx_id": "ctx_01HZX8Z2W4D9S6F3J7K1M5P8Q",
+  "ts": 1735689600123,
+  "event_type": "allow",
+  "payload_hash": "3f0d5c7c6a5b4e2d1f9a8b7c6d5e4f30112233445566778899aabbccddeeff00"
 }
 ```
 
-Normative support:
-
-- two providers
-- Claude arbitrates every result
-- generation occurs in parallel
-
-### 4. Pull Request Open State Example
+### Valid VTZ Denial Record
 
 ```json
 {
-  "pull_request": {
-    "mode": "draft"
-  }
+  "verdict": "block"
 }
 ```
 
-Normative support:
+### Valid Consensus Invocation Shape
 
-- every PR is opened as draft
-
-### 5. Incorrect REST Draft Promotion Attempt
-
-```http
-PATCH /repos/{owner}/{repo}/pulls/{number}
-Content-Type: application/json
-
-{"draft":false}
+```python
+result = await self._consensus.run(
+    task="Implement: ExampleSpec",
+    context="relevant context",
+    language="python",
+)
+code = result.final_code
 ```
-
-Observed contract from provided lessons learned:
-
-- may return `200`
-- draft state remains unchanged
-- field is silently ignored
-
-### 6. Correct GraphQL Draft Promotion Example
-
-```graphql
-mutation MarkReady($pullRequestId: ID!) {
-  markPullRequestReadyForReview(input: { pullRequestId: $pullRequestId }) {
-    pullRequest {
-      id
-      isDraft
-    }
-  }
-}
-```
-
-Associated variables example:
-
-```json
-{
-  "pullRequestId": "PR_NODE_ID"
-}
-```
-
-Normative support:
-
-- `markPullRequestReadyForReview` is the required supported mechanism
 
 ---
 
-## Non-Normative Notes on Unspecified Areas
+## Invalid Payloads
 
-The provided excerpts indicate that many detailed interfaces exist in the TRDs, but they are not included here. Therefore this document does **not** define:
+### Invalid TrustFlow Event: Missing Required Field
 
-- full Swift↔Python message schemas
-- XPC payload contracts
-- auth token structures
-- Keychain record formats
-- consensus result object schemas
-- PRD or typed PR JSON schema
-- error codes or error envelope structure
-- GitHub REST/GraphQL schemas beyond the explicitly documented draft-promotion behavior
+```json
+{
+  "event_id": "6f1b3c9e-7d42-4ad4-a7ce-9d9ef3c1b2a1",
+  "session_id": "sess_01HZX8YQ7K8M2P4R9T6N3V1C5B",
+  "ts": 1735689600123,
+  "event_type": "allow",
+  "payload_hash": "3f0d5c7c6a5b4e2d1f9a8b7c6d5e4f30112233445566778899aabbccddeeff00"
+}
+```
 
-Those remain owned by the referenced TRDs and must not be inferred beyond what is documented above.
+Reason: `ctx_id` is required.
+
+### Invalid TrustFlow Event: Non-millisecond Timestamp
+
+```json
+{
+  "event_id": "6f1b3c9e-7d42-4ad4-a7ce-9d9ef3c1b2a1",
+  "session_id": "sess_01HZX8YQ7K8M2P4R9T6N3V1C5B",
+  "ctx_id": "ctx_01HZX8Z2W4D9S6F3J7K1M5P8Q",
+  "ts": 1735689600,
+  "event_type": "allow",
+  "payload_hash": "3f0d5c7c6a5b4e2d1f9a8b7c6d5e4f30112233445566778899aabbccddeeff00"
+}
+```
+
+Reason: `ts` MUST be a UTC Unix timestamp with millisecond precision.
+
+### Invalid VTZ Denial Record
+
+```json
+{
+  "verdict": "allow"
+}
+```
+
+Reason: on VTZ policy denial, `verdict` MUST equal `block`.
+
+### Invalid Consensus Invocation: Missing Language
+
+```python
+result = await self._consensus.run(
+    task="Implement: ExampleSpec",
+    context="relevant context",
+)
+```
+
+Reason: `language` MUST always be passed.
+
+### Invalid Consensus Invocation: Unsupported Language
+
+```python
+result = await self._consensus.run(
+    task="Implement: ExampleSpec",
+    context="relevant context",
+    language="java",
+)
+```
+
+Reason: allowed values are exactly `"python" | "swift" | "go" | "typescript" | "rust"`.
+
+### Invalid Fix Arbitration
+
+```python
+winner = max(claude_fix, openai_fix, key=len)
+```
+
+Reason: length-based arbitration is forbidden; use `_score_fix()`.
+
+### Invalid Swift Pattern: Force Unwrap
+
+```swift
+let value = optional!
+```
+
+Reason: force unwrap is forbidden.
+
+### Invalid Swift Pattern: Backend LLM API Call
+
+```swift
+let client = AnthropicClient(apiKey: keychainValue)
+```
+
+Reason: LLM API call from Swift is forbidden.
+
+### Invalid Swift Pattern: Backend Keychain Read
+
+```swift
+let token = KeychainKit.read("github_token")
+```
+
+Reason: Python reads nothing from Keychain; Swift reads Keychain only to deliver via XPC.
+
+---
+
+## Integration Points
+
+## Consensus Engine
+
+CraftedAgent integrates with a consensus engine through:
+
+- `await self._consensus.run(task, context, language)`
+- Output field: `result.final_code`
+
+Behavioral routing:
+
+- `language="swift"` -> `SWIFT_GENERATION_SYSTEM` + optional `SWIFT_UI_ADDENDUM`
+- `language="python"` -> `GENERATION_SYSTEM`
+
+## CAL Enforcement
+
+Every agent action entry point integrates with CAL enforcement through:
+
+1. CTX-ID validation
+2. VTZ policy evaluation
+3. `VTZEnforcementDecision` creation on denial
+4. TrustFlow emission for all outcomes
+
+## TrustFlow
+
+Synchronous emission in enforcement path. No async buffering permitted.
+
+Required event fields:
+
+- `event_id`
+- `session_id`
+- `ctx_id`
+- `ts`
+- `event_type`
+- `payload_hash`
+
+## TrustLock
+
+CTX-ID validation MUST be against TrustLock public key. Software-only validation is rejected.
+
+## Path Security
+
+Before any disk write, integrate:
+
+- `path_security.validate_write_path()`
+
+## Injection Scanning
+
+Before including loaded document chunks in any LLM prompt, integrate injection scanning.
+
+## Prompt Placement
+
+External document context integration rule:
+
+- external document context -> USER prompt
+- never -> SYSTEM prompt
+
+## Security Gating
+
+On LLM output value `SECURITY_REFUSAL`:
+
+- stop
+- gate
+- log
+- do not retry to bypass
+
+## Test and Quality Tooling
+
+Required integration points:
+
+- `pytest`
+- `ruff`
+- `mypy`
+- `pyyaml` in `requirements.txt`
+
+## Pre-Implementation Procedure
+
+Before modifying CraftedAgent-related code:
+
+1. Find the owning TRD in `README.md`.
+2. Read relevant TRD sections, especially interfaces, error contracts, security, testing requirements.
+3. Check TRD-11 if the change touches credentials, external content, generated code, or CI.
+4. Run existing tests:
+
+```bash
+cd src && pytest ../tests/ -v --tb=short
+```
