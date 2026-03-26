@@ -4,7 +4,7 @@
   "intent": "We are not building the Forge Agent architecture. We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture. You should apply Max impl_files per PR: 8\u201310. Beyond that, split into multiple PRs. Max acceptance criteria: 8\u201310. More than that is a scope problem.",
   "scope_statement": "Build the complete Crafted Dev Agent \u2014 a native macOS two-process AI coding agent consisting of a Swift shell (UI, Touch ID, Keychain, XPC) and a Python backend (consensus engine, build pipeline, GitHub integration, document store, multi-agent coordination, holistic review, TRD workflow, recovery/state management, CI pipeline, cross-run learning). The system is specified across 16 TRDs (TRD-1 through TRD-17) and must be decomposed into an ordered PRD plan respecting inter-TRD dependencies, with each PRD producing 8-10 implementation files per PR and 8-10 acceptance criteria per PR. Operator gap answers confirm that TRD-18 (Crafted Connect SDK), generate_single() on ConsensusEngine, existing test coverage, and cross-TRD build ordering should all be resolved during the PRD decomposition process using best practices and the Depends-on/Required-by fields in each TRD header.\n\nAmbiguity clarifications:\n  - This needs to be resolved using the PRD process using best practices.\n  - This needs to be resolved using the PRD process using best practices.\n  - TRD-18 was combined with TRD-17\n  - build the complete system\n\nOperator on 'Is this a greenfield build of the complete Crafted Dev Agent':\ngreenfield build. We have some code that manages automation and agent operations, that will be shared later. The intent is to build clean code though.\n\nOperator on 'Should the PRD plan include the Swift shell (TRD-1, TRD-8) a':\nit should include both so that a holistic product can be built\n\nOperator on 'For the TRD-18 Crafted Connect SDK gap: should a lightweight':\nTRD-18 was combined with TRD-17 and resolved using the PRD process using best practices.\n\nOperator on 'The 35 regression tests in test_regression_taxonomy.py (TRD-':\nThis needs to be resolved using the PRD process using best practices.",
   "created_at": 1774553591.250897,
-  "updated_at": 1774554217.492471,
+  "updated_at": 1774558269.8650181,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -334,18 +334,18 @@
       "pr_num": 2,
       "title": "Add forge-standards documents (ARCHITECTURE, INTERFACES, DECISIONS, CONVENTIONS)",
       "branch": "",
-      "status": "blocked",
+      "status": "done",
       "engineer_id": "",
-      "pr_url": null,
+      "pr_url": "https://github.com/todd-yousource-ai/Dev-Agent/pull/163",
       "claimed_at": null,
       "started_at": null,
-      "completed_at": null,
+      "completed_at": 1774558269.864985,
       "depends_on_prs": [
         1
       ],
       "retry_count": 0,
       "failure_summary": "",
-      "journal_path": "",
+      "journal_path": "crafted-coordination/impl-journal/PR-002.md",
       "summary": "Creates the four canonical forge-standards markdown documents: ARCHITECTURE.md (two-process architecture overview, Python backend + Swift shell, XPC bridge), INTERFACES.md (placeholder interface contracts between subsystems), DECISIONS.md (ADR log initialized with decision to use two-process architecture), CONVENTIONS.md (naming, file layout, import, and commit conventions). All prose/markdown only.",
       "impl_files": [
         "ARCHITECTURE.md",
@@ -829,7 +829,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 2,
+  "version": 3,
   "schema_version": 3,
   "agent_version": "39.59.0"
 }
