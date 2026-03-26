@@ -1,0 +1,149 @@
+{
+  "build_id": "craftedagent-93091994",
+  "subsystem": "CraftedAgent",
+  "intent": "We are building a Mac Consensus Dev Agent that will use consensus AI to develop high quality software. Use all the documents in the local repo to determine the architecture. You should apply Max impl_files per PR: 8\u201310. Beyond that, split into multiple PRs. Max acceptance criteria: 8\u201310. More than that is a scope problem.",
+  "scope_statement": "Build the complete Crafted Dev Agent \u2014 a native macOS two-process AI coding agent consisting of a Swift/SwiftUI shell (UI, Touch ID auth, Keychain, XPC channel, process management) and a Python 3.12 backend (consensus engine, build pipeline, GitHub integration, document store, multi-agent coordination, holistic review, TRD workflow, recovery/state management, CI pipeline, self-healing, and cross-run learning systems). The architecture is fully specified across 17 TRDs covering every subsystem from the macOS application shell (TRD-1) through self-healing software (TRD-17), with the five identified gaps (TRD-18 Crafted Connect, CommandRouter, EmailNotifier, Figma MCP, recover.py) to be resolved during PRD decomposition using best practices. This is a full-system build that will be decomposed into multiple PRDs, each producing 8-10 PRs per the documented constraints.\n\nClarifications:\n  - Resolved during the PRD process. Use best practices to deploy.\n  - Resolved during the PRD process. Use best practices to deploy.\n  - Resolved during the PRD process. Use best practices to deploy.\n  - that is not enough to capture the memory cosnildation. Resolved during the PRD process. Use best practices to deploy.\n  - build a configurable setting section for these an other configurable env variables\n  - Resolved during the PRD process. Use best practices to deploy.\n\nOperator on 'Should the initial PRD decomposition prioritize building the':\nboth tracks proceed in parallel\n\nOperator on 'For the v1 build, should we implement all three TRD-7 operat':\nimplement all three TRD-7 operator modes (FOUNDER, ENGINEER, CONSULTANT)\n\nOperator on 'TRD-8 v3.0 introduces the Health Dashboard, self-healing rem':\nincluded in the initial build scope. Resolved during the PRD process. Use best practices to deploy.\n\nOperator on 'The Holistic Code Review (TRD-6) is described as an independ':\nincluded in the initial build scope. Resolved during the PRD process. Use best practices to deploy.",
+  "created_at": 1774488258.242622,
+  "updated_at": 1774488258.242713,
+  "updated_by": "todd-gould",
+  "prd_plan": [
+    {
+      "prd_id": "PRD-001",
+      "title": "XPC Bridge & IPC Protocol Foundation",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-002",
+      "title": "macOS Application Shell \u2014 SwiftUI Chrome, Window Management & Process Lifecycle",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-003",
+      "title": "Authentication, Keychain Integration & Secrets Management",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-004",
+      "title": "Configurable Settings System & Environment Variable Management",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-005",
+      "title": "Python Backend Skeleton, Plugin Architecture & CommandRouter",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-006",
+      "title": "Document Store, Embedding Index & Cross-Run Memory (TRD-10/TRD-15)",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-007",
+      "title": "LLM Consensus Engine (TRD-3)",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-008",
+      "title": "Build Pipeline & Code Generation Engine (TRD-4)",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-009",
+      "title": "GitHub Integration & PR Workflow (TRD-5)",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-010",
+      "title": "Holistic Code Review System (TRD-6)",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-011",
+      "title": "Multi-Agent Coordination & Operator Modes (TRD-7)",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-012",
+      "title": "TRD Workflow Engine (TRD-9)",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-013",
+      "title": "State Management, Recovery & Crash Resilience (TRD-11 / recover.py)",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-014",
+      "title": "CI Pipeline Integration & Build Verification (TRD-12)",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-015",
+      "title": "Self-Healing Software & Health Dashboard (TRD-8 / TRD-17)",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-016",
+      "title": "Email Notification System (EmailNotifier)",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-017",
+      "title": "Figma MCP Integration",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-018",
+      "title": "Crafted Connect \u2014 External Integration Hub (TRD-18)",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-019",
+      "title": "End-to-End Integration Testing, Polish & Release Packaging",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    }
+  ],
+  "pr_entries": {},
+  "knowledge_notes": [],
+  "version": 1,
+  "schema_version": 3,
+  "agent_version": "39.43.0"
+}
