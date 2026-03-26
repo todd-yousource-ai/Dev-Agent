@@ -1,104 +1,29 @@
 # Interface Contracts - CraftedApp
 
+## Scope
+
+This document defines the wire-format and API contract requirements for the CraftedApp subsystem based on the provided TRD content.
+
+Where the source text specifies normative behavior, the values and field names below are reproduced exactly.
+
+---
+
 ## Data Structures
 
-This document defines the required wire-format and API contracts for the CraftedApp subsystem based on the provided TRD interface requirements.
+### ConsensusRunRequest
 
----
+Request contract for invoking the consensus engine.
 
-### TrustFlowEvent
-
-Required for every action outcome emitted in the enforcement path.
+#### Fields
 
 | Field | Type | Required | Constraints |
 |---|---|---:|---|
-| `event_id` | `string` | yes | MUST be globally unique. MUST be generated with CSPRNG. MUST NOT be sequential. |
-| `session_id` | `string` | yes | Session identifier for the agent session. |
-| `ctx_id` | `string` | yes | CTX-ID token identifier associated with the action. |
-| `ts` | `number` | yes | UTC Unix timestamp with millisecond precision. |
-| `event_type` | `string` | yes | Event type for the emitted TrustFlow event. |
-| `payload_hash` | `string` | yes | MUST be SHA-256 of the serialized action payload. |
+| `task` | `string` | yes | Free-form task description. Example source usage: `"Implement: {spec.title}"` |
+| `context` | `string` | yes | Context string passed to the engine |
+| `language` | `"python" \| "swift" \| "go" \| "typescript" \| "rust"` | yes | Must always be passed |
 
-#### Additional contract requirements
-- Emission MUST be synchronous in the enforcement path.
-- Async buffering is not permitted.
-- Failed emission MUST be surfaced.
-- Failed emission is a WARN-level audit event.
-- Failed emission MUST NOT silently continue.
+#### Required call shape
 
----
-
-### VTZEnforcementDecision
-
-Produced when VTZ policy denies an action.
-
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `verdict` | `string` | yes | MUST be `block` for VTZ policy denial. |
-
-#### Additional contract requirements
-- Every action MUST be checked against VTZ policy BEFORE execution.
-- VTZ policy denial MUST produce a `VTZEnforcementDecision` record with `verdict=block`.
-
----
-
-### CTX-ID Token
-
-Represents the identity and trust context bound to an agent session.
-
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `ctx_id` | `string` | yes | CTX-ID token value. Immutable once issued. |
-
-#### Additional contract requirements
-- CTX-ID tokens are IMMUTABLE once issued.
-- No field modification after issuance.
-- Rotation creates a new token.
-- The old token is invalidated immediately upon rotation.
-- Expired CTX-ID MUST be rejected.
-- Clock skew tolerance is defined per deployment.
-- CTX-ID MUST be validated against TrustLock public key.
-- Software-only validation is rejected.
-- Missing CTX-ID MUST be treated as `UNTRUSTED`.
-- Identity MUST NEVER be inferred from context if CTX-ID is missing.
-
----
-
-### Agent Action
-
-A logical action processed by a CraftedApp entry point.
-
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `session_id` | `string` | yes | Must identify the current agent session. |
-| `ctx_id` | `string` | yes | MUST be validated FIRST before any partial processing. |
-| `payload` | `object` | yes | Serialized action payload used to compute `payload_hash`. |
-
-#### Additional contract requirements
-- Every entry point that processes an agent action MUST call CTX-ID validation FIRST.
-- CTX-ID validation failure MUST result in immediate rejection.
-- No partial processing is permitted before CTX-ID validation succeeds.
-- Every action outcome (`allow`, `restrict`, `block`) MUST emit a TrustFlow event.
-
----
-
-### Consensus Engine Invocation
-
-Required invocation contract for consensus-backed implementation tasks.
-
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `task` | `string` | yes | Example format: `Implement: {spec.title}` |
-| `context` | `string` | yes | Context string provided to the consensus engine. |
-| `language` | `string` | yes | MUST be one of: `"python"`, `"swift"`, `"go"`, `"typescript"`, `"rust"` |
-
-#### Result Structure
-
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `final_code` | `string` | yes | Final generated code output from consensus execution. |
-
-#### Required usage
 ```python
 result = await self._consensus.run(
     task=f"Implement: {spec.title}",
@@ -108,54 +33,100 @@ result = await self._consensus.run(
 code = result.final_code
 ```
 
-#### Behavioral requirements
-- `language="swift"` selects `SWIFT_GENERATION_SYSTEM` plus optional `SWIFT_UI_ADDENDUM` when UI keywords are detected.
-- `language="python"` selects `GENERATION_SYSTEM`.
+#### Output fields
 
-#### Prohibited implementation behavior
-- Fix loop strategy MUST use `_choose_strategy(failure_type, attempt, records)`.
-- Fix arbitration MUST use `_score_fix()`.
-- Length-based arbitration is forbidden.
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `final_code` | `string` | yes | Final generated code result |
+
+---
+
+### VTZEnforcementDecision
+
+Record emitted when VTZ policy denies an action.
+
+#### Fields
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `verdict` | `string` | yes | For denial, MUST equal `block` |
+
+#### Notes
+
+- VTZ policy denial MUST produce a `VTZEnforcementDecision` record with `verdict=block`.
+
+---
+
+### TrustFlowEvent
+
+Every action outcome must emit a TrustFlow event.
+
+#### Fields
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `event_id` | `string` | yes | MUST be globally unique; CSPRNG, not sequential |
+| `session_id` | `string` | yes | Session identifier |
+| `ctx_id` | `string` | yes | CTX-ID associated with the action |
+| `ts` | `number` | yes | UTC Unix timestamp with millisecond precision |
+| `event_type` | `string` | yes | Event classification |
+| `payload_hash` | `string` | yes | MUST be SHA-256 of the serialized action payload |
+
+#### Behavioral constraints
+
+- Emission MUST be synchronous in the enforcement path.
+- Async buffering is not permitted.
+- Failed emission is a WARN-level audit event, not a silent skip.
+- Every action outcome (`allow`, `restrict`, `block`) MUST emit a TrustFlow event.
+
+---
+
+### CTX-ID Token
+
+Logical token contract for CTX-ID handling.
+
+#### Fields
+
+The TRD excerpt does not define a concrete serialized field schema for CTX-ID tokens. The following constraints are normative:
+
+| Property | Type | Required | Constraints |
+|---|---|---:|---|
+| `ctx_id` | `string` | yes | Missing `CTX-ID` MUST be treated as `UNTRUSTED` |
+| `immutable` | `boolean` | implied | CTX-ID tokens are IMMUTABLE once issued |
+| `expired` | `boolean` | implied | Expired CTX-ID MUST be rejected |
+| `validated_against_trustlock_public_key` | `boolean` | implied | MUST be true for acceptance; software-only validation is rejected |
+
+#### Lifecycle constraints
+
+- CTX-ID rotation creates a new token.
+- The old token is invalidated immediately.
+- No field modification is permitted after issuance.
+- Clock skew tolerance is defined per deployment.
+
+---
+
+### AgentActionProcessingEntryPoint
+
+Normative processing contract for any entry point that processes an agent action.
+
+#### Required ordered checks
+
+| Order | Step | Required |
+|---:|---|---:|
+| 1 | CTX-ID validation | yes |
+| 2 | Immediate rejection on CTX-ID validation failure | yes |
+| 3 | VTZ policy check before execution | yes |
+| 4 | Produce `VTZEnforcementDecision` on VTZ denial | yes |
+| 5 | Emit `TrustFlowEvent` for every action outcome | yes |
+| 6 | Log and surface TrustFlow emission failure | yes |
 
 ---
 
 ## Enums and Constants
 
-### Action Outcome
+### Language
 
-Allowed values for action outcome emission:
-
-- `allow`
-- `restrict`
-- `block`
-
-Every action outcome with one of these values MUST emit a TrustFlow event.
-
----
-
-### VTZ Enforcement Verdict
-
-Allowed/required known value from the provided contract:
-
-- `block`
-
-For VTZ policy denial, `verdict` MUST be exactly `block`.
-
----
-
-### CTX-ID Trust State
-
-Known required value:
-
-- `UNTRUSTED`
-
-If `ctx_id` is missing, the request/session/action MUST be treated as `UNTRUSTED`.
-
----
-
-### Consensus Language
-
-Exact allowed values:
+Allowed values for `ConsensusRunRequest.language`:
 
 - `"python"`
 - `"swift"`
@@ -163,147 +134,194 @@ Exact allowed values:
 - `"typescript"`
 - `"rust"`
 
----
+### Verdict
 
-### System Selector Constants
+Known required value from the TRD:
 
-Exact referenced constant names:
+- `block`
+
+### Action Outcome
+
+Action outcomes that MUST emit TrustFlow events:
+
+- `allow`
+- `restrict`
+- `block`
+
+### Trust Classification
+
+Known required classification:
+
+- `UNTRUSTED`
+
+### Logging / audit severity
+
+Known required severity:
+
+- `WARN`
+
+### Security refusal sentinel
+
+Known output token:
+
+- `SECURITY_REFUSAL`
+
+### Generator system selection constants
+
+Known exact values:
 
 - `SWIFT_GENERATION_SYSTEM`
 - `SWIFT_UI_ADDENDUM`
 - `GENERATION_SYSTEM`
 
----
+### Python runtime contract constants
 
-### Required Python Runtime/Tooling Constants
-
-These are implementation constraints for Python-backed CraftedApp components:
+Known exact values:
 
 - Python version: `3.12`
-- Test runner: `pytest`
+- Test framework: `pytest`
 - Linter: `ruff`
 - Type checker: `mypy`
-- Required dependency: `pyyaml`
+- YAML package requirement: `pyyaml`
+- Coverage floor: `85%`
 
 ---
 
 ## Validation Rules
 
-## 1. CAL Enforcement
+## 1. Consensus Engine Usage
 
-1. Every entry point that processes an agent action MUST call CTX-ID validation FIRST.
-2. CTX-ID validation failure MUST result in immediate rejection.
-3. No partial processing is allowed before CTX-ID validation completes successfully.
-4. Every action MUST be checked against VTZ policy BEFORE execution.
-5. VTZ policy denial MUST produce a `VTZEnforcementDecision` with `verdict=block`.
-6. Every action outcome (`allow`, `restrict`, `block`) MUST emit a TrustFlow event.
-7. TrustFlow emission failure MUST NOT silently continue.
-8. TrustFlow emission failure MUST be logged and surfaced.
+### Required
 
-## 2. TrustFlow Event Validation
+- Always pass `language`.
+- `language` MUST be one of:
+  - `"python"`
+  - `"swift"`
+  - `"go"`
+  - `"typescript"`
+  - `"rust"`
 
-A `TrustFlowEvent` is valid only if all of the following hold:
+### Selection behavior
 
-- `event_id` is present.
-- `event_id` is globally unique.
-- `event_id` is generated using CSPRNG.
-- `event_id` is not sequential.
-- `session_id` is present.
-- `ctx_id` is present.
-- `ts` is present.
-- `ts` is a UTC Unix timestamp with millisecond precision.
-- `event_type` is present.
-- `payload_hash` is present.
-- `payload_hash` equals SHA-256 of the serialized action payload.
+- `language="swift"` selects `SWIFT_GENERATION_SYSTEM` + optional `SWIFT_UI_ADDENDUM` when UI keywords are detected.
+- `language="python"` selects `GENERATION_SYSTEM`.
 
-Operational rules:
+### Fix strategy behavior
 
-- Emission MUST be synchronous in the enforcement path.
-- Async buffering is not permitted.
-- Failed emission is a WARN-level audit event.
+- Fix loop strategy is failure-type-aware via `_choose_strategy(failure_type, attempt, records)`.
+- Fix arbitration uses `_score_fix()` based on assertion token overlap.
+- Length-based fix arbitration is forbidden.
 
-## 3. CTX-ID Validation
+### Forbidden example
 
-A CTX-ID is valid only if all of the following hold:
-
-- It is present unless the caller is explicitly treated as `UNTRUSTED`.
-- It has not expired.
-- It validates against the TrustLock public key.
-- Validation is not software-only.
-- It has not been invalidated by rotation.
-
-Additional rules:
-
-- CTX-ID tokens are immutable once issued.
-- No field modification after issuance is permitted.
-- Rotation creates a new token and invalidates the old one immediately.
-- Expired CTX-ID MUST be rejected.
-- Missing CTX-ID MUST be treated as `UNTRUSTED`.
-
-## 4. VTZ Enforcement Validation
-
-- Every agent session is bound to EXACTLY ONE VTZ at CTX-ID issuance.
-- Cross-VTZ tool calls require explicit policy authorization.
-- Implicit authorization is denied.
-- VTZ boundaries are structural and cannot be bypassed by application code.
-- VTZ policy changes take effect at NEXT CTX-ID issuance, not mid-session.
-
-## 5. Security Rules
-
-The following are mandatory interface-level security constraints:
-
-- Never hardcode credentials, API keys, tokens, or secrets as string literals.
-- Never use `shell=True` in subprocess calls.
-- Never call `eval()` or `exec()` on generated or external content.
-- Never log HTTP response bodies.
-- Log status codes and error types only.
-- All file paths written to disk MUST pass `path_security.validate_write_path()` before any write.
-- All loaded document chunks MUST pass injection scanning before inclusion in any LLM prompt.
-- Context from external documents goes in the USER prompt, never the SYSTEM prompt.
-- When `SECURITY_REFUSAL` output is returned from the LLM: stop, gate, log. Never retry to bypass.
-
-## 6. Python Implementation Rules
-
-For Python implementations in CraftedApp:
-
-- Python `3.12` is required.
-- Type annotations are required on every function.
-- `async/await` must be used throughout the backend.
-- No blocking calls on the event loop.
-- Dataclasses are required for all structured data.
-- Tests must use `pytest`.
-- Tests live in `tests/` and mirror `src/` structure.
-- `ruff` must pass clean.
-- `mypy` must pass clean.
-- Test coverage must be `>= 85%` on all new modules.
-- `pyyaml` must be present in `requirements.txt`.
-
-## 7. Forbidden Patterns
-
-The following are explicitly non-conformant:
-
-### Length-based fix arbitration
 ```python
 winner = max(claude_fix, openai_fix, key=len)  # WRONG — use _score_fix()
 ```
 
-### Swift force unwrap
-```swift
-let value = optional!
-```
+---
 
-### LLM API call from Swift
-```swift
-let client = AnthropicClient(apiKey: keychainValue)
-```
+## 2. Security Rules
 
-### Keychain read for backend
-```swift
-let token = KeychainKit.read("github_token")  // Python reads nothing from Keychain
-```
+### Forbidden
 
-Additional rule:
-- Only Swift reads Keychain, only to deliver via XPC.
+- Never hardcode credentials, API keys, tokens, or secrets as string literals.
+- Never use `shell=True` in subprocess calls.
+- Never call `eval()` or `exec()` on any generated or external content.
+- Never log HTTP response bodies.
+- Never retry to bypass `SECURITY_REFUSAL`.
+
+### Required
+
+- Log status codes and error types only for HTTP failures.
+- All file paths written to disk must pass `path_security.validate_write_path()` before any write.
+- All loaded document chunks must pass injection scanning before inclusion in any LLM prompt.
+- Context from external documents goes in the USER prompt, never the SYSTEM prompt.
+- When `SECURITY_REFUSAL` is seen: stop, gate, log.
+
+---
+
+## 3. Python Backend Rules
+
+- Python must be `3.12`.
+- Type annotations on every function.
+- `async/await` throughout the backend.
+- No blocking calls on the event loop.
+- Dataclasses for all structured data.
+- Tests live in `tests/` and mirror `src/` structure.
+- `ruff` and `mypy` must pass clean.
+- Test coverage must be at least `85%` on all new modules.
+- `pyyaml` must be in `requirements.txt`.
+
+---
+
+## 4. CAL Enforcement Contract
+
+### Required
+
+- Every entry point that processes an agent action MUST call CTX-ID validation FIRST.
+- CTX-ID validation failure MUST result in immediate rejection.
+- No partial processing is permitted after CTX-ID validation failure.
+- Every action MUST be checked against VTZ policy BEFORE execution.
+- VTZ policy denial MUST produce a `VTZEnforcementDecision` record with `verdict=block`.
+- Every action outcome (`allow`, `restrict`, `block`) MUST emit a TrustFlow event.
+- TrustFlow emission failure MUST NOT silently continue.
+- TrustFlow emission failure MUST be logged and surfaced.
+
+---
+
+## 5. TrustFlow Emission Contract
+
+### Required fields
+
+A TrustFlow event MUST include:
+
+- `event_id`
+- `session_id`
+- `ctx_id`
+- `ts`
+- `event_type`
+- `payload_hash`
+
+### Field constraints
+
+- `event_id` MUST be globally unique.
+- `event_id` MUST use CSPRNG.
+- `event_id` MUST NOT be sequential.
+- `ts` MUST be a UTC Unix timestamp with millisecond precision.
+- `payload_hash` MUST be SHA-256 of the serialized action payload.
+
+### Emission constraints
+
+- Emission MUST be synchronous in the enforcement path.
+- Async buffering is not permitted.
+- Failed emission is a WARN-level audit event.
+- Failed emission must not be silently skipped.
+
+---
+
+## 6. CTX-ID Contract
+
+- CTX-ID tokens are IMMUTABLE once issued.
+- No field modification is allowed after issuance.
+- CTX-ID rotation creates a new token.
+- The old one is invalidated immediately.
+- Expired CTX-ID MUST be rejected.
+- Missing CTX-ID MUST be treated as `UNTRUSTED`.
+- Identity must never be inferred from context when CTX-ID is missing.
+- CTX-ID MUST be validated against TrustLock public key.
+- Software-only validation is rejected.
+
+---
+
+## 7. VTZ Enforcement Contract
+
+- Every agent session is bound to EXACTLY ONE VTZ at CTX-ID issuance.
+- Cross-VTZ tool calls require explicit policy authorization.
+- Implicit authorization is denied.
+- VTZ boundaries are structural, not advisory.
+- Enforcement cannot be bypassed by application code.
+- VTZ policy changes take effect at NEXT CTX-ID issuance.
+- VTZ policy changes do not take effect mid-session.
 
 ---
 
@@ -311,50 +329,34 @@ Additional rule:
 
 ## Valid Payloads
 
-### Valid TrustFlowEvent
-```json
-{
-  "event_id": "b9d7b4d8-8b8e-4b33-9e8d-5d0d5e8c1a21",
-  "session_id": "sess_12345",
-  "ctx_id": "ctx_abc123",
-  "ts": 1712345678123,
-  "event_type": "action.allow",
-  "payload_hash": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
-}
-```
+### Valid consensus engine request
 
-### Valid VTZEnforcementDecision
 ```json
 {
-  "verdict": "block"
-}
-```
-
-### Valid Agent Action
-```json
-{
-  "session_id": "sess_12345",
-  "ctx_id": "ctx_abc123",
-  "payload": {
-    "tool": "read_file",
-    "path": "/workspace/project/README.md"
-  }
-}
-```
-
-### Valid Consensus Engine Invocation
-```json
-{
-  "task": "Implement: SampleSpec",
+  "task": "Implement: ExampleSpec",
   "context": "Relevant implementation context",
   "language": "python"
 }
 ```
 
-### Valid Consensus Engine Result
+### Valid TrustFlow event
+
 ```json
 {
-  "final_code": "print('hello')"
+  "event_id": "6f7f7d8c-3d1c-4d55-8b89-5d52d7d8f0a1",
+  "session_id": "session-123",
+  "ctx_id": "ctx-abc",
+  "ts": 1712345678123,
+  "event_type": "allow",
+  "payload_hash": "3f0a377ba0a4a460ecb616f6507ce0d8cfa3e704025d4fda3ed0c5ca05468728"
+}
+```
+
+### Valid VTZ enforcement denial record
+
+```json
+{
+  "verdict": "block"
 }
 ```
 
@@ -362,21 +364,48 @@ Additional rule:
 
 ## Invalid Payloads
 
-### Invalid TrustFlowEvent: missing required field
+### Invalid consensus request: missing language
+
 ```json
 {
-  "event_id": "b9d7b4d8-8b8e-4b33-9e8d-5d0d5e8c1a21",
-  "session_id": "sess_12345",
-  "ts": 1712345678123,
-  "event_type": "action.allow",
-  "payload_hash": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+  "task": "Implement: ExampleSpec",
+  "context": "Relevant implementation context"
 }
 ```
 
 Reason:
-- `ctx_id` is required.
+- `language` is required.
 
-### Invalid VTZEnforcementDecision: wrong verdict
+### Invalid consensus request: unsupported language
+
+```json
+{
+  "task": "Implement: ExampleSpec",
+  "context": "Relevant implementation context",
+  "language": "java"
+}
+```
+
+Reason:
+- `language` must be one of `"python" | "swift" | "go" | "typescript" | "rust"`.
+
+### Invalid TrustFlow event: missing required field
+
+```json
+{
+  "event_id": "6f7f7d8c-3d1c-4d55-8b89-5d52d7d8f0a1",
+  "session_id": "session-123",
+  "ctx_id": "ctx-abc",
+  "ts": 1712345678123,
+  "event_type": "allow"
+}
+```
+
+Reason:
+- `payload_hash` is required.
+
+### Invalid VTZ decision: wrong verdict
+
 ```json
 {
   "verdict": "allow"
@@ -384,161 +413,116 @@ Reason:
 ```
 
 Reason:
-- VTZ policy denial MUST produce `verdict=block`.
+- On VTZ policy denial, `verdict` MUST equal `block`.
 
-### Invalid Consensus Engine Invocation: unsupported language
-```json
-{
-  "task": "Implement: SampleSpec",
-  "context": "Relevant implementation context",
-  "language": "java"
-}
+### Invalid Swift behavior
+
+```swift
+let value = optional!
 ```
 
 Reason:
-- `language` MUST be one of `"python"`, `"swift"`, `"go"`, `"typescript"`, `"rust"`.
+- Force unwrap is forbidden.
 
-### Invalid Agent Action: missing ctx_id
-```json
-{
-  "session_id": "sess_12345",
-  "payload": {
-    "tool": "read_file"
-  }
-}
+### Invalid backend credential access in Swift
+
+```swift
+let client = AnthropicClient(apiKey: keychainValue)
 ```
 
 Reason:
-- CTX-ID validation must occur first.
-- Missing CTX-ID must be treated as `UNTRUSTED`.
+- LLM API call from Swift is forbidden.
 
-### Invalid Security Behavior
-```python
-subprocess.run(cmd, shell=True)
+### Invalid backend token read
+
+```swift
+let token = KeychainKit.read("github_token")
 ```
 
 Reason:
-- `shell=True` is forbidden.
-
-```python
-eval(untrusted_content)
-```
-
-Reason:
-- `eval()` on generated or external content is forbidden.
-
-```python
-log.info("response body: %s", response.text)
-```
-
-Reason:
-- HTTP response bodies must never be logged.
+- Keychain read for backend is forbidden.
+- Only Swift reads Keychain, only to deliver via XPC.
 
 ---
 
 ## Integration Points
 
-## 1. Agent Entry Points
+## Pre-implementation workflow
 
-Any CraftedApp entry point that processes agent actions MUST:
+Before code changes:
 
-1. Validate `ctx_id` first.
-2. Reject immediately on CTX-ID validation failure.
-3. Check VTZ policy before executing the action.
-4. Produce `VTZEnforcementDecision` with `verdict=block` on denial.
-5. Emit a synchronous TrustFlow event for every outcome.
+1. Find the TRD that owns the component being modified.
+2. Read the relevant TRD sections:
+   - interfaces
+   - error contracts
+   - security
+   - testing requirements
+3. Check `TRD-11` if the change touches:
+   - credentials
+   - external content
+   - generated code
+   - CI
+4. Run existing tests:
 
-## 2. TrustLock
+```bash
+cd src && pytest ../tests/ -v --tb=short
+```
 
-CTX-ID validation MUST integrate with:
+---
 
-- TrustLock public key validation
+## Consensus engine integration
 
-Constraint:
-- Software-only validation is rejected.
+Required invocation shape:
 
-## 3. VTZ Policy Engine
+```python
+result = await self._consensus.run(
+    task=f"Implement: {spec.title}",
+    context=context_string,
+    language=spec.language,
+)
+code = result.final_code
+```
 
-CraftedApp MUST integrate with a VTZ policy enforcement mechanism that supports:
+---
 
-- session bound to EXACTLY ONE VTZ
-- explicit authorization for cross-VTZ tool calls
-- denial by default for implicit cross-VTZ access
-- policy application at NEXT CTX-ID issuance
+## File write integration
 
-## 4. TrustFlow Audit Pipeline
+Before any disk write:
 
-CraftedApp MUST integrate with a TrustFlow emission path that:
+- `path_security.validate_write_path()` MUST be called successfully.
 
-- accepts `event_id`, `session_id`, `ctx_id`, `ts`, `event_type`, `payload_hash`
-- emits synchronously in the enforcement path
-- surfaces emission failures
-- records failures as WARN-level audit events
+---
 
-## 5. Consensus Engine
+## Prompt construction integration
 
-CraftedApp integrations using the consensus engine MUST call:
+- All loaded document chunks MUST pass injection scanning before inclusion in any LLM prompt.
+- Context from external documents MUST be placed in the USER prompt.
+- Context from external documents MUST NOT be placed in the SYSTEM prompt.
 
-- `await self._consensus.run(...)`
+---
 
-With required parameters:
+## Enforcement-path integration
 
-- `task`
-- `context`
-- `language`
+For every agent action:
 
-And must consume:
+1. Validate CTX-ID first.
+2. Reject immediately on failure.
+3. Check VTZ policy before execution.
+4. If denied, produce `VTZEnforcementDecision` with `verdict=block`.
+5. Emit synchronous TrustFlow event with:
+   - `event_id`
+   - `session_id`
+   - `ctx_id`
+   - `ts`
+   - `event_type`
+   - `payload_hash`
+6. If TrustFlow emission fails:
+   - log it
+   - surface it
+   - do not silently continue
 
-- `result.final_code`
+---
 
-## 6. File Write Security
+## Non-conformance
 
-Before any disk write, CraftedApp MUST integrate with:
-
-- `path_security.validate_write_path()`
-
-This validation MUST occur before any write operation.
-
-## 7. Prompt Construction / External Content Handling
-
-For any external document content included in prompts:
-
-- loaded document chunks MUST pass injection scanning
-- external document context MUST be placed in the USER prompt
-- external document context MUST NOT be placed in the SYSTEM prompt
-
-## 8. LLM Security Refusal Handling
-
-When the LLM returns:
-
-- `SECURITY_REFUSAL`
-
-CraftedApp MUST:
-
-1. stop
-2. gate
-3. log
-4. never retry to bypass
-
---- 
-
-## Conformance Summary
-
-A CraftedApp component is non-conformant if any of the following are violated:
-
-- missing required TrustFlow event fields
-- non-unique or sequential `event_id`
-- non-millisecond or non-UTC `ts`
-- incorrect `payload_hash`
-- CTX-ID not validated first
-- partial processing before CTX-ID validation
-- expired or rotated CTX-ID accepted
-- software-only CTX-ID validation
-- missing TrustFlow event for any `allow` / `restrict` / `block` outcome
-- asynchronous TrustFlow buffering in enforcement path
-- VTZ denial without `VTZEnforcementDecision(verdict="block")`
-- implicit cross-VTZ access
-- bypassable VTZ enforcement
-- forbidden security patterns
-- unsupported consensus `language`
-- use of length-based fix arbitration instead of `_score_fix()`
+A Crafted component that does not implement these contracts is non-conformant.
