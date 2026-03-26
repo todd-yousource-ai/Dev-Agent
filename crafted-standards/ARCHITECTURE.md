@@ -2,254 +2,339 @@
 
 ## What This Subsystem Does
 
-CraftedAgent is the native macOS AI coding agent subsystem responsible for turning a plain-language build intent into an operator-gated sequence of pull requests.
+CraftedAgent is the native macOS build orchestration subsystem for Crafted Dev Agent. It converts a plain-language build intent into an ordered sequence of pull requests and drives each PR through generation, correction, validation, CI, and operator gating.
 
-Within the Forge architecture, it:
+At a high level, the subsystem:
 
-- decomposes build intent into an ordered PR plan
-- performs scope assessment and confidence gating before implementation
-- generates implementation and tests using two LLM providers in parallel
-- uses Claude as the arbitrator in consensus generation flow
-- runs self-correction, lint gating, and a bounded local fix loop
-- executes CI and presents results to the operator
-- pauses on explicit gate cards for operator input before merge-sensitive transitions
-- persists cross-run learning via build memory and build rules
-- resumes safely after crashes using per-PR stage checkpoints
+- Decomposes build intent into staged PR work
+- Performs scope analysis and enforces a confidence gate before implementation
+- Generates implementation and tests using two LLM providers in parallel
+- Uses Claude arbitration through the consensus path
+- Runs a self-correction pass, lint gate, and up to a 20-pass local fix loop
+- Executes CI for the PR
+- Emits streamed status and gate cards to the UI layer
+- Waits indefinitely for operator input at gates
+- Persists per-PR checkpoints so completed work is not rerun after crashes
+- Persists cross-run learning in build memory and build rules
 
-The subsystem is human-in-the-loop by construction. Gates block indefinitely for operator response, and there is no auto-approve path.
+Primary implementation surfaces identified in the architecture context:
+
+- `src/build_director.py` — `BuildPipeline` orchestration, confidence gate, PR type routing
+- `src/consensus.py` — `ConsensusEngine`, `GENERATION_SYSTEM`, `SWIFT_GENERATION_SYSTEM` + `UI_ADDENDUM`
+- `src/github_tools.py` — `GitHubTool`, `WebhookReceiver`
+- `src/build_ledger.py` — checkpointing and build progress persistence implied by per-PR stage checkpoints
 
 ## Component Boundaries
 
-CraftedAgent includes orchestration, generation, context loading, persistence of learning artifacts, and controlled GitHub interaction through the approved tool boundary.
+CraftedAgent is responsible for orchestration, enforcement, and safe coordination. Its boundaries are defined by the following responsibilities and exclusions.
 
 ### In scope
 
-- Build orchestration via `src/build_director.py`
-  - `BuildPipeline` orchestration
-  - confidence gate handling
-  - `pr_type` routing
-- Multi-model consensus generation via `src/consensus.py`
-  - `ConsensusEngine`
-  - `GENERATION_SYSTEM`
-  - `SWIFT_GENERATION_SYSTEM + UI_ADDENDUM`
-- GitHub operations through `src/github_tools.py`
-  - `GitHubTool`
-  - `WebhookReceiver`
-- Build learning persistence
-  - `workspace/{engineer_id}/build_memory.json`
-  - `Mac-Docs/build_rules.md`
-- DocumentStore-backed context retrieval for generation
-- XPC protocol participation using the documented wire format and message types
-- Stage checkpointing and crash-safe continuation per PR
-- Failure handling and retry strategy application
-- Context trimming and CI log truncation safeguards
+- Build intent decomposition into ordered PRs
+- PR-stage orchestration via `BuildPipeline`
+- Scope confidence evaluation and gating
+- Consensus-based generation using two LLM providers in parallel
+- Use of document context for generation
+- Build memory and build rules persistence
+- Streaming UI protocol messages:
+  - `build_card`
+  - `gate_card`
+  - `doc_status`
+  - `ready`
+- GitHub operations through `GitHubTool`
+- Crash-safe stage checkpointing per PR
+- Local failure handling and bounded retry/fix behavior
+- Validation of write paths before any file mutation
 
-### Explicit boundaries and exclusions
+### Out of scope / prohibited
 
-- CraftedAgent does not execute generated code via `eval`, `exec`, or subprocess invocation of generated content.
-- CraftedAgent does not call the GitHub API directly; all GitHub operations must go through `GitHubTool`.
-- CraftedAgent does not bypass operator gates.
-- CraftedAgent does not trust external inputs by default; documents, PR comments, and CI output are treated as untrusted.
-- CraftedAgent does not place external document context into the SYSTEM prompt; that context belongs only in the USER prompt.
-- CraftedAgent does not silently clear persistent learning state.
-- CraftedAgent does not raise exceptions for unknown XPC message types; they are discarded and logged.
+- Direct GitHub API use outside `GitHubTool`
+- Execution of generated code by the agent
+- Silent fallback on auth, crypto, or identity failures
+- Auto-approval of gates
+- Placement of external document context into the SYSTEM prompt
+- Clearing persistent build memory or build rules during normal clean runs
+- Raising exceptions for unknown XPC message types
+
+### Trust boundary
+
+All external inputs are untrusted and must be validated, including:
+
+- Documents
+- PR comments
+- CI output
+
+The subsystem treats protocol payloads, document store content, and external service responses as data that must be constrained before use.
 
 ## Data Flow
 
-1. **Initialization and transport**
-   - The subsystem communicates over XPC using line-delimited JSON.
-   - Messages are nonce-authenticated.
-   - Maximum message size is 16 MB.
-   - A `ready` message advertises:
-     - `agent_version`
-     - `min_swift_version`
-     - `capabilities[]`
-     - `doc_store_status`
+### 1. Session/bootstrap
 
-2. **Credential and identity intake**
-   - Credentials arrive via:
-     - `anthropic_api_key`
-     - `openai_api_key`
-     - `github_token`
-     - `engineer_id`
-   - Auth, crypto, and identity failures fail closed.
+CraftedAgent participates in an XPC protocol with:
 
-3. **Intent to scope**
-   - A plain-language build intent enters the core loop.
-   - The scope system returns:
-     - `confidence` from 0–100
-     - `coverage_gaps`
-   - `_stage_scope` enforces `_CONFIDENCE_THRESHOLD = 85`.
+- Line-delimited JSON wire format
+- Nonce authentication
+- Maximum 16MB per message
 
-4. **Scope confidence gate**
-   - If confidence is below threshold, the subsystem shows gaps and offers:
-     - proceed
-     - answer
-     - cancel
-   - If the operator supplies answers to gaps, one re-scope pass is performed.
-   - There is no indefinite re-scope loop.
+The subsystem emits or consumes protocol messages including:
 
-5. **Context assembly**
-   - DocumentStore is used for generation context.
-   - Specific documents may be loaded, including examples such as `PRODUCT_CONTEXT.md`.
-   - External document context is inserted into the USER prompt only.
-   - Build memory and build rules are included as persistent learning inputs when available.
+- `ready`
+  - `{ agent_version, min_swift_version, capabilities[], doc_store_status }`
+- `credentials`
+  - `{ anthropic_api_key, openai_api_key, github_token, engineer_id }`
+- `build_card`
+  - `{ card_type, stage, content, progress }`
+- `gate_card`
+  - `{ gate_type, options[], description }`
+- `doc_status`
+  - `{ doc_id, doc_name, status, chunk_count, embedded_count }`
 
-6. **Generation and arbitration**
-   - Two LLM providers generate implementation and tests in parallel.
-   - Claude arbitrates through the consensus path.
-   - Generated code is treated as inert output and is never executed as code by the agent.
+Unknown XPC message types are discarded and logged.
 
-7. **Write controls**
-   - Before any file write, `path_security.validate_write_path()` must approve the target path.
-   - This applies to all writes without exception.
+### 2. Scope and planning
 
-8. **Local validation and repair**
-   - Self-correction pass runs.
-   - Lint gate runs.
-   - A bounded local fix loop runs, with a maximum of 20 attempts.
-   - Failure strategy selection is driven by `failure_handler.py:_choose_strategy(failure_type, attempt, records)`.
+The build intent enters the core loop and is evaluated by the scope confidence path.
 
-9. **CI and operator presentation**
-   - CI is executed.
-   - CI log output is truncated to 8k characters using 70% head / 30% tail.
-   - Progress is streamed via `build_card` messages:
-     - `card_type`
-     - `stage`
-     - `content`
-     - `progress`
-   - Blocking operator decisions are emitted via `gate_card`:
-     - `gate_type`
-     - `options[]`
-     - `description`
+Documented scope behavior:
 
-10. **GitHub operations**
-    - All repository interactions go through `GitHubTool`.
-    - No direct GitHub API usage is permitted.
+- `SCOPE_SYSTEM` returns:
+  - `confidence` from 0–100
+  - `coverage_gaps`
+- `_stage_scope` gates at `_CONFIDENCE_THRESHOLD = 85`
 
-11. **Persistence and resume**
-    - Per-PR stage checkpoints prevent repeating completed work after crash.
-    - After every successful PR, build memory is updated via `build_memory.record_pr()`.
-    - `build_rules.md` is updated after a build run when 3 or more recurring failure patterns are found.
+If below threshold, the subsystem:
 
-12. **Document status reporting**
-    - Embedding/document ingestion status may be surfaced via `doc_status`:
-      - `doc_id`
-      - `doc_name`
-      - `status`
-      - `chunk_count`
-      - `embedded_count`
+- Shows coverage gaps
+- Offers operator choices:
+  - proceed
+  - answer
+  - cancel
+- Allows a one-shot re-scope if the operator provides gap answers
+- Does not loop indefinitely on re-scope
+
+This establishes whether implementation should proceed and what missing information must be surfaced to the operator.
+
+### 3. Context assembly for generation
+
+Generation context is assembled from:
+
+- Repository state
+- Requested build intent
+- Document store material
+- Persistent build memory
+- Persistent build rules
+
+Document usage rules:
+
+- Document store is used for generation context
+- A specific document can be loaded, for example `PRODUCT_CONTEXT.md`
+- Context from external documents goes into the USER prompt, never the SYSTEM prompt
+
+Persistent learning inputs:
+
+- `workspace/{engineer_id}/build_memory.json`
+  - survives fresh installs and thread state wipes
+  - written after every successful PR via `build_memory.record_pr()`
+  - never deleted on clean runs
+- `Mac-Docs/build_rules.md`
+  - loaded automatically by `DocumentStore`
+  - written after each build run when 3+ recurring failure patterns are found
+  - never deleted on clean runs unless switching to a completely new codebase
+
+### 4. Generation and arbitration
+
+For each PR, CraftedAgent generates implementation and tests using two LLM providers in parallel. Claude arbitrates via the consensus path implemented in `src/consensus.py`.
+
+The subsystem applies generation system prompts from the consensus module, including:
+
+- `GENERATION_SYSTEM`
+- `SWIFT_GENERATION_SYSTEM`
+- `UI_ADDENDUM`
+
+The consensus path is therefore a controlled generation mechanism rather than arbitrary model invocation.
+
+### 5. Local correction and validation loop
+
+After generation, CraftedAgent performs:
+
+- A self-correction pass
+- A lint gate
+- A bounded fix loop with a maximum of 20 local attempts
+
+Failure handling rules are explicitly defined:
+
+- In `failure_handler.py`: `_choose_strategy(failure_type, attempt, records)`
+- Failure type is the primary signal
+- Attempt count is secondary escalation
+- `assertion_error` → `test_driven` immediately
+- `import_error` / `runtime_error` → `converse` first, then `test_driven`
+- `attempt >= 8` → `nuclear` every 3rd attempt
+- Never retry indefinitely — max 20 local attempts, then move on
+
+Automatic context/log controls inside this flow:
+
+- `ContextManager` auto-trims at 30k tokens
+- Preserves spec-anchor first turn + last 6 messages
+- CI log output truncated at 8k chars using 70% head / 30% tail
+
+### 6. File and repository mutation
+
+Any file write is guarded before execution:
+
+- All writes must be validated via `path_security.validate_write_path()`
+- “Validate paths before ANY write”
+
+Repository operations are mediated through:
+
+- `GitHubTool`
+- `WebhookReceiver`
+
+All GitHub operations must go through `GitHubTool`. Direct GitHub API access is prohibited.
+
+### 7. CI, polling, and operator gate
+
+The subsystem executes CI and handles remote service interaction with bounded, explicit retry behavior:
+
+- 403 primary: exponential backoff
+  - `2s → 4s → 8s → 16s → 32s → 64s`
+- 429 secondary: respect `Retry-After` header
+- ETag caching on all polling endpoints
+
+After CI and validation, CraftedAgent emits a `gate_card` and blocks for operator response. Gates wait indefinitely and are never auto-approved.
+
+### 8. Checkpointing and persistence
+
+Per-PR stage checkpoints prevent re-running completed work after a crash. This persistence boundary ensures idempotent stage progression across restarts without erasing successful prior stages.
+
+Cross-run learning remains persistent independently of checkpoints:
+
+- Build memory persists successful PR learnings
+- Build rules persist recurring failure-derived coding rules
 
 ## Key Invariants
 
-The subsystem must preserve the following invariants:
+The subsystem enforces the following invariants from Forge architecture context and subsystem-specific TRD content:
 
-- Fail closed on auth, crypto, and identity errors.
-- No silent failure paths; every error must surface with context.
-- Secrets never appear in logs, error messages, or generated code.
-- All external input is untrusted and validated.
-- Generated code is never executed by the agent.
-- Gates wait indefinitely for operator input; there is no auto-approve behavior.
-- All file writes are validated by `path_security.validate_write_path()` before execution.
-- Context from external documents goes into the USER prompt, never the SYSTEM prompt.
-- `SECURITY_REFUSAL` output is terminal for the attempted action: stop, gate, and log.
-- Unknown XPC message types are discarded and logged, never raised as exceptions.
-- Per-PR stage checkpoints prevent re-running completed work after crashes.
-- Build memory and build rules are persistent learning systems and are never cleared automatically.
-
-Additional enforced rules from subsystem behavior:
-
-- `_stage_scope` gates below `_CONFIDENCE_THRESHOLD = 85`.
-- Re-scope after operator clarification is one-shot only.
-- All GitHub operations must route through `GitHubTool`.
-- Never retry indefinitely; the local repair loop stops after 20 attempts.
-- `ContextManager` auto-trims at 30k tokens.
-- Context preservation during trimming keeps the spec-anchor first turn plus the last 6 messages.
-- Polling endpoints use ETag caching.
-- 403 primary rate/authorization failures use exponential backoff:
-  - 2s, 4s, 8s, 16s, 32s, 64s
-- 429 secondary responses honor the `Retry-After` header.
+- Fail closed on auth, crypto, and identity errors; never degrade silently
+- No silent failure paths; every error surfaces with context
+- Secrets never appear in logs, error messages, or generated code
+- All external input is untrusted and validated
+- Generated code is never executed by the agent
+  - no `eval`
+  - no `exec`
+  - no subprocess of generated content
+- Gates wait indefinitely for operator input; no auto-approve ever
+- All file writes are path-validated via `path_security.validate_write_path()` before execution
+- Context from external documents goes in the USER prompt, never the SYSTEM prompt
+- `SECURITY_REFUSAL` output is never bypassed by rephrasing; stop, gate, log
+- Unknown XPC message types are discarded and logged, never raised as exceptions
+- Per-PR stage checkpoints prevent rerunning completed work after crashes
+- Build memory and build rules are persistent learning systems and are never cleared automatically
+- Scope execution is gated at confidence threshold 85
+- Re-scope is one-shot when operator supplies coverage-gap answers
+- Local remediation is bounded to 20 attempts maximum
+- All GitHub operations go through `GitHubTool`
 
 ## Failure Modes
 
 ### Scope uncertainty
 
-- **Condition:** Scope confidence below 85.
-- **Behavior:** The subsystem gates and presents `coverage_gaps`.
-- **Operator options:** proceed, answer, cancel.
-- **Limit:** At most one re-scope pass after gap answers.
+Condition:
+- `SCOPE_SYSTEM` returns confidence below 85
 
-### Auth, crypto, or identity failure
+Behavior:
+- Surface `coverage_gaps`
+- Present proceed/answer/cancel gate
+- Permit one-shot re-scope if operator answers gaps
+- Do not enter an unbounded clarification loop
 
-- **Condition:** Invalid or unverifiable credentials/identity state.
-- **Behavior:** Fail closed.
-- **Constraint:** No degraded or best-effort continuation.
+### Auth / crypto / identity failures
 
-### Invalid or unsafe write target
+Condition:
+- Any authentication, cryptographic, or identity error
 
-- **Condition:** `path_security.validate_write_path()` rejects a path.
-- **Behavior:** Write does not occur.
-- **Constraint:** There is no bypass path.
+Behavior:
+- Fail closed
+- Do not silently continue with degraded guarantees
+- Surface the error with context
+- Do not leak secrets in logs or messages
 
 ### Security refusal
 
-- **Condition:** `SECURITY_REFUSAL` is produced.
-- **Behavior:** Stop, gate, and log.
-- **Constraint:** Rephrasing does not bypass the refusal.
+Condition:
+- `SECURITY_REFUSAL` is returned
+
+Behavior:
+- Stop current path
+- Gate
+- Log
+- Do not attempt bypass via prompt rephrasing
+
+### Invalid or unsafe file write target
+
+Condition:
+- Write path fails `path_security.validate_write_path()`
+
+Behavior:
+- Write must not execute
+- Failure must surface explicitly
 
 ### Unknown XPC message type
 
-- **Condition:** Received XPC message type is not recognized.
-- **Behavior:** Discard and log.
-- **Constraint:** Do not raise as an exception.
+Condition:
+- XPC message type not recognized
 
-### Generation / validation failures
+Behavior:
+- Discard
+- Log
+- Do not raise as exception
 
-Failure strategy is selected by `failure_handler.py:_choose_strategy(failure_type, attempt, records)`.
+### GitHub / polling throttling and authorization responses
 
-Documented strategy rules:
+Condition:
+- 403 primary or 429 secondary responses
 
-- `assertion_error` → `test_driven` immediately
-- `import_error` / `runtime_error` → `converse` first, then `test_driven`
-- `attempt >= 8` → `nuclear` every 3rd attempt
-- hard cap of 20 local attempts, then move on
+Behavior:
+- 403: exponential backoff through 64s maximum listed delay
+- 429: honor `Retry-After`
+- Use ETag caching on all polling endpoints
 
-This makes failure type the primary routing signal and attempt count the secondary escalation signal.
+### Local build/test correction exhaustion
 
-### Polling and API pressure
+Condition:
+- Repeated local failures during fix loop
 
-- **403 primary:** exponential backoff from 2s to 64s
-- **429 secondary:** respect `Retry-After`
-- **Constraint:** polling endpoints use ETag caching
+Behavior:
+- Strategy selected by `_choose_strategy(failure_type, attempt, records)`
+- Escalate by failure type first, attempt count second
+- Stop local retries after 20 attempts and move on
+
+### Crash during PR execution
+
+Condition:
+- Agent crashes mid-stage or between stages
+
+Behavior:
+- Resume using per-PR stage checkpoints
+- Do not rerun completed work
 
 ### Oversized context or logs
 
-- **Context overflow:** `ContextManager` auto-trims at 30k tokens while preserving the spec-anchor first turn and last 6 messages.
-- **CI log overflow:** truncate to 8k chars with 70% head / 30% tail.
-- **Behavior:** automatic; no operator action required.
+Condition:
+- Prompt context or CI output exceeds configured bounds
 
-### Crash / restart during PR execution
-
-- **Condition:** Process interruption mid-pipeline.
-- **Behavior:** Resume using per-PR stage checkpoints.
-- **Guarantee:** Completed work is not re-run.
-
-### Persistent learning artifact mishandling
-
-- **Condition:** Clean-run or reset logic attempts to remove learning artifacts.
-- **Behavior required by architecture:** do not delete automatically.
-- **Protected artifacts:**
-  - `workspace/{engineer_id}/build_memory.json`
-  - `Mac-Docs/build_rules.md` unless switching to a completely new codebase
+Behavior:
+- Auto-trim context at 30k tokens while preserving spec-anchor first turn and last 6 messages
+- Truncate CI logs to 8k chars with 70/30 head-tail split
 
 ## Dependencies
 
-### Internal code units
+### Internal modules
 
 - `src/build_director.py`
   - `BuildPipeline`
   - confidence gate
-  - `pr_type` routing
+  - PR type routing
 - `src/consensus.py`
   - `ConsensusEngine`
   - `GENERATION_SYSTEM`
@@ -258,40 +343,34 @@ This makes failure type the primary routing signal and attempt count the seconda
 - `src/github_tools.py`
   - `GitHubTool`
   - `WebhookReceiver`
+- `src/build_ledger.py`
+  - per-PR stage checkpoint persistence
+
+### Supporting subsystem concepts referenced by TRD content
+
+- `DocumentStore`
+  - used for generation context
+  - auto-loads `Mac-Docs/build_rules.md`
+- `ContextManager`
+  - auto-trims prompt context
 - `failure_handler.py`
   - `_choose_strategy(failure_type, attempt, records)`
 - `path_security.validate_write_path()`
-- `ContextManager`
+  - mandatory precondition for all writes
+- `build_memory.record_pr()`
+  - persistence hook after every successful PR
 
-### Persistent stores and files
+### External services/protocols
+
+- XPC transport using line-delimited JSON with nonce authentication
+- Two LLM providers in parallel
+  - credentials include `anthropic_api_key` and `openai_api_key`
+- GitHub through `GitHubTool`
+  - credentials include `github_token`
+- Operator-facing UI consuming streamed `build_card` and `gate_card`
+- Document embedding/status pipeline via `doc_status`
+
+### Persistent data locations
 
 - `workspace/{engineer_id}/build_memory.json`
-  - survives fresh installs and thread state wipes
-  - written after every successful PR via `build_memory.record_pr()`
 - `Mac-Docs/build_rules.md`
-  - loaded by `DocumentStore` automatically
-  - written after each build run when 3+ recurring failure patterns are found
-
-### External services and protocols
-
-- XPC transport
-  - line-delimited JSON
-  - nonce-authenticated
-  - 16 MB max per message
-- LLM providers
-  - two providers generate in parallel
-  - Claude arbitrates
-- GitHub
-  - accessed only through `GitHubTool`
-- DocumentStore
-  - used for retrieval of generation context and automatic loading of build rules
-
-### UI/protocol message contracts
-
-- `ready`
-- `build_card`
-- `gate_card`
-- `credentials`
-- `doc_status`
-
-These protocol contracts define how CraftedAgent exposes state, blocks for decisions, and reports document availability/status to the rest of the system.
