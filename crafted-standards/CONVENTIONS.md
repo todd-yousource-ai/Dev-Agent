@@ -1,514 +1,229 @@
 # Code Conventions
 
-This document defines repository-wide coding conventions derived from the provided TRD materials and agent guidance. The TRDs remain the source of truth for interfaces, behavior, security controls, and testing requirements. Conventions here standardize implementation style, naming, and patterns across all subsystems.
-
 ## File and Directory Naming
 
-Use the existing two-process architecture consistently:
+1. **Name Python backend modules exactly after their primary responsibility in `snake_case`.**
+   - Use filenames like:
+     - `src/consensus.py` for `ConsensusEngine`
+     - `src/build_director.py` for `BuildPipeline`
+   - Do not use alternate names like `consensus_engine.py` or `pipeline_builder.py` when the TRD-defined canonical filename exists.
 
-```text
-src/
-├─ swift/                  # Native macOS shell process
-│  ├─ App/
-│  ├─ UI/
-│  ├─ Auth/
-│  ├─ Security/
-│  ├─ Keychain/
-│  ├─ IPC/
-│  ├─ Models/
-│  ├─ ViewModels/
-│  ├─ Services/
-│  ├─ Utilities/
-│  └─ Tests/
-├─ python/                 # Backend process
-│  ├─ api/
-│  ├─ consensus/
-│  ├─ pipeline/
-│  ├─ providers/
-│  ├─ github/
-│  ├─ ipc/
-│  ├─ security/
-│  ├─ models/
-│  ├─ services/
-│  ├─ utils/
-│  └─ tests/
-└─ shared/                 # Cross-process schemas, fixtures, docs-generated artifacts
-```
+2. **Place Python application code under `src/`.**
+   - New backend modules for the CraftedDevAgent subsystem must live in `src/` unless they are repository-root exceptions defined below.
 
-### General Rules
+3. **Keep required repository-root files at the repo root with no directory prefix.**
+   - The following files must be committed at the repository root:
+     - `README.md`
+     - `CODEOWNERS`
+     - `LICENSE`
+     - `.gitignore`
+     - `.editorconfig`
+     - `VERSION`
+     - `Makefile`
+     - `pyproject.toml`
+   - Do not place these files under `docs/`, `config/`, or any other subdirectory.
 
-- Use lowercase directory names.
-- Use singular conceptual names for modules unless the folder clearly contains a category of peer implementations:
-  - Prefer `provider/` only if one implementation exists.
-  - Prefer `providers/` if multiple adapters live there.
-- Group by subsystem ownership, not by technical primitive alone.
-- Keep cross-process contracts isolated from process-specific code.
+4. **Name CI workflow files exactly as mandated.**
+   - Ubuntu workflow file: `crafted-ci.yml`
+   - macOS Swift workflow file: `crafted-ci-macos.yml`
+   - Do not introduce renamed variants such as `ci.yml`, `ubuntu-ci.yml`, or `swift-macos.yml` for these canonical workflows.
 
-### Swift File Naming
+5. **Preserve `conftest.py` as the import bootstrap file when ensured by CI tooling.**
+   - If `ci_workflow.ensure()` creates or updates `conftest.py` for `src/` imports, do not replace it with a differently named bootstrap file.
 
-- Use `PascalCase.swift` matching the primary type in the file.
-- One primary type per file.
-- Suffix by role where meaningful:
-  - `...View.swift`
-  - `...ViewModel.swift`
-  - `...Controller.swift`
-  - `...Manager.swift`
-  - `...Service.swift`
-  - `...Client.swift`
-  - `...Store.swift`
-  - `...Error.swift`
-- Extensions go in separate files only when they are substantial; name as:
-  - `TypeName+Feature.swift`
+6. **Use subsystem slugs in branch names exactly in the required branch format.**
+   - Branch names must match:
+     - `forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}`
+   - Example:
+     - `forge-agent/build/alex/crafted-dev-agent/pr-042-add-path-validation`
+   - Keep the `forge-agent` prefix unchanged for compatibility.
 
-Examples:
-- `ConsensusStatusView.swift`
-- `AuthenticatedSocketClient.swift`
-- `KeychainCredentialStore.swift`
-- `ProviderSessionError.swift`
+7. **Use lowercase kebab-case for branch path segments that represent slugs.**
+   - Apply this to:
+     - `{subsystem_slug}`
+     - `{title_slug}`
+   - Do not use spaces, underscores, or camelCase in these segments.
 
-### Python File Naming
-
-- Use `snake_case.py`.
-- Name files by responsibility, not by vague utility terms.
-- Avoid generic filenames like `helpers.py`, `misc.py`, `common.py` unless bounded to a specific package.
-- Prefer:
-  - `consensus_engine.py`
-  - `provider_adapter.py`
-  - `pull_request_service.py`
-  - `line_delimited_json.py`
-
-### Test File Naming
-
-#### Swift
-- Mirror source structure under `Tests/`.
-- Name test files `TypeNameTests.swift`.
-
-#### Python
-- Mirror package structure under `tests/`.
-- Name test files `test_<module_name>.py`.
-
-Examples:
-- `test_consensus_engine.py`
-- `test_github_graphql_client.py`
+8. **Use zero-padded three-digit PR numbers in branch names.**
+   - Format PR numbers as `pr-001`, `pr-042`, `pr-120`.
+   - Do not use `pr-1` or `pr-42`.
 
 ## Class and Function Naming
 
-## General Naming Rules
+1. **Name Python classes in `PascalCase`.**
+   - Examples derived from TRDs:
+     - `ConsensusEngine`
+     - `BuildPipeline`
 
-- Use names that reflect domain behavior from the TRDs.
-- Prefer explicit, subsystem-specific names over abstract names.
-- Avoid product-branded identifiers in code conventions and new code unless externally required.
-- Do not encode implementation details unnecessarily into public names.
-- Name by responsibility, input/output meaning, or state transition.
+2. **Name Python functions and methods in `snake_case`.**
+   - Examples:
+     - `validate_write_path`
+     - `ensure()`
+     - `is_docs_pr()` for logic corresponding to docs-PR detection
+   - Do not use `camelCase` or `PascalCase` for functions.
 
-## Swift Naming
+3. **Name module-level constants in `UPPER_SNAKE_CASE`.**
+   - Examples:
+     - `GENERATION_SYSTEM`
+     - `SWIFT_GENERATION_SYSTEM`
+     - `UI_ADDENDUM`
 
-### Types
-- Use `PascalCase`.
-- Nouns for models and services.
-- Adjectival or participle forms only for states or wrappers when accurate.
+4. **Use descriptive names that match the subsystem role named in the TRD.**
+   - If a class implements consensus behavior, name it `ConsensusEngine`.
+   - If a class coordinates the build pipeline, name it `BuildPipeline`.
+   - Avoid introducing synonyms when a canonical term is already established in the TRD.
 
-Examples:
-- `ConsensusEngine`
-- `ProviderAdapter`
-- `GitHubReviewService`
-- `SocketAuthenticationManager`
+5. **Name accessibility identifiers using the exact token order below.**
+   - Format:
+     - `{module}-{component}-{role}-{context?}`
+   - Apply this format to all interactive UI elements via `.accessibilityIdentifier()`.
 
-### Properties and Functions
-- Use `camelCase`.
-- Boolean properties must read as predicates:
-  - `isAuthenticated`
-  - `hasStoredCredential`
-  - `canSubmitReview`
-- Functions should be verb-first:
-  - `loadSession()`
-  - `storeCredential()`
-  - `sendHandshake()`
-  - `convertDraftPullRequestToReady()`
+6. **Use lowercase kebab-case in accessibility identifiers.**
+   - Valid examples:
+     - `auth-touchid-button`
+     - `settings-anthropic-key-test-button`
+     - `navigator-project-row-123`
+   - Do not use spaces, underscores, or camelCase inside identifiers.
 
-### Protocols
-- Name by capability or role.
-- Prefer noun or `...Providing` / `...Managing` / `...Serving` patterns.
+7. **Append dynamic context values at the end of accessibility identifiers.**
+   - Examples:
+     - `navigator-project-row-{projectId}`
+     - `stream-gate-card-{gateId}`
+     - `stream-gate-yes-button-{gateId}`
+   - Keep the dynamic identifier as the final token.
 
-Examples:
-- `CredentialStoring`
-- `SocketAuthenticating`
-- `ReviewSubmitting`
-
-## Python Naming
-
-### Classes
-- Use `PascalCase`.
-
-Examples:
-- `ConsensusEngine`
-- `ProviderAdapter`
-- `GitHubGraphQLClient`
-- `AuthenticatedUnixSocketServer`
-
-### Functions and Methods
-- Use `snake_case`.
-- Verb-first for actions.
-- Use precise names for stateful operations.
-
-Examples:
-- `build_consensus_result()`
-- `validate_handshake_token()`
-- `mark_pull_request_ready_for_review()`
-- `parse_line_delimited_json()`
-
-### Constants
-- Use `UPPER_SNAKE_CASE`.
-- Group subsystem-specific constants near their owning module.
-
-Examples:
-- `MAX_SOCKET_MESSAGE_BYTES`
-- `DEFAULT_RETRY_BACKOFF_SECONDS`
-- `GITHUB_GRAPHQL_TIMEOUT_SECONDS`
+8. **Assign an accessibility identifier to every interactive SwiftUI element.**
+   - Apply `.accessibilityIdentifier("...")` to buttons, fields, rows, and other interactive controls.
+   - Do not leave interactive elements unnamed.
 
 ## Error and Exception Patterns
 
-## General Error Rules
-
-- Errors must follow TRD-defined contracts exactly.
-- Do not invent error shapes for public interfaces.
-- Include enough context for diagnosis without exposing secrets, tokens, credentials, or generated sensitive content.
-- Distinguish operator-correctable, transient, validation, and security failures.
-
-## Swift Error Conventions
-
-- Prefer typed errors with `enum`.
-- Name error types with `Error` suffix.
-- Cases should describe failure conditions, not remediation.
-
-Example:
-```swift
-enum SocketHandshakeError: Error {
-    case missingToken
-    case invalidToken
-    case unsupportedProtocolVersion
-    case malformedMessage
-}
-```
-
-- Add contextual payloads only when safe:
-```swift
-enum PullRequestError: Error {
-    case notFound(number: Int)
-    case invalidState(currentState: String)
-    case apiFailure(statusCode: Int)
-}
-```
-
-- Convert low-level errors into subsystem-owned error types at boundaries.
-- Do not leak raw Keychain, auth, socket, or external API errors directly across subsystem interfaces unless the TRD requires it.
-
-## Python Exception Conventions
-
-- Use custom exceptions per subsystem.
-- Suffix exception classes with `Error`.
-- Maintain a clear hierarchy when a subsystem has multiple failure modes.
-
-Example:
-```python
-class GitHubError(Exception):
-    pass
-
-class PullRequestStateError(GitHubError):
-    pass
-
-class GraphQLMutationError(GitHubError):
-    pass
-```
-
-- Raise validation errors early at ingress boundaries.
-- Wrap third-party client failures into internal exception types before crossing module boundaries.
-- Preserve root cause using exception chaining:
-```python
-raise GraphQLMutationError("failed to mark pull request ready") from exc
-```
-
-## Error Messages
-
-- Make messages actionable and concise.
-- Include identifiers that aid tracing:
-  - pull request number
-  - repository owner/name
-  - protocol version
-  - request id
-- Never include:
-  - secrets
-  - tokens
-  - full credential material
-  - raw untrusted payloads unless redacted
-
-## Per-Subsystem Naming Rules
-
-## Swift Shell Subsystem
-
-Owns UI, authentication, Keychain, native app lifecycle, and XPC/process coordination.
-
-### UI and SwiftUI
-
-- Views: `PascalCaseView`
-- Reusable cards/panels: `PascalCaseCard`, `PascalCasePanel`
-- State owners: `PascalCaseViewModel`
-- UI-only models: `PascalCaseDisplayModel`
-
-Examples:
-- `SessionStatusView`
-- `ReviewQueuePanel`
-- `ProviderHealthCard`
-- `AuthenticationViewModel`
-
-Rules:
-- Views should be named by what they render, not where they appear.
-- View models should be named after the view or flow they own.
-- Avoid `MainView`, `DataView`, `InfoPanel` unless scoped by subsystem meaning.
-
-### Authentication
-
-- Prefix auth coordination types with `Auth` only when needed to disambiguate.
-- Prefer explicit names:
-  - `SessionAuthenticator`
-  - `LoginStateStore`
-  - `TokenRefreshService`
-
-Avoid:
-- `AuthHelper`
-- `LoginManager` when role is broader or narrower than login
-
-### Keychain and Secrets
-
-- Types must make storage semantics explicit:
-  - `KeychainCredentialStore`
-  - `SecretAccessPolicy`
-  - `CredentialMetadata`
-
-Rules:
-- Use `Store` for persistence abstraction.
-- Use `Policy` for enforcement logic.
-- Use `Provider` only for read-oriented dependencies.
-
-### IPC / XPC / Unix Socket
-
-- Name by transport and trust role:
-  - `AuthenticatedSocketClient`
-  - `SocketHandshakeMessage`
-  - `LineDelimitedJSONEncoder`
-  - `BackendProcessSupervisor`
-
-Rules:
-- Include `Authenticated` in names where authentication is security-significant.
-- Include protocol format in serializer names.
-
-## Python Backend Subsystem
-
-Owns consensus, generation pipeline, external service operations, and repository automation.
-
-### Consensus
-
-- Core engine type: `ConsensusEngine`
-- Strategy implementations: `...Strategy`
-- Results: `...Result`
-- Inputs: `...Request`, `...Context`, `...Candidate`
-
-Examples:
-- `ConsensusRequest`
-- `ConsensusCandidate`
-- `WeightedSelectionStrategy`
-- `ConsensusResult`
-
-Rules:
-- Use `Engine` for orchestration.
-- Use `Strategy` for interchangeable decision logic.
-- Use `Scorer` only for components that assign scores, not final selection.
-
-### Provider Adapters
-
-- Adapter types: `...ProviderAdapter`
-- Client wrappers: `...Client`
-- Provider-specific payload mappers: `...Translator` or `...Mapper`
-
-Examples:
-- `OpenAIProviderAdapter`
-- `AnthropicProviderAdapter`
-- `ProviderResponseMapper`
-
-Rules:
-- All provider integrations should present a common adapter-shaped interface.
-- Keep provider brand names confined to implementation classes where necessary.
-- Shared abstractions should remain provider-neutral.
-
-### Pipeline
-
-- Pipeline orchestrators: `...Pipeline` or `...PipelineRunner`
-- Stages: `...Stage`
-- Stage outputs: `...StageResult`
-- Validation and gating: `...Validator`, `...Gate`
-
-Examples:
-- `GenerationPipeline`
-- `PatchSynthesisStage`
-- `SafetyValidationGate`
-- `RepositoryContextStageResult`
-
-Rules:
-- Use `Stage` for ordered execution units.
-- Use `Gate` for pass/fail enforcement steps.
-- Use `Validator` for rule evaluation that may return detailed findings.
-
-### GitHub Integration
-
-Follow the documented API behavior lessons strictly.
-
-#### Naming
-- REST wrappers: `...RestClient`
-- GraphQL wrappers: `...GraphQLClient`
-- Workflow/service layers: `...Service`
-- Domain operations must be named after actual platform behavior.
-
-Examples:
-- `GitHubRestClient`
-- `GitHubGraphQLClient`
-- `PullRequestService`
-- `mark_pull_request_ready_for_review()`
-
-#### Pull Request Lifecycle Rules
-- Do not name a method as though REST can convert a draft pull request to ready when the implementation must use GraphQL.
-- Prefer explicit names tied to the successful mechanism:
-  - `mark_pull_request_ready_for_review`
-  - not `update_pull_request_draft_state`
-
-- If an operation is constrained by external platform behavior, encode that constraint in the implementation and tests, not in ambiguous naming.
-
-### Repository and Code Generation Safety
-
-- Types enforcing non-execution constraints should be explicit:
-  - `GeneratedCodePolicy`
-  - `ExecutionProhibitionError`
-  - `RepositoryMutationGuard`
-
-Rules:
-- Any component handling generated content must be named to reflect review, validation, storage, or transport only.
-- Do not use names implying execution, running, eval, or shelling unless the TRD explicitly permits it.
-
-## Shared Contracts and Models
-
-For cross-process contracts over authenticated Unix socket with line-delimited JSON:
-
-- Message types: `...Message`
-- Request payloads: `...Request`
-- Response payloads: `...Response`
-- Event payloads: `...Event`
-- Handshake models: `...Handshake`, `...HandshakeResult`
-
-Examples:
-- `SocketHandshakeRequest`
-- `SocketHandshakeResponse`
-- `PipelineStatusEvent`
-
-Rules:
-- Keep wire-format names stable and versioned per TRD.
-- Serializer/deserializer names must include transport format when applicable.
-- Avoid embedding UI concerns into shared message names.
-
-## Function Design Patterns
-
-- Keep subsystem boundaries explicit.
-- Validate inputs at entry points.
-- Translate external or low-level errors at boundaries.
-- Return typed results or structured models, not loosely shaped dictionaries or ad hoc tuples, unless required by the wire protocol.
-- Prefer small composable functions with names that describe one state transition or one transformation.
-
-Examples:
-- `validate_request()`
-- `build_handshake_response()`
-- `persist_session_metadata()`
-- `submit_review_comment()`
-
-Avoid:
-- `process_data()`
-- `handle_everything()`
-- `do_request()`
-
-## State and Lifecycle Naming
-
-Stateful flows should use consistent vocabulary:
-
-- `initial`
-- `pending`
-- `authenticated`
-- `ready`
-- `failed`
-- `completed`
-- `cancelled`
-
-Rules:
-- Use the same state names in code, tests, and telemetry where the TRD defines them.
-- Name transitions as verbs:
-  - `authenticate`
-  - `prepare`
-  - `enqueue`
-  - `complete`
-  - `cancel`
-
-## Logging and Diagnostic Naming
-
-- Log categories should mirror subsystem names:
-  - `auth`
-  - `keychain`
-  - `ipc`
-  - `consensus`
-  - `pipeline`
-  - `github`
-  - `security`
-- Event names should be action-oriented:
-  - `socket_handshake_started`
-  - `pull_request_marked_ready`
-  - `credential_store_failed`
-
-Rules:
-- Never log secrets or raw credentials.
-- Redact tokens and sensitive payloads.
-- Use stable identifiers for correlation.
-
-## Test Naming Conventions
-
-- Test names should describe behavior and expected outcome.
-- Prefer:
-  - `test_marks_draft_pull_request_ready_via_graphql`
-  - `test_rejects_invalid_handshake_token`
-  - `test_keychain_store_returns_missing_item_error`
-
-- For Swift:
-  - `testHandshakeFailsWhenTokenIsMissing()`
-  - `testMarkReadyUsesGraphQLMutation()`
-
-Rules:
-- Name tests after the requirement they verify.
-- Where external platform quirks exist, encode the behavior directly in the test name.
-
-## Forbidden Naming Patterns
-
-Do not introduce:
-
-- `Helper`
-- `Util` / `Utils` for broad unrelated logic
-- `Manager` when a more specific role exists
-- `Data` as a primary domain type name
-- `Info` as a substitute for a concrete model
-- `Common` or `Base` without a narrowly justified abstraction
-- names that imply executing generated code when execution is prohibited
-- names that hide security-critical behavior behind vague terminology
-
-## Naming Decision Rule
-
-When choosing a name, prefer this order:
-
-1. TRD-defined term
-2. External protocol or API term
-3. Domain responsibility
-4. Implementation role
-
-If a shorter name is less precise than a longer one, choose the more precise name.
+1. **Validate every user-supplied write path before any filesystem write.**
+   - Call:
+     ```python
+     from path_security import validate_write_path
+     safe_path = validate_write_path(user_supplied_path)
+     ```
+   - Use `safe_path` for the write operation.
+   - Never write directly to a raw user-provided path.
+
+2. **Perform path validation before creating, modifying, or overwriting any file.**
+   - This includes:
+     - file creation
+     - file replacement
+     - appending
+     - generated artifact output
+     - workflow file updates
+   - Path validation is required even when the caller is expected to provide a relative path.
+
+3. **Use the validated path returned by `validate_write_path()` even when traversal is detected.**
+   - The TRD specifies that `validate_write_path()` returns a safe default on traversal.
+   - Do not retry writes with the original path after validation.
+
+4. **Treat missing path validation before a write as a correctness bug.**
+   - When reviewing or modifying CraftedDevAgent code, add validation at the write call site rather than documenting it as a future fix.
+
+## Import and Module Organisation
+
+1. **Import `validate_write_path` from `path_security` at the module that performs writes.**
+   - Use:
+     ```python
+     from path_security import validate_write_path
+     ```
+   - Do not inline alternate traversal checks where this helper is required.
+
+2. **Keep write-path validation close to the write operation.**
+   - Validate the path in the same function or immediate call path that performs the write.
+   - Do not defer validation to distant callers unless the validated path object is what is explicitly passed through.
+
+3. **Organize backend implementation around the canonical TRD modules.**
+   - Consensus-related implementation belongs in `src/consensus.py`.
+   - Build-pipeline coordination belongs in `src/build_director.py`.
+
+4. **Keep test import support compatible with `src/` layout.**
+   - Do not remove or bypass `conftest.py` behavior added by `ci_workflow.ensure()` when tests rely on importing from `src/`.
+
+## Comment and Documentation Rules
+
+1. **Document docs-PR detection logic with the TRD term `docs` and keyword matching behavior when implemented.**
+   - If implementing or maintaining docs-PR classification, preserve the keyword-based approach derived from:
+     ```python
+     _is_docs_pr = any(kw in title_lower for kw in _docs_keywords) or ...
+     ```
+   - Keep the keyword collection in a clearly named constant or variable associated with docs classification.
+
+2. **Use the exact phrase `naming convention` in documentation or keyword lists where docs classification depends on TRD-derived keywords.**
+   - The TRD keyword set explicitly includes `naming convention`, `glossary`, and `changelog`.
+   - Do not paraphrase these specific keywords if they are used for detection.
+
+3. **Comment path-validation code only when the reason is not obvious from the helper name.**
+   - Prefer:
+     ```python
+     safe_path = validate_write_path(user_supplied_path)
+     ```
+   - Add a short comment only when needed to clarify the write source or fallback behavior.
+
+4. **When documenting UI identifiers, show examples in the exact accessibility identifier format.**
+   - Use examples like:
+     - `settings-anthropic-key-field`
+     - `stream-gate-stop-button-{gateId}`
+   - Do not document alternate ordering schemes.
+
+5. **Do not document root-required files as directory-based rules.**
+   - When writing checks or comments for root files, refer to them by basename membership in the known set, because the TRD specifies they are validated by basename.
+
+## CraftedDevAgent-Specific Patterns
+
+1. **Use the mandatory branch naming format for all CraftedDevAgent work branches.**
+   - Required format:
+     - `forge-agent/build/{engineer_id}/{subsystem_slug}/pr-{N:03d}-{title_slug}`
+   - This format is compatibility-sensitive; do not change `forge-agent` to `crafted-agent` or any other prefix.
+
+2. **When adding or updating CI workflows for this subsystem, use only the two canonical workflow filenames.**
+   - `crafted-ci.yml`
+   - `crafted-ci-macos.yml`
+
+3. **Preserve `src/` import compatibility in test and CI setup.**
+   - If workflow or test setup calls `ci_workflow.ensure()`, allow it to manage `conftest.py`.
+   - Do not add parallel ad hoc import hacks when `conftest.py` is the established mechanism.
+
+4. **Implement filesystem-writing features with path validation as the first write-preparation step.**
+   - Pattern:
+     ```python
+     from path_security import validate_write_path
+
+     safe_path = validate_write_path(user_supplied_path)
+     with open(safe_path, "w") as f:
+         f.write(content)
+     ```
+   - Do not compute the final output path and write first, then validate afterward.
+
+5. **Use canonical subsystem vocabulary from the TRDs in code artifacts.**
+   - Prefer names already established in the TRDs:
+     - `ConsensusEngine`
+     - `BuildPipeline`
+     - `crafted-ci.yml`
+     - `crafted-ci-macos.yml`
+   - Avoid introducing alternate labels for the same role in code, comments, or filenames.
+
+6. **Apply the accessibility identifier convention uniformly across authentication, settings, navigator, and stream-gate UI.**
+   - Follow the demonstrated patterns:
+     - `auth-touchid-button`
+     - `auth-passcode-button`
+     - `settings-anthropic-key-field`
+     - `settings-anthropic-key-reveal-button`
+     - `navigator-project-row-{projectId}`
+     - `stream-gate-card-{gateId}`
+     - `stream-gate-skip-button-{gateId}`
+
+7. **Keep dynamic UI context placeholders stable and human-readable.**
+   - Use semantic suffixes like `{projectId}` and `{gateId}`.
+   - Do not replace them with positional or opaque suffixes such as `{id}` when a more specific TRD term exists.
+
+8. **When implementing docs-PR heuristics, store keyword strings in a dedicated collection and compare against lowercase normalized titles.**
+   - Pattern:
+     ```python
+     title_lower = title.lower()
+     is_docs_pr = any(kw in title_lower for kw in _docs_keywords)
+     ```
+   - Keep keyword matching logic explicit rather than embedding repeated string checks inline.
